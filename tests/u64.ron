@@ -1,14 +1,15 @@
 Test(
     name: "u64",
-    generated: true,
     funcs: [
-        All((
+        (
             name: "basic_val",
+            conventions: [All],
             inputs: [Int(c_int64_t(0x12f456789)), Int(c_int64_t(0x2a4567e1))],
             output: Some(Int(c_int64_t(0x1a3456e89))),
-        )),
-        All((
+        ),
+        (
             name: "many_val",
+            conventions: [All],
             inputs: [
                 Int(c_int64_t(0x12f456789)), 
                 Int(c_int64_t(0x2a4567e1)),
@@ -20,6 +21,6 @@ Test(
                 Int(c_int64_t(0xea4367e2)),
             ],
             output: Some(Int(c_int64_t(0xfa3456a81))),
-        )),
+        ),
     ]
 )

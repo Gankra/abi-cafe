@@ -10,19 +10,19 @@ mod abis;
 
 use abis::*;
 
-static TESTS: &[&str] = &["opaque_example", "u64", "u128", "structs"];
+pub static TESTS: &[&str] = &["opaque_example", "u64", "u128", "structs"];
 
-static RUST_TEST_PREFIX: &str = include_str!("../harness/rust_test_prefix.rs");
-static C_TEST_PREFIX: &str = include_str!("../harness/c_test_prefix.h");
+pub static RUST_TEST_PREFIX: &str = include_str!("../harness/rust_test_prefix.rs");
+pub static C_TEST_PREFIX: &str = include_str!("../harness/c_test_prefix.h");
 
 #[derive(Debug, thiserror::Error)]
-enum BuildError {
+pub enum BuildError {
     #[error("io error\n{0}")]
     Io(#[from] std::io::Error),
     #[error("parse error {0}\n{2}\n{}\n{:width$}^",
-        .1.lines().nth(.2.position.line - 1).unwrap(),
+        .1.lines().nth(.2.position.line.saturating_sub(1)).unwrap(),
         "",
-        width=.2.position.col - 1,
+        width=.2.position.col.saturating_sub(1),
 )]
     ParseError(String, String, ron::error::Error),
     #[error("rust compile error \n{} \n{}", 
@@ -43,10 +43,12 @@ enum BuildError {
         old_decl: String,
         new_decl: String,
     },
+    #[error("If you use the Handwritten calling convention, all functions in the test must use only that.")]
+    HandwrittenMixing,
 }
 
 #[derive(Debug, thiserror::Error)]
-enum TestFailure {
+pub enum TestFailure {
     #[error("test {0} input {1} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}")]
     InputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>),
     #[error("test {0} output {1} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}")]
@@ -62,7 +64,7 @@ enum TestFailure {
 }
 
 #[derive(Debug)]
-struct TestReport {
+pub struct TestReport {
     test: Test,
     results: Vec<Result<(), TestFailure>>,
 }
@@ -98,7 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (test_name, report) in reports {
         print!("{test_name}: ");
         match report {
-            Err(e) => {
+            Err(_) => {
                 println!("failed completely (bad input?)");
                 total_fails += 1;
             }
@@ -106,7 +108,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let passed = report.results.iter().filter(|r| r.is_ok()).count();
                 println!("{passed}/{} passed!", report.results.len());
                 for (test_func, result) in report.test.funcs.iter().zip(report.results.iter()) {
-                    print!("  {test_name}::{}... ", test_func.name());
+                    print!("  {test_name}::{}... ", test_func.name);
                     if result.is_ok() {
                         println!("passed!");
                         passes += 1;
@@ -127,30 +129,43 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn do_test(out_dir: &Path, test_name: &str) -> Result<TestReport, BuildError> {
     eprintln!("preparing test {test_name}");
     let test = read_test_manifest(test_name)?;
+    let is_handwritten = test.funcs.iter().any(|f| {
+        f.conventions
+            .iter()
+            .any(|c| matches!(c, CallingConvention::Handwritten))
+    });
+    let is_all_handwritten = test.funcs.iter().all(|f| {
+        f.conventions
+            .iter()
+            .all(|c| matches!(c, CallingConvention::Handwritten))
+    });
 
-    let base_dir = if test.generated {
-        PathBuf::from("target/temp/generated/")
+    if is_handwritten && !is_all_handwritten {
+        return Err(BuildError::HandwrittenMixing);
+    }
+
+    let base_dir = if is_handwritten {
+        PathBuf::from("handwritten_impls/")
     } else {
-        PathBuf::from("impls/")
+        PathBuf::from("generated_impls/")
     };
 
-    if test.generated {
+    if !is_handwritten {
+        // If the impl isn't handwritten, then we need to generate it.
         let rust_src = base_dir.join(format!("rust/{test_name}_rust_caller.rs"));
         let c_src = base_dir.join(format!("c/{test_name}_c_callee.c"));
 
-        {
-            std::fs::create_dir_all(rust_src.parent().unwrap())?;
-            std::fs::create_dir_all(c_src.parent().unwrap())?;
-            let mut rust_output = File::create(rust_src)?;
-            generate_rust_caller(&mut rust_output, &test)?;
+        std::fs::create_dir_all(rust_src.parent().unwrap())?;
+        std::fs::create_dir_all(c_src.parent().unwrap())?;
+        let mut rust_output = File::create(rust_src)?;
+        abis::rust::generate_rust_caller(&mut rust_output, &test)?;
 
-            let mut c_output = File::create(c_src)?;
-            generate_c_callee(&mut c_output, &test)?;
-        }
+        let mut c_output = File::create(c_src)?;
+        abis::c::generate_c_callee(&mut c_output, &test)?;
     }
 
-    let caller = build_rust_caller(&base_dir, test_name)?;
-    let callee = build_cc_callee(&base_dir, test_name)?;
+    let caller = abis::rust::build_rust_caller(&base_dir, test_name)?;
+    let callee = abis::c::build_cc_callee(&base_dir, test_name)?;
     let dylib = build_harness(&base_dir, &caller, &callee, test_name)?;
 
     run_dynamic_test(&out_dir, test_name, &dylib, test)
@@ -165,50 +180,6 @@ fn read_test_manifest(test_name: &str) -> Result<Test, BuildError> {
     let test: Test =
         ron::from_str(&input).map_err(|e| BuildError::ParseError(test_file, input, e))?;
     Ok(test)
-}
-
-fn build_cc_callee(base_path: &Path, test: &str) -> Result<String, BuildError> {
-    let filename = format!("{test}_c_callee.c");
-    let output_lib = format!("{test}_c_callee");
-    let mut src = PathBuf::from(base_path);
-    src.push("c");
-    src.push(filename);
-
-    cc::Build::new()
-        .file(src)
-        .cargo_metadata(false)
-        // .warnings_into_errors(true)
-        .try_compile(&output_lib)?;
-    Ok(output_lib)
-}
-fn build_cc_caller(base_path: &Path, test: &str) -> Result<String, BuildError> {
-    todo!()
-}
-
-fn build_rust_callee(base_path: &Path, test: &str) -> Result<String, BuildError> {
-    todo!()
-}
-fn build_rust_caller(base_path: &Path, test: &str) -> Result<String, BuildError> {
-    let filename = format!("{test}_rust_caller.rs");
-    let output_lib = format!("{test}_rust_caller");
-
-    let mut src = PathBuf::from(base_path);
-    src.push("rust");
-    src.push(filename);
-
-    let out = Command::new("rustc")
-        .arg("--crate-type")
-        .arg("staticlib")
-        .arg("--out-dir")
-        .arg("target/temp/")
-        .arg(src)
-        .output()?;
-
-    if !out.status.success() {
-        Err(BuildError::RustCompile(out))
-    } else {
-        Ok(output_lib)
-    }
 }
 
 fn build_harness(
@@ -246,167 +217,6 @@ fn build_harness(
     } else {
         Ok(output)
     }
-}
-
-fn generate_rust_caller<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildError> {
-    // Load test harness "headers"
-    write!(f, "{}", RUST_TEST_PREFIX)?;
-
-    // Forward-decl struct types
-    let mut forward_decls = std::collections::HashMap::<String, String>::new();
-    for function in &test.funcs {
-        let function = function.sig()?;
-        for val in function.inputs.iter().chain(function.output.as_ref()) {
-            if let Some((name, decl)) = val.rust_forward_decl()? {
-                match forward_decls.entry(name) {
-                    std::collections::hash_map::Entry::Occupied(entry) => {
-                        if entry.get() != &decl {
-                            return Err(BuildError::InconsistentStructDefinition {
-                                name: entry.key().clone(),
-                                old_decl: entry.remove(),
-                                new_decl: decl,
-                            });
-                        }
-                    }
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        writeln!(f, "{decl}")?;
-                        entry.insert(decl);
-                    }
-                }
-            }
-        }
-    }
-
-    // Generate the extern block
-    writeln!(f, "extern {{")?;
-    for function in &test.funcs {
-        let function = function.sig()?;
-        write!(f, "  fn {}(", function.name)?;
-        for (idx, input) in function.inputs.iter().enumerate() {
-            let ty = input.rust_arg_type()?;
-            write!(f, "arg{idx}: {ty}, ",)?;
-        }
-        write!(f, ")")?;
-        if let Some(output) = &function.output {
-            let ty = output.rust_arg_type()?;
-            write!(f, " -> {ty}")?;
-        }
-        writeln!(f, ";")?;
-    }
-    writeln!(f, "}}")?;
-    writeln!(f)?;
-
-    // Now generate the body
-    writeln!(f, "#[no_mangle] pub extern fn do_test() {{")?;
-
-    for function in &test.funcs {
-        let function = function.sig()?;
-        writeln!(f, "   unsafe {{")?;
-        // writeln!(f, r#"        println!("test {}::{}\n");"#, test.name, function.name)?;
-        // writeln!(f, r#"        println!("\n{}::{} rust caller inputs: ");"#, test.name, function.name)?;
-        // writeln!(f)?;
-        for (idx, input) in function.inputs.iter().enumerate() {
-            let ty = input.rust_arg_type()?;
-            writeln!(f, "        let arg{idx}: {ty} = {};", input.rust_val()?)?;
-        }
-        writeln!(f)?;
-        for (idx, input) in function.inputs.iter().enumerate() {
-            //    writeln!(f, r#"        println!("{{}}", arg{idx});"#)?;
-            let val = format!("arg{idx}");
-            writeln!(f, "{}", input.rust_write_val("CALLER_INPUTS", &val)?)?;
-        }
-        writeln!(f)?;
-        write!(f, "        ")?;
-        if let Some(output) = &function.output {
-            let ty = output.rust_arg_type()?;
-            write!(f, "        let output: {ty} = ")?;
-        }
-        write!(f, "{}(", function.name)?;
-        for (idx, _input) in function.inputs.iter().enumerate() {
-            write!(f, "arg{idx}, ")?;
-        }
-        writeln!(f, ");")?;
-        writeln!(f)?;
-        if let Some(output) = &function.output {
-            //    writeln!(f, r#"        println!("\n{}::{} rust caller outputs: ");"#, test.name, function.name)?;
-            //    writeln!(f, r#"        println!("{{}}", output);"#)?;
-            writeln!(f, "{}", output.rust_write_val("CALLER_OUTPUTS", "output")?)?;
-        }
-        writeln!(
-            f,
-            "        FINISHED_FUNC.unwrap()(CALLER_INPUTS, CALLER_OUTPUTS);"
-        )?;
-        writeln!(f, "   }}")?;
-    }
-
-    writeln!(f, "}}")?;
-
-    Ok(())
-}
-
-fn generate_c_callee<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildError> {
-    write!(f, "{}", C_TEST_PREFIX)?;
-
-    // Forward-decl struct types
-    let mut forward_decls = std::collections::HashSet::new();
-    for function in &test.funcs {
-        let function = function.sig()?;
-        for val in function.inputs.iter().chain(function.output.as_ref()) {
-            if let Some((name, decl)) = val.c_forward_decl()? {
-                if forward_decls.insert(name) {
-                    writeln!(f, "{decl}")?;
-                }
-            }
-        }
-    }
-
-    // Generate the impls
-    for function in &test.funcs {
-        let function = function.sig()?;
-        if let Some(output) = &function.output {
-            write!(f, "{} ", output.c_arg_type()?)?;
-        } else {
-            write!(f, "void ")?;
-        }
-        write!(f, "{}(", function.name)?;
-        for (idx, input) in function.inputs.iter().enumerate() {
-            if idx != 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{} arg{idx}", input.c_arg_type()?)?;
-        }
-        writeln!(f, ") {{")?;
-
-        // writeln!(f, r#"    printf("\n{}::{} C callee inputs: \n");"#, test.name, function.name)?;
-        writeln!(f)?;
-        for (idx, input) in function.inputs.iter().enumerate() {
-            // let formatter = input.cfmt();
-            // writeln!(f, r#"    printf("%" {formatter} "\n", arg{idx});"#)?;
-            let val = format!("arg{idx}");
-            writeln!(f, "{}", input.c_write_val("CALLEE_INPUTS", &val)?)?;
-        }
-        writeln!(f)?;
-        if let Some(output) = &function.output {
-            // let formatter = output.cfmt();
-            writeln!(
-                f,
-                "    {} output = {};",
-                output.c_arg_type()?,
-                output.c_val()?
-            )?;
-            // writeln!(f, r#"    printf("\n{}::{} C callee outputs: \n");"#, test.name, function.name)?;
-            // writeln!(f, r#"    printf("%" {formatter} "\n", output);"#)?;
-            writeln!(f, "{}", output.c_write_val("CALLEE_OUTPUTS", "output")?)?;
-            writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
-            writeln!(f, "    return output;")?;
-        } else {
-            writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
-        }
-        writeln!(f, "}}")?;
-        writeln!(f)?;
-    }
-
-    Ok(())
 }
 
 fn run_dynamic_test(
@@ -622,10 +432,10 @@ fn run_dynamic_test(
             // TODO: fix this abstraction boundary?
             match result {
                 Ok(()) => {
-                    eprintln!("Test {}::{}... passed!", test.name, func.name());
+                    eprintln!("Test {}::{}... passed!", test.name, func.name);
                 }
                 Err(e) => {
-                    eprintln!("Test {}::{}... failed!", test.name, func.name());
+                    eprintln!("Test {}::{}... failed!", test.name, func.name);
                     eprintln!("{}", e);
                 }
             }

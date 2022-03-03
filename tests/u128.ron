@@ -1,24 +1,27 @@
 Test(
     name: "u128",
-    generated: true,
     funcs: [
-        All((
+        (
             name: "one_in",
+            conventions: [All],
             inputs: [Int(c_uint128_t(0xa1b2c3d4_21becad4_e1bfc1df_a0b0c1d3))],
             output: None,
-        )),
-        All((
+        ),
+        (
             name: "one_out",
+            conventions: [All],
             inputs: [Int(c_uint128_t(0x12f456789))],
             output: None,
-        )),
-        All((
+        ),
+        (
             name: "in_out",
+            conventions: [All],
             inputs: [Int(c_uint128_t(0x12f456789))],
             output: Some(Int(c_uint128_t(0x1a3456e89))),
-        )),
-        All((
+        ),
+        (
             name: "many_val",
+            conventions: [All],
             inputs: [
                 Int(c_int64_t(0x12f456789)), 
                 Int(c_int64_t(0x2a4567e1)),
@@ -30,6 +33,6 @@ Test(
                 Int(c_int64_t(0xea4367e2)),
             ],
             output: Some(Int(c_int64_t(0xfa3456a81))),
-        )),
+        ),
     ]
 )

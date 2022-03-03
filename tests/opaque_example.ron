@@ -1,7 +1,11 @@
 Test(
     name: "opaque_example",
-    generated: false,
     funcs: [
-        Custom("i_am_opaque_to_the_test_harness")
+        (
+            name: "i_am_opaque_to_the_test_harness",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        )
     ]
 )

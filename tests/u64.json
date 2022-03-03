@@ -1,0 +1,65 @@
+{
+    "name": "u64",
+    "functions": [
+        {
+            "name": "u64_basic_val",
+            "convention": "c",
+            "inputs": [
+                {
+                    "ctype": "int64_t",
+                    "val": "0x12f456789"
+                },
+                {
+                    "ctype": "int64_t",
+                    "val": "0x2a4567e1"
+                }
+            ],
+            "output": {
+                "ctype": "int64_t",
+                "val": "0x1a3456e89"
+            }
+        },
+        {
+            "name": "u64_many_val",
+            "convention": "c",
+            "inputs": [
+                {
+                    "ctype": "int64_t",
+                    "val": "0x12f456789"
+                },
+                {
+                    "ctype": "int64_t",
+                    "val": "0x2a4567e1"
+                },
+                {
+                    "ctype": "int64_t",
+                    "val": "0xe2f4e67a9"
+                },
+                {
+                    "ctype": "int64_t",
+                    "val": "0x3a456be2"
+                },
+                {
+                    "ctype": "int64_t",
+                    "val": "0x1af45c780"
+                },
+                {
+                    "ctype": "int64_t",
+                    "val": "0x1a45e7e1"
+                },
+                {
+                    "ctype": "int64_t",
+                    "val": "0x12f4567e1"
+                },
+                {
+                    "ctype": "int64_t",
+                    "val": "0xea4367e2"
+                }
+            ],
+            "output": {
+                "ctype": "int64_t",
+                "val": "0x1a3456e89"
+            }
+        }
+    ]
+}

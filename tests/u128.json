@@ -1,0 +1,19 @@
+{
+    "name": "u128",
+    "functions": [
+        {
+            "name": "u128_by_val",
+            "convention": "c",
+            "inputs": [
+                {
+                    "ctype": "int64_t",
+                    "val": "0x12f456789"
+                }
+            ],
+            "output": {
+                "ctype": "int64_t",
+                "val": "0x1a3456e89"
+            }
+        }
+    ]
+}

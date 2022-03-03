@@ -1,21 +1,16 @@
-use std::io::{Write, Read};
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 mod abis;
 
 use abis::*;
 
-static TESTS: &[&str] = &[
-    "opaque_example",
-    "u64",
-    "u128",
-    "structs",
-];
+static TESTS: &[&str] = &["opaque_example", "u64", "u128", "structs"];
 
 static RUST_TEST_PREFIX: &str = include_str!("../harness/rust_test_prefix.rs");
 static C_TEST_PREFIX: &str = include_str!("../harness/c_test_prefix.h");
@@ -57,11 +52,11 @@ enum TestFailure {
     #[error("test {0} output {1} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}")]
     OutputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>),
     #[error("test {0} input {1} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}")]
-    InputFieldCountMismatch( usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>),
+    InputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>),
     #[error("test {0} output {1} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}")]
     OutputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>),
     #[error("test {0} input count mismatch \ncaller: {1:#02X?} \ncallee: {2:#02X?}")]
-    InputCountMismatch( usize, Vec<Vec<Vec<u8>>>, Vec<Vec<Vec<u8>>>),
+    InputCountMismatch(usize, Vec<Vec<Vec<u8>>>, Vec<Vec<Vec<u8>>>),
     #[error("test {0} output count mismatch \ncaller: {1:#02X?} \ncallee: {2:#02X?}")]
     OutputCountMismatch(usize, Vec<Vec<Vec<u8>>>, Vec<Vec<Vec<u8>>>),
 }
@@ -87,7 +82,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut reports = Vec::new();
     for test_name in TESTS {
         let result = do_test(&out_dir, test_name);
-        
+
         if let Err(e) = &result {
             eprintln!("test failed: {}", e);
         }
@@ -140,7 +135,7 @@ fn do_test(out_dir: &Path, test_name: &str) -> Result<TestReport, BuildError> {
     };
 
     if test.generated {
-        let rust_src = base_dir.join(format!("rust/{test_name}_rust_caller.rs")); 
+        let rust_src = base_dir.join(format!("rust/{test_name}_rust_caller.rs"));
         let c_src = base_dir.join(format!("c/{test_name}_c_callee.c"));
 
         {
@@ -153,7 +148,7 @@ fn do_test(out_dir: &Path, test_name: &str) -> Result<TestReport, BuildError> {
             generate_c_callee(&mut c_output, &test)?;
         }
     }
-    
+
     let caller = build_rust_caller(&base_dir, test_name)?;
     let callee = build_cc_callee(&base_dir, test_name)?;
     let dylib = build_harness(&base_dir, &caller, &callee, test_name)?;
@@ -167,9 +162,8 @@ fn read_test_manifest(test_name: &str) -> Result<Test, BuildError> {
     let mut reader = BufReader::new(file);
     let mut input = String::new();
     reader.read_to_string(&mut input)?;
-    let test: Test = ron::from_str(&input).map_err(|e|
-        BuildError::ParseError(test_file, input, e)    
-    )?;
+    let test: Test =
+        ron::from_str(&input).map_err(|e| BuildError::ParseError(test_file, input, e))?;
     Ok(test)
 }
 
@@ -197,7 +191,7 @@ fn build_rust_callee(base_path: &Path, test: &str) -> Result<String, BuildError>
 fn build_rust_caller(base_path: &Path, test: &str) -> Result<String, BuildError> {
     let filename = format!("{test}_rust_caller.rs");
     let output_lib = format!("{test}_rust_caller");
-    
+
     let mut src = PathBuf::from(base_path);
     src.push("rust");
     src.push(filename);
@@ -217,11 +211,20 @@ fn build_rust_caller(base_path: &Path, test: &str) -> Result<String, BuildError>
     }
 }
 
-fn build_harness(_base_path: &Path, caller_name: &str, callee_name: &str, test: &str) -> Result<String, BuildError> {
+fn build_harness(
+    _base_path: &Path,
+    caller_name: &str,
+    callee_name: &str,
+    test: &str,
+) -> Result<String, BuildError> {
     let src = PathBuf::from("harness/harness.rs");
     let caller = format!("target/temp/{caller_name}");
     let callee = format!("target/temp/{callee_name}");
-    let output = format!("target/temp/{test}{}{}_harness.dll", caller_name.strip_prefix(test).unwrap(), callee_name.strip_prefix(test).unwrap());
+    let output = format!(
+        "target/temp/{test}{}{}_harness.dll",
+        caller_name.strip_prefix(test).unwrap(),
+        callee_name.strip_prefix(test).unwrap()
+    );
 
     let out = Command::new("rustc")
         .arg("-v")
@@ -245,9 +248,6 @@ fn build_harness(_base_path: &Path, caller_name: &str, callee_name: &str, test: 
     }
 }
 
-
-
-
 fn generate_rust_caller<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildError> {
     // Load test harness "headers"
     write!(f, "{}", RUST_TEST_PREFIX)?;
@@ -262,9 +262,9 @@ fn generate_rust_caller<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildErr
                     std::collections::hash_map::Entry::Occupied(entry) => {
                         if entry.get() != &decl {
                             return Err(BuildError::InconsistentStructDefinition {
-                                name: entry.key().clone(), 
-                                old_decl: entry.remove(), 
-                                new_decl: decl
+                                name: entry.key().clone(),
+                                old_decl: entry.remove(),
+                                new_decl: decl,
                             });
                         }
                     }
@@ -311,7 +311,7 @@ fn generate_rust_caller<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildErr
         }
         writeln!(f)?;
         for (idx, input) in function.inputs.iter().enumerate() {
-        //    writeln!(f, r#"        println!("{{}}", arg{idx});"#)?;
+            //    writeln!(f, r#"        println!("{{}}", arg{idx});"#)?;
             let val = format!("arg{idx}");
             writeln!(f, "{}", input.rust_write_val("CALLER_INPUTS", &val)?)?;
         }
@@ -328,11 +328,14 @@ fn generate_rust_caller<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildErr
         writeln!(f, ");")?;
         writeln!(f)?;
         if let Some(output) = &function.output {
-        //    writeln!(f, r#"        println!("\n{}::{} rust caller outputs: ");"#, test.name, function.name)?;
-        //    writeln!(f, r#"        println!("{{}}", output);"#)?;
+            //    writeln!(f, r#"        println!("\n{}::{} rust caller outputs: ");"#, test.name, function.name)?;
+            //    writeln!(f, r#"        println!("{{}}", output);"#)?;
             writeln!(f, "{}", output.rust_write_val("CALLER_OUTPUTS", "output")?)?;
         }
-        writeln!(f, "        FINISHED_FUNC.unwrap()(CALLER_INPUTS, CALLER_OUTPUTS);")?;
+        writeln!(
+            f,
+            "        FINISHED_FUNC.unwrap()(CALLER_INPUTS, CALLER_OUTPUTS);"
+        )?;
         writeln!(f, "   }}")?;
     }
 
@@ -365,10 +368,10 @@ fn generate_c_callee<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildError>
         } else {
             write!(f, "void ")?;
         }
-        write!(f,"{}(", function.name)?;
+        write!(f, "{}(", function.name)?;
         for (idx, input) in function.inputs.iter().enumerate() {
             if idx != 0 {
-                write!(f, ", ")?;   
+                write!(f, ", ")?;
             }
             write!(f, "{} arg{idx}", input.c_arg_type()?)?;
         }
@@ -385,7 +388,12 @@ fn generate_c_callee<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildError>
         writeln!(f)?;
         if let Some(output) = &function.output {
             // let formatter = output.cfmt();
-            writeln!(f, "    {} output = {};", output.c_arg_type()?, output.c_val()?)?;
+            writeln!(
+                f,
+                "    {} output = {};",
+                output.c_arg_type()?,
+                output.c_val()?
+            )?;
             // writeln!(f, r#"    printf("\n{}::{} C callee outputs: \n");"#, test.name, function.name)?;
             // writeln!(f, r#"    printf("%" {formatter} "\n", output);"#)?;
             writeln!(f, "{}", output.c_write_val("CALLEE_OUTPUTS", "output")?)?;
@@ -401,19 +409,24 @@ fn generate_c_callee<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildError>
     Ok(())
 }
 
-
-
-
-
-
-
-
-fn run_dynamic_test(base_path: &Path, test_name: &str, dylib: &str, test: Test) -> Result<TestReport, BuildError> {
-    
-    type WriteCallback = unsafe extern fn(&mut WriteBuffer, *const u8, u32) -> ();
-    type FinishedValCallback = unsafe extern fn(&mut WriteBuffer) -> ();
-    type FinishedFuncCallback = unsafe extern fn(&mut WriteBuffer, &mut WriteBuffer) -> ();
-    type TestInit = unsafe extern fn(WriteCallback, FinishedValCallback, FinishedFuncCallback, &mut WriteBuffer,  &mut WriteBuffer,  &mut WriteBuffer,  &mut WriteBuffer) -> ();
+fn run_dynamic_test(
+    base_path: &Path,
+    test_name: &str,
+    dylib: &str,
+    test: Test,
+) -> Result<TestReport, BuildError> {
+    type WriteCallback = unsafe extern "C" fn(&mut WriteBuffer, *const u8, u32) -> ();
+    type FinishedValCallback = unsafe extern "C" fn(&mut WriteBuffer) -> ();
+    type FinishedFuncCallback = unsafe extern "C" fn(&mut WriteBuffer, &mut WriteBuffer) -> ();
+    type TestInit = unsafe extern "C" fn(
+        WriteCallback,
+        FinishedValCallback,
+        FinishedFuncCallback,
+        &mut WriteBuffer,
+        &mut WriteBuffer,
+        &mut WriteBuffer,
+        &mut WriteBuffer,
+    ) -> ();
 
     /// Tests write back the raw bytes of their values to a WriteBuffer in a
     /// hierarchical way: tests (functions) => values => fields => bytes.
@@ -424,7 +437,7 @@ fn run_dynamic_test(base_path: &Path, test_name: &str, dylib: &str, test: Test) 
     impl WriteBuffer {
         fn new() -> Self {
             // Preload the hierarchy for the first test.
-            WriteBuffer { 
+            WriteBuffer {
                 funcs: vec![vec![vec![]]],
             }
         }
@@ -434,36 +447,40 @@ fn run_dynamic_test(base_path: &Path, test_name: &str, dylib: &str, test: Test) 
         }
     }
 
-    unsafe extern fn write_field(output: &mut WriteBuffer, input: *const u8, size: u32) {
+    unsafe extern "C" fn write_field(output: &mut WriteBuffer, input: *const u8, size: u32) {
         // Push the bytes of an individual field
         let data = std::slice::from_raw_parts(input, size as usize);
-        output.funcs
+        output
+            .funcs
             .last_mut() // values
             .unwrap()
             .last_mut() // fields
             .unwrap()
             .push(data.to_vec());
     }
-    unsafe extern fn finished_val(output: &mut WriteBuffer) {
+    unsafe extern "C" fn finished_val(output: &mut WriteBuffer) {
         // This value is finished, push a new entry
-        output.funcs
+        output
+            .funcs
             .last_mut() // values
             .unwrap()
             .push(vec![]);
     }
-    unsafe extern fn finished_func(output1: &mut WriteBuffer, output2: &mut WriteBuffer) {
+    unsafe extern "C" fn finished_func(output1: &mut WriteBuffer, output2: &mut WriteBuffer) {
         // Remove the pending value
-        output1.funcs
+        output1
+            .funcs
             .last_mut() // values
             .unwrap()
             .pop()
             .unwrap();
-        output2.funcs
+        output2
+            .funcs
             .last_mut() // values
             .unwrap()
             .pop()
             .unwrap();
-    
+
         // Push a new pending function
         output1.funcs.push(vec![vec![]]);
         output2.funcs.push(vec![vec![]]);
@@ -478,13 +495,15 @@ fn run_dynamic_test(base_path: &Path, test_name: &str, dylib: &str, test: Test) 
         let lib = libloading::Library::new(dylib)?;
         let do_test: libloading::Symbol<TestInit> = lib.get(b"test_start")?;
         eprintln!("running test {test_name}");
-        do_test(write_field,
-            finished_val, 
-            finished_func,  
-            &mut caller_inputs, 
-            &mut caller_outputs, 
-            &mut callee_inputs, 
-            &mut callee_outputs);
+        do_test(
+            write_field,
+            finished_val,
+            finished_func,
+            &mut caller_inputs,
+            &mut caller_outputs,
+            &mut callee_inputs,
+            &mut callee_outputs,
+        );
 
         caller_inputs.finish_tests();
         caller_outputs.finish_tests();
@@ -492,62 +511,109 @@ fn run_dynamic_test(base_path: &Path, test_name: &str, dylib: &str, test: Test) 
         callee_outputs.finish_tests();
 
         let expected_test_count = test.funcs.len();
-        if caller_inputs.funcs.len() != expected_test_count ||
-            caller_outputs.funcs.len() != expected_test_count ||
-            callee_inputs.funcs.len() != expected_test_count ||
-            callee_outputs.funcs.len() != expected_test_count {
-            return Err(BuildError::TestCountMismatch(expected_test_count, 
+        if caller_inputs.funcs.len() != expected_test_count
+            || caller_outputs.funcs.len() != expected_test_count
+            || callee_inputs.funcs.len() != expected_test_count
+            || callee_outputs.funcs.len() != expected_test_count
+        {
+            return Err(BuildError::TestCountMismatch(
+                expected_test_count,
                 caller_inputs.funcs.len(),
                 caller_outputs.funcs.len(),
                 callee_inputs.funcs.len(),
                 callee_outputs.funcs.len(),
-            ))
+            ));
         }
 
         let mut results: Vec<Result<(), TestFailure>> = Vec::new();
-        'funcs: for (func_idx, (((caller_inputs, caller_outputs), callee_inputs), callee_outputs)) in 
-            caller_inputs.funcs.into_iter()
+        'funcs: for (
+            func_idx,
+            (((caller_inputs, caller_outputs), callee_inputs), callee_outputs),
+        ) in caller_inputs
+            .funcs
+            .into_iter()
             .zip(caller_outputs.funcs.into_iter())
             .zip(callee_inputs.funcs.into_iter())
             .zip(callee_outputs.funcs.into_iter())
-            .enumerate() {
+            .enumerate()
+        {
             if caller_inputs.len() != callee_inputs.len() {
-                results.push(Err(TestFailure::InputCountMismatch(func_idx, caller_inputs, callee_inputs)));
+                results.push(Err(TestFailure::InputCountMismatch(
+                    func_idx,
+                    caller_inputs,
+                    callee_inputs,
+                )));
                 continue 'funcs;
             }
             if caller_outputs.len() != callee_outputs.len() {
-                results.push(Err(TestFailure::OutputCountMismatch(func_idx, caller_outputs, callee_outputs)));
+                results.push(Err(TestFailure::OutputCountMismatch(
+                    func_idx,
+                    caller_outputs,
+                    callee_outputs,
+                )));
                 continue 'funcs;
             }
 
             // Process Inputs
-            for (input_idx, (caller_val, callee_val)) in caller_inputs.into_iter().zip(callee_inputs.into_iter()).enumerate() {
+            for (input_idx, (caller_val, callee_val)) in caller_inputs
+                .into_iter()
+                .zip(callee_inputs.into_iter())
+                .enumerate()
+            {
                 if caller_val.len() != callee_val.len() {
-                    results.push(Err(TestFailure::InputFieldCountMismatch(func_idx, input_idx, caller_val, callee_val)));
+                    results.push(Err(TestFailure::InputFieldCountMismatch(
+                        func_idx, input_idx, caller_val, callee_val,
+                    )));
                     continue 'funcs;
                 }
-                for (field_idx, (caller_field, callee_field)) in caller_val.into_iter().zip(callee_val.into_iter()).enumerate() {
+                for (field_idx, (caller_field, callee_field)) in caller_val
+                    .into_iter()
+                    .zip(callee_val.into_iter())
+                    .enumerate()
+                {
                     if caller_field != callee_field {
-                        results.push(Err(TestFailure::InputFieldMismatch(func_idx, input_idx, field_idx, caller_field, callee_field)));
+                        results.push(Err(TestFailure::InputFieldMismatch(
+                            func_idx,
+                            input_idx,
+                            field_idx,
+                            caller_field,
+                            callee_field,
+                        )));
                         continue 'funcs;
                     }
                 }
             }
-            
+
             // Process Outputs
-            for (output_idx, (caller_val, callee_val)) in caller_outputs.into_iter().zip(callee_outputs.into_iter()).enumerate() {
+            for (output_idx, (caller_val, callee_val)) in caller_outputs
+                .into_iter()
+                .zip(callee_outputs.into_iter())
+                .enumerate()
+            {
                 if caller_val.len() != callee_val.len() {
-                    results.push(Err(TestFailure::OutputFieldCountMismatch(func_idx, output_idx, caller_val, callee_val)));
+                    results.push(Err(TestFailure::OutputFieldCountMismatch(
+                        func_idx, output_idx, caller_val, callee_val,
+                    )));
                     continue 'funcs;
                 }
-                for (field_idx, (caller_field, callee_field)) in caller_val.into_iter().zip(callee_val.into_iter()).enumerate() {
+                for (field_idx, (caller_field, callee_field)) in caller_val
+                    .into_iter()
+                    .zip(callee_val.into_iter())
+                    .enumerate()
+                {
                     if caller_field != callee_field {
-                        results.push(Err(TestFailure::OutputFieldMismatch(func_idx, output_idx, field_idx, caller_field, callee_field)));
+                        results.push(Err(TestFailure::OutputFieldMismatch(
+                            func_idx,
+                            output_idx,
+                            field_idx,
+                            caller_field,
+                            callee_field,
+                        )));
                         continue 'funcs;
                     }
                 }
             }
-            
+
             // If we got this far then the test passes
             results.push(Ok(()));
         }
@@ -565,9 +631,6 @@ fn run_dynamic_test(base_path: &Path, test_name: &str, dylib: &str, test: Test) 
             }
         }
 
-        Ok(TestReport {
-            test,
-            results,
-        })
-    }    
+        Ok(TestReport { test, results })
+    }
 }

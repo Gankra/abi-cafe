@@ -9,8 +9,10 @@ edition = "2021"
 cc = "*"
 built = "*"
 serde_json = "*"
+ron = "*"
 serde = "*"
 libloading = "*"
+thiserror = "*"
 
 
 [build-dependencies]

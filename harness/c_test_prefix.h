@@ -8,3 +8,6 @@ extern WriteBuffer CALLER_OUTPUTS;
 extern WriteBuffer CALLEE_INPUTS;
 extern WriteBuffer CALLEE_OUTPUTS;
 extern void (*WRITE)(WriteBuffer, char*, uint32_t);
+extern void (*FINISHED_VAL)(WriteBuffer);
+extern void (*FINISHED_FUNC)(WriteBuffer, WriteBuffer);
+

@@ -1,0 +1,7 @@
+Test(
+    name: "opaque_example",
+    generated: false,
+    funcs: [
+        Custom("i_am_opaque_to_the_test_harness")
+    ]
+)

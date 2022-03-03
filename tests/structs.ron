@@ -1,0 +1,11 @@
+Test(
+    name: "structs",
+    generated: true,
+    funcs: [
+        All((
+            name: "basic_val",
+            inputs: [Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(1234.23))]), Struct("MyStruct", [Int(c_uint8_t(0x1)), Float(c_double(0.23))])],
+            output: None,
+        )),
+    ]
+)

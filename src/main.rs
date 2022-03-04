@@ -10,7 +10,7 @@ mod abis;
 
 use abis::*;
 
-pub static TESTS: &[&str] = &["opaque_example", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32", "i64", "i128", "structs"];
+pub static TESTS: &[&str] = &["opaque_example", "structs", "core_primitives", "ui128"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut reports = Vec::new();
     for test_name in TESTS {
-        for (caller, callee) in TEST_PAIRS { 
+        for (caller, callee) in TEST_PAIRS {
             let result = do_test(&out_dir, *caller, *callee, test_name);
 
             if let Err(e) = &result {
@@ -110,7 +110,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let passed = report.results.iter().filter(|r| r.is_ok()).count();
                 println!("{passed}/{} passed!", report.results.len());
                 for (test_func, result) in report.test.funcs.iter().zip(report.results.iter()) {
-                    let subtest_name = full_subtest_name(test_name, caller_name, callee_name, &test_func.name);
+                    let subtest_name =
+                        full_subtest_name(test_name, caller_name, callee_name, &test_func.name);
                     print!("  {}... ", subtest_name);
                     if result.is_ok() {
                         println!("passed!");
@@ -129,7 +130,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn do_test(_out_dir: &Path, caller: AbiRef, callee: AbiRef, test_name: &str) -> Result<TestReport, BuildError> {
+fn do_test(
+    _out_dir: &Path,
+    caller: AbiRef,
+    callee: AbiRef,
+    test_name: &str,
+) -> Result<TestReport, BuildError> {
     eprintln!("preparing test {test_name}");
     let caller_name = caller.name();
     let caller_src_ext = caller.src_ext();
@@ -158,8 +164,12 @@ fn do_test(_out_dir: &Path, caller: AbiRef, callee: AbiRef, test_name: &str) -> 
         PathBuf::from("generated_impls/")
     };
 
-    let caller_src = src_dir.join(format!("{caller_name}/{test_name}_{caller_name}_caller.{caller_src_ext}"));
-    let callee_src = src_dir.join(format!("{callee_name}/{test_name}_{callee_name}_callee.{callee_src_ext}"));
+    let caller_src = src_dir.join(format!(
+        "{caller_name}/{test_name}_{caller_name}_caller.{caller_src_ext}"
+    ));
+    let callee_src = src_dir.join(format!(
+        "{callee_name}/{test_name}_{callee_name}_callee.{callee_src_ext}"
+    ));
     let caller_lib = format!("{test_name}_{caller_name}_caller");
     let callee_lib = format!("{test_name}_{callee_name}_callee");
 
@@ -176,7 +186,13 @@ fn do_test(_out_dir: &Path, caller: AbiRef, callee: AbiRef, test_name: &str) -> 
 
     let caller_lib = caller.compile_caller(&caller_src, &caller_lib)?;
     let callee_lib = callee.compile_callee(&callee_src, &callee_lib)?;
-    let dylib = build_harness(caller_name, &caller_lib, callee_name, &callee_lib, test_name)?;
+    let dylib = build_harness(
+        caller_name,
+        &caller_lib,
+        callee_name,
+        &callee_lib,
+        test_name,
+    )?;
 
     run_dynamic_test(test_name, caller_name, callee_name, &dylib, test)
 }
@@ -200,9 +216,7 @@ fn build_harness(
     test: &str,
 ) -> Result<String, BuildError> {
     let src = PathBuf::from("harness/harness.rs");
-    let output = format!(
-        "target/temp/{test}_{caller_name}_calls_{callee_name}_harness.dll"
-    );
+    let output = format!("target/temp/{test}_{caller_name}_calls_{callee_name}_harness.dll");
 
     let out = Command::new("rustc")
         .arg("-v")
@@ -460,116 +474,125 @@ fn full_test_name(test_name: &str, caller_name: &str, callee_name: &str) -> Stri
     format!("{test_name}::{caller_name}_calls_{callee_name}")
 }
 
-fn full_subtest_name(test_name: &str, caller_name: &str, callee_name: &str, func_name: &str) -> String {
+fn full_subtest_name(
+    test_name: &str,
+    caller_name: &str,
+    callee_name: &str,
+    func_name: &str,
+) -> String {
     format!("{test_name}::{caller_name}_calls_{callee_name}::{func_name}")
 }
 
-
-
 /*
 fn generate_primitive_tests() {
-    let vals = &[
-        IntVal::c__int128(0x1a2b3c4d_23eaf142_7a320c01_e0120a82),
-        IntVal::c_int64_t(0x1a2b3c4d_23eaf142),
-        IntVal::c_int32_t(0x1a2b3c4d),
-        IntVal::c_int16_t(0x1a2b),
-        IntVal::c_int8_t(0x1a),
-        IntVal::c__uint128(0x1a2b3c4d_23eaf142_7a320c01_e0120a82),
-        IntVal::c_uint64_t(0x1a2b3c4d_23eaf142),
-        IntVal::c_uint32_t(0x1a2b3c4d),
-        IntVal::c_uint16_t(0x1a2b),
-        IntVal::c_uint8_t(0x1a),
+    let tests: &[(&str, &[Val])] = &[
+        (
+            "core_primitives",
+            &[
+                Val::Int(IntVal::c_int64_t(0x1a2b3c4d_23eaf142)),
+                Val::Int(IntVal::c_int32_t(0x1a2b3c4d)),
+                Val::Int(IntVal::c_int16_t(0x1a2b)),
+                Val::Int(IntVal::c_int8_t(0x1a)),
+                Val::Int(IntVal::c_uint64_t(0x1a2b3c4d_23eaf142)),
+                Val::Int(IntVal::c_uint32_t(0x1a2b3c4d)),
+                Val::Int(IntVal::c_uint16_t(0x1a2b)),
+                Val::Int(IntVal::c_uint8_t(0x1a)),
+                Val::Bool(true),
+                Val::Float(FloatVal::c_float(-4921.3527)),
+                Val::Float(FloatVal::c_double(809239021.392)),
+            ],
+        ),
+        (
+            "ui128",
+            &[
+                Val::Int(IntVal::c__int128(0x1a2b3c4d_23eaf142_7a320c01_e0120a82)),
+                Val::Int(IntVal::c__uint128(0x1a2b3c4d_23eaf142_7a320c01_e0120a82)),
+            ],
+        ),
     ];
 
-    for val in vals {
-        let new_val = || -> Val {
-            match val {
-                IntVal::c__int128(_) => Val::Int(val.clone()),
-                IntVal::c_int64_t(_) => Val::Int(val.clone()),
-                IntVal::c_int32_t(_) => Val::Int(val.clone()),
-                IntVal::c_int16_t(_) => Val::Int(val.clone()),
-                IntVal::c_int8_t(_) => Val::Int(val.clone()),
-                IntVal::c__uint128(_) => Val::Int(val.clone()),
-                IntVal::c_uint64_t(_) => Val::Int(val.clone()),
-                IntVal::c_uint32_t(_) => Val::Int(val.clone()),
-                IntVal::c_uint16_t(_) => Val::Int(val.clone()),
-                IntVal::c_uint8_t(_) => Val::Int(val.clone()),
-            }
-        };
-
-        let name = Val::Int(val.clone()).rust_arg_type().unwrap();
+    for (test_name, vals) in tests {
         let mut test = Test {
-            name: name.clone(),
+            name: test_name.to_string(),
             funcs: Vec::new(),
         };
 
-        test.funcs.push(Func { 
-            name: format!("val_in"), 
-            conventions: vec![CallingConvention::All],
-            inputs: vec![new_val()], 
-            output: None 
-        });
+        for val in vals.iter() {
+            let new_val = || -> Val {
+                // TODO: actually perturb the values?
+                val.clone()
+            };
 
-        test.funcs.push(Func { 
-            name: format!("val_out"), 
-            conventions: vec![CallingConvention::All],
-            inputs: vec![], 
-            output: Some(new_val()), 
-        });
+            let val_name = val.rust_arg_type().unwrap();
 
-        test.funcs.push(Func { 
-            name: format!("val_in_out"), 
-            conventions: vec![CallingConvention::All],
-            inputs: vec![new_val()], 
-            output: Some(new_val()), 
-        });
+            test.funcs.push(Func {
+                name: format!("{val_name}_val_in"),
+                conventions: vec![CallingConvention::All],
+                inputs: vec![new_val()],
+                output: None,
+            });
 
-        for len in 2..=16 {
-            test.funcs.push(Func { 
-                name: format!("val_in_{len}"), 
+            test.funcs.push(Func {
+                name: format!("{val_name}_val_out"),
                 conventions: vec![CallingConvention::All],
-                inputs: (0..len).map(|_| new_val()).collect(), 
-                output: None, 
+                inputs: vec![],
+                output: Some(new_val()),
             });
-        }
 
-        for len in 1..=16 {
-            test.funcs.push(Func { 
-                name: format!("struct_val_in_{len}"), 
+            test.funcs.push(Func {
+                name: format!("{val_name}_val_in_out"),
                 conventions: vec![CallingConvention::All],
-                inputs: vec![Val::Struct(
-                    format!("val_in_{len}"),
-                    (0..len).map(|_| new_val()).collect()
-                )], 
-                output: None, 
+                inputs: vec![new_val()],
+                output: Some(new_val()),
             });
+
+            for len in 2..=16 {
+                test.funcs.push(Func {
+                    name: format!("{val_name}_val_in_{len}"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: (0..len).map(|_| new_val()).collect(),
+                    output: None,
+                });
+            }
+
+            for len in 1..=16 {
+                test.funcs.push(Func {
+                    name: format!("struct_{val_name}_val_in_{len}"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: vec![Val::Struct(
+                        format!("{val_name}_val_in_{len}"),
+                        (0..len).map(|_| new_val()).collect(),
+                    )],
+                    output: None,
+                });
+            }
+            for idx in 0..=16 {
+                let mut inputs = (0..16).map(|_| new_val()).collect::<Vec<_>>();
+                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
+                inputs.insert(17 - idx, Val::Float(FloatVal::c_float(1234.456)));
+                test.funcs.push(Func {
+                    name: format!("{val_name}_val_in_{idx}_perturbed"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: inputs,
+                    output: None,
+                });
+            }
+            for idx in 0..=16 {
+                let mut inputs = (0..16).map(|_| new_val()).collect::<Vec<_>>();
+                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
+                inputs.insert(16 - idx, Val::Float(FloatVal::c_float(1234.456)));
+                test.funcs.push(Func {
+                    name: format!("struct_{val_name}_val_in_{idx}_perturbed"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: vec![Val::Struct(
+                        format!("{val_name}_val_in_{idx}_perturbed"),
+                        inputs,
+                    )],
+                    output: None,
+                });
+            }
         }
-        for idx in 0..=16 {
-            let mut inputs = (0..16).map(|_| new_val()).collect::<Vec<_>>();
-            inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xab)));
-            inputs.insert(17-idx, Val::Float(FloatVal::c_float(1234.456)));
-            test.funcs.push(Func { 
-                name: format!("val_in_{idx}_perturbed"), 
-                conventions: vec![CallingConvention::All],
-                inputs: inputs, 
-                output: None, 
-            });
-        }
-        for idx in 0..=16 {
-            let mut inputs = (0..16).map(|_| new_val()).collect::<Vec<_>>();
-            inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xab)));
-            inputs.insert(16-idx, Val::Float(FloatVal::c_float(1234.456)));
-            test.funcs.push(Func { 
-                name: format!("struct_val_in_{idx}_perturbed"), 
-                conventions: vec![CallingConvention::All],
-                inputs: vec![Val::Struct(
-                    format!("val_in_{idx}_perturbed"),
-                    inputs,
-                )], 
-                output: None, 
-            });
-        }
-        let mut file = std::fs::File::create(format!("tests/{name}.ron")).unwrap();
+        let mut file = std::fs::File::create(format!("tests/{test_name}.ron")).unwrap();
         let output = ron::to_string(&test).unwrap();
         file.write_all(output.as_bytes()).unwrap();
     }

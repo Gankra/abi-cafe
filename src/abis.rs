@@ -1,8 +1,8 @@
 #![allow(non_camel_case_types)]
 
+use super::BuildError;
 use std::io::Write;
 use std::path::Path;
-use super::BuildError;
 
 pub mod c;
 pub mod rust;
@@ -12,10 +12,7 @@ pub type AbiRef = &'static (dyn Abi + Sync);
 pub static RUST_ABI: AbiRef = &rust::RustAbi;
 pub static C_ABI: AbiRef = &c::CAbi;
 
-pub static TEST_PAIRS: &[(AbiRef, AbiRef)] = &[
-    (RUST_ABI, C_ABI),
-    (C_ABI, RUST_ABI),
-];
+pub static TEST_PAIRS: &[(AbiRef, AbiRef)] = &[(RUST_ABI, C_ABI), (C_ABI, RUST_ABI)];
 
 pub trait Abi {
     fn name(&self) -> &'static str;
@@ -25,8 +22,6 @@ pub trait Abi {
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
     fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
 }
-
-
 
 #[derive(Debug, thiserror::Error)]
 pub enum GenerateError {

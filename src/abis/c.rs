@@ -101,18 +101,19 @@ impl Abi for CAbi {
                 // let formatter = input.cfmt();
                 // writeln!(f, r#"    printf("%" {formatter} "\n", arg{idx});"#)?;
                 let var = format!("arg{idx}");
-                write!(f, "        {} {var} = {};", input.c_arg_type()?, input.c_val()?)?;
+                writeln!(
+                    f,
+                    "        {} {var} = {};",
+                    input.c_arg_type()?,
+                    input.c_val()?
+                )?;
                 writeln!(f, "{}", input.c_write_val("CALLER_INPUTS", &var)?)?;
             }
             writeln!(f)?;
-            
+
             // Output
             if let Some(output) = &function.output {
-                write!(
-                    f,
-                    "        {} output = ",
-                    output.c_arg_type()?,
-                )?;
+                write!(f, "        {} output = ", output.c_arg_type()?,)?;
             }
 
             // Do the actual call
@@ -153,12 +154,11 @@ impl Abi for CAbi {
             .try_compile(lib_name)?;
         Ok(String::from(lib_name))
     }
-
 }
 
 fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
     write!(f, "{}", C_TEST_PREFIX)?;
-        
+
     // Forward-decl struct types
     let mut forward_decls = std::collections::HashSet::new();
     for function in &test.funcs {

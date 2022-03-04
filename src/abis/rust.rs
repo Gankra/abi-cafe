@@ -15,7 +15,7 @@ impl Abi for RustAbi {
 
     fn generate_caller(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
         write_rust_prefix(f, test)?;
-    
+
         // Generate the extern block
         writeln!(f, "extern {{")?;
         for function in &test.funcs {
@@ -33,10 +33,10 @@ impl Abi for RustAbi {
         }
         writeln!(f, "}}")?;
         writeln!(f)?;
-    
+
         // Now generate the body
         writeln!(f, "#[no_mangle] pub extern fn do_test() {{")?;
-    
+
         for function in &test.funcs {
             writeln!(f, "   unsafe {{")?;
             // writeln!(f, r#"        println!("test {}::{}\n");"#, test.name, function.name)?;
@@ -75,14 +75,14 @@ impl Abi for RustAbi {
             )?;
             writeln!(f, "   }}")?;
         }
-    
+
         writeln!(f, "}}")?;
-    
+
         Ok(())
     }
     fn generate_callee(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
         write_rust_prefix(f, test)?;
- 
+
         for function in &test.funcs {
             // Write the signature
             writeln!(f, "#[no_mangle]")?;
@@ -109,18 +109,28 @@ impl Abi for RustAbi {
                 let ty = output.rust_arg_type()?;
                 let val = output.rust_val()?;
                 writeln!(f, "    let output: {ty} = {val};")?;
-                writeln!(f, "    {}", output.rust_write_val("CALLEE_OUTPUTS", "output")?)?;
-                writeln!(f, "    FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
+                writeln!(
+                    f,
+                    "    {}",
+                    output.rust_write_val("CALLEE_OUTPUTS", "output")?
+                )?;
+                writeln!(
+                    f,
+                    "    FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
+                )?;
                 writeln!(f, "    return output;")?;
             } else {
-                writeln!(f, "    FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
+                writeln!(
+                    f,
+                    "    FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
+                )?;
             }
             writeln!(f, "}}")?;
         }
-    
+
         Ok(())
     }
-    
+
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
         let out = Command::new("rustc")
             .arg("--crate-type")
@@ -129,7 +139,7 @@ impl Abi for RustAbi {
             .arg("target/temp/")
             .arg(src_path)
             .output()?;
-    
+
         if !out.status.success() {
             Err(BuildError::RustCompile(out))
         } else {
@@ -144,14 +154,13 @@ impl Abi for RustAbi {
             .arg("target/temp/")
             .arg(src_path)
             .output()?;
-    
+
         if !out.status.success() {
             Err(BuildError::RustCompile(out))
         } else {
             Ok(String::from(lib_name))
         }
     }
-    
 }
 
 fn write_rust_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {

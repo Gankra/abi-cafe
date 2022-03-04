@@ -1,6 +1,179 @@
 use super::super::*;
 use super::*;
 
+pub static C_TEST_PREFIX: &str = include_str!("../../harness/c_test_prefix.h");
+
+pub struct CAbi;
+
+impl Abi for CAbi {
+    fn name(&self) -> &'static str {
+        "c"
+    }
+    fn src_ext(&self) -> &'static str {
+        "c"
+    }
+
+    fn generate_callee(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+        write_c_prefix(f, test)?;
+
+        // Generate the impls
+        for function in &test.funcs {
+            if let Some(output) = &function.output {
+                write!(f, "{} ", output.c_arg_type()?)?;
+            } else {
+                write!(f, "void ")?;
+            }
+            write!(f, "{}(", function.name)?;
+            for (idx, input) in function.inputs.iter().enumerate() {
+                if idx != 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{} arg{idx}", input.c_arg_type()?)?;
+            }
+            if function.inputs.is_empty() {
+                write!(f, "void")?;
+            }
+            writeln!(f, ") {{")?;
+
+            // writeln!(f, r#"    printf("\n{}::{} C callee inputs: \n");"#, test.name, function.name)?;
+            writeln!(f)?;
+            for (idx, input) in function.inputs.iter().enumerate() {
+                // let formatter = input.cfmt();
+                // writeln!(f, r#"    printf("%" {formatter} "\n", arg{idx});"#)?;
+                let val = format!("arg{idx}");
+                writeln!(f, "{}", input.c_write_val("CALLEE_INPUTS", &val)?)?;
+            }
+            writeln!(f)?;
+            if let Some(output) = &function.output {
+                // let formatter = output.cfmt();
+                writeln!(
+                    f,
+                    "    {} output = {};",
+                    output.c_arg_type()?,
+                    output.c_val()?
+                )?;
+                // writeln!(f, r#"    printf("\n{}::{} C callee outputs: \n");"#, test.name, function.name)?;
+                // writeln!(f, r#"    printf("%" {formatter} "\n", output);"#)?;
+                writeln!(f, "{}", output.c_write_val("CALLEE_OUTPUTS", "output")?)?;
+                writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
+                writeln!(f, "    return output;")?;
+            } else {
+                writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
+            }
+            writeln!(f, "}}")?;
+            writeln!(f)?;
+        }
+
+        Ok(())
+    }
+
+    fn generate_caller(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+        write_c_prefix(f, test)?;
+
+        // Generate the extern block
+        for function in &test.funcs {
+            if let Some(output) = &function.output {
+                write!(f, "{} ", output.c_arg_type()?)?;
+            } else {
+                write!(f, "void ")?;
+            }
+            write!(f, "{}(", function.name)?;
+            for (idx, input) in function.inputs.iter().enumerate() {
+                if idx != 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{} arg{idx}", input.c_arg_type()?)?;
+            }
+            if function.inputs.is_empty() {
+                write!(f, "void")?;
+            }
+            writeln!(f, ");")?;
+        }
+
+        writeln!(f)?;
+        writeln!(f, "void do_test(void) {{")?;
+
+        // Generate the impls
+        for function in &test.funcs {
+            // Inputs
+            writeln!(f, "{{")?;
+            for (idx, input) in function.inputs.iter().enumerate() {
+                // let formatter = input.cfmt();
+                // writeln!(f, r#"    printf("%" {formatter} "\n", arg{idx});"#)?;
+                let var = format!("arg{idx}");
+                write!(f, "        {} {var} = {};", input.c_arg_type()?, input.c_val()?)?;
+                writeln!(f, "{}", input.c_write_val("CALLER_INPUTS", &var)?)?;
+            }
+            writeln!(f)?;
+            
+            // Output
+            if let Some(output) = &function.output {
+                write!(
+                    f,
+                    "        {} output = ",
+                    output.c_arg_type()?,
+                )?;
+            }
+
+            // Do the actual call
+            write!(f, "{}(", function.name)?;
+            for (idx, _input) in function.inputs.iter().enumerate() {
+                if idx != 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "arg{idx}")?;
+            }
+            writeln!(f, ");")?;
+
+            if let Some(output) = &function.output {
+                writeln!(f, "{}", output.c_write_val("CALLER_OUTPUTS", "output")?)?;
+            }
+            writeln!(f, "        FINISHED_FUNC(CALLER_INPUTS, CALLER_OUTPUTS);")?;
+            writeln!(f, "    }}")?;
+            writeln!(f)?;
+        }
+        writeln!(f, "}}")?;
+        Ok(())
+    }
+
+    fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
+        cc::Build::new()
+            .file(src_path)
+            .cargo_metadata(false)
+            // .warnings_into_errors(true)
+            .try_compile(lib_name)?;
+        Ok(String::from(lib_name))
+    }
+
+    fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
+        cc::Build::new()
+            .file(src_path)
+            .cargo_metadata(false)
+            // .warnings_into_errors(true)
+            .try_compile(lib_name)?;
+        Ok(String::from(lib_name))
+    }
+
+}
+
+fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+    write!(f, "{}", C_TEST_PREFIX)?;
+        
+    // Forward-decl struct types
+    let mut forward_decls = std::collections::HashSet::new();
+    for function in &test.funcs {
+        for val in function.inputs.iter().chain(function.output.as_ref()) {
+            if let Some((name, decl)) = val.c_forward_decl()? {
+                if forward_decls.insert(name) {
+                    writeln!(f, "{decl}")?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 impl Val {
     pub fn c_arg_type(&self) -> Result<String, GenerateError> {
         use IntVal::*;
@@ -15,12 +188,12 @@ impl Val {
             Float(FloatVal::c_double(_)) => format!("double"),
             Float(FloatVal::c_float(_)) => format!("float"),
             Int(int_val) => match int_val {
-                c_int128_t(_) => format!("int128_t"),
+                c__int128(_) => format!("__int128_t"),
                 c_int64_t(_) => format!("int64_t"),
-                c_int32_t(_) => format!("int33_t"),
+                c_int32_t(_) => format!("int32_t"),
                 c_int16_t(_) => format!("int16_t"),
                 c_int8_t(_) => format!("int8_t"),
-                c_uint128_t(_) => format!("uint128_t"),
+                c__uint128(_) => format!("__uint128_t"),
                 c_uint64_t(_) => format!("uint64_t"),
                 c_uint32_t(_) => format!("uint32_t"),
                 c_uint16_t(_) => format!("uint16_t"),
@@ -71,9 +244,9 @@ impl Val {
                 output.push_str("}");
                 output
             }
-            Struct(name, fields) => {
+            Struct(_name, fields) => {
                 let mut output = String::new();
-                output.push_str(&format!("struct {name} {{"));
+                output.push_str(&format!("{{"));
                 for (idx, field) in fields.iter().enumerate() {
                     if idx != 0 {
                         output.push_str(", ");
@@ -87,12 +260,20 @@ impl Val {
             Float(FloatVal::c_double(val)) => format!("{val}"),
             Float(FloatVal::c_float(val)) => format!("{val}"),
             Int(int_val) => match int_val {
-                c_int128_t(val) => format!("{val}"),
+                c__int128(val) => {
+                    let lower = val & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
+                    let higher = (val & 0xFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
+                    format!("((__int128_t){lower}) | (((__int128_t){higher}) << 64)")
+                }
+                c__uint128(val) => {
+                    let lower = val & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
+                    let higher = (val & 0xFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
+                    format!("((__uint128_t){lower}) | (((__uint128_t){higher}) << 64)")
+                }
                 c_int64_t(val) => format!("{val}"),
                 c_int32_t(val) => format!("{val}"),
                 c_int16_t(val) => format!("{val}"),
                 c_int8_t(val) => format!("{val}"),
-                c_uint128_t(val) => format!("{val}"),
                 c_uint64_t(val) => format!("{val}"),
                 c_uint32_t(val) => format!("{val}"),
                 c_uint16_t(val) => format!("{val}"),
@@ -181,85 +362,4 @@ impl Val {
         }
     }
     */
-}
-
-pub fn generate_c_callee<W: Write>(f: &mut W, test: &Test) -> Result<(), BuildError> {
-    write!(f, "{}", C_TEST_PREFIX)?;
-
-    // Forward-decl struct types
-    let mut forward_decls = std::collections::HashSet::new();
-    for function in &test.funcs {
-        for val in function.inputs.iter().chain(function.output.as_ref()) {
-            if let Some((name, decl)) = val.c_forward_decl()? {
-                if forward_decls.insert(name) {
-                    writeln!(f, "{decl}")?;
-                }
-            }
-        }
-    }
-
-    // Generate the impls
-    for function in &test.funcs {
-        if let Some(output) = &function.output {
-            write!(f, "{} ", output.c_arg_type()?)?;
-        } else {
-            write!(f, "void ")?;
-        }
-        write!(f, "{}(", function.name)?;
-        for (idx, input) in function.inputs.iter().enumerate() {
-            if idx != 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{} arg{idx}", input.c_arg_type()?)?;
-        }
-        writeln!(f, ") {{")?;
-
-        // writeln!(f, r#"    printf("\n{}::{} C callee inputs: \n");"#, test.name, function.name)?;
-        writeln!(f)?;
-        for (idx, input) in function.inputs.iter().enumerate() {
-            // let formatter = input.cfmt();
-            // writeln!(f, r#"    printf("%" {formatter} "\n", arg{idx});"#)?;
-            let val = format!("arg{idx}");
-            writeln!(f, "{}", input.c_write_val("CALLEE_INPUTS", &val)?)?;
-        }
-        writeln!(f)?;
-        if let Some(output) = &function.output {
-            // let formatter = output.cfmt();
-            writeln!(
-                f,
-                "    {} output = {};",
-                output.c_arg_type()?,
-                output.c_val()?
-            )?;
-            // writeln!(f, r#"    printf("\n{}::{} C callee outputs: \n");"#, test.name, function.name)?;
-            // writeln!(f, r#"    printf("%" {formatter} "\n", output);"#)?;
-            writeln!(f, "{}", output.c_write_val("CALLEE_OUTPUTS", "output")?)?;
-            writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
-            writeln!(f, "    return output;")?;
-        } else {
-            writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
-        }
-        writeln!(f, "}}")?;
-        writeln!(f)?;
-    }
-
-    Ok(())
-}
-
-pub fn build_cc_callee(base_path: &Path, test: &str) -> Result<String, BuildError> {
-    let filename = format!("{test}_c_callee.c");
-    let output_lib = format!("{test}_c_callee");
-    let mut src = PathBuf::from(base_path);
-    src.push("c");
-    src.push(filename);
-
-    cc::Build::new()
-        .file(src)
-        .cargo_metadata(false)
-        // .warnings_into_errors(true)
-        .try_compile(&output_lib)?;
-    Ok(output_lib)
-}
-pub fn build_cc_caller(base_path: &Path, test: &str) -> Result<String, BuildError> {
-    todo!()
 }

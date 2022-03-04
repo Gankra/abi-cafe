@@ -1,7 +1,32 @@
 #![allow(non_camel_case_types)]
 
+use std::io::Write;
+use std::path::Path;
+use super::BuildError;
+
 pub mod c;
 pub mod rust;
+
+pub type AbiRef = &'static (dyn Abi + Sync);
+
+pub static RUST_ABI: AbiRef = &rust::RustAbi;
+pub static C_ABI: AbiRef = &c::CAbi;
+
+pub static TEST_PAIRS: &[(AbiRef, AbiRef)] = &[
+    (RUST_ABI, C_ABI),
+    (C_ABI, RUST_ABI),
+];
+
+pub trait Abi {
+    fn name(&self) -> &'static str;
+    fn src_ext(&self) -> &'static str;
+    fn generate_callee(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError>;
+    fn generate_caller(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError>;
+    fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
+    fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
+}
+
+
 
 #[derive(Debug, thiserror::Error)]
 pub enum GenerateError {
@@ -66,13 +91,13 @@ pub enum Val {
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum IntVal {
-    c_int128_t(i128),
+    c__int128(i128),
     c_int64_t(i64),
     c_int32_t(i32),
     c_int16_t(i16),
     c_int8_t(i8),
 
-    c_uint128_t(u128),
+    c__uint128(u128),
     c_uint64_t(u64),
     c_uint32_t(u32),
     c_uint16_t(u16),

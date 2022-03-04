@@ -10,10 +10,7 @@ mod abis;
 
 use abis::*;
 
-pub static TESTS: &[&str] = &["opaque_example", "u64", "u128", "structs"];
-
-pub static RUST_TEST_PREFIX: &str = include_str!("../harness/rust_test_prefix.rs");
-pub static C_TEST_PREFIX: &str = include_str!("../harness/c_test_prefix.h");
+pub static TESTS: &[&str] = &["opaque_example", "u8", "u16", "u32", "u64", "u128", "i8", "i16", "i32", "i64", "i128", "structs"];
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
@@ -74,6 +71,8 @@ pub mod built_info {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // generate_primitive_tests();
+
     let out_dir = PathBuf::from("target/temp/");
 
     env::set_var("OUT_DIR", &out_dir);
@@ -83,12 +82,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut reports = Vec::new();
     for test_name in TESTS {
-        let result = do_test(&out_dir, test_name);
+        for (caller, callee) in TEST_PAIRS { 
+            let result = do_test(&out_dir, *caller, *callee, test_name);
 
-        if let Err(e) = &result {
-            eprintln!("test failed: {}", e);
+            if let Err(e) = &result {
+                eprintln!("test failed: {}", e);
+            }
+            reports.push((test_name, caller.name(), callee.name(), result));
         }
-        reports.push((test_name, result));
     }
 
     println!();
@@ -97,8 +98,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut passes = 0;
     let mut fails = 0;
     let mut total_fails = 0;
-    for (test_name, report) in reports {
-        print!("{test_name}: ");
+    for (test_name, caller_name, callee_name, report) in reports {
+        let pretty_test_name = full_test_name(test_name, caller_name, callee_name);
+        print!("{pretty_test_name}: ");
         match report {
             Err(_) => {
                 println!("failed completely (bad input?)");
@@ -108,7 +110,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let passed = report.results.iter().filter(|r| r.is_ok()).count();
                 println!("{passed}/{} passed!", report.results.len());
                 for (test_func, result) in report.test.funcs.iter().zip(report.results.iter()) {
-                    print!("  {test_name}::{}... ", test_func.name);
+                    let subtest_name = full_subtest_name(test_name, caller_name, callee_name, &test_func.name);
+                    print!("  {}... ", subtest_name);
                     if result.is_ok() {
                         println!("passed!");
                         passes += 1;
@@ -126,8 +129,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn do_test(out_dir: &Path, test_name: &str) -> Result<TestReport, BuildError> {
+fn do_test(_out_dir: &Path, caller: AbiRef, callee: AbiRef, test_name: &str) -> Result<TestReport, BuildError> {
     eprintln!("preparing test {test_name}");
+    let caller_name = caller.name();
+    let caller_src_ext = caller.src_ext();
+    let callee_name = callee.name();
+    let callee_src_ext = callee.src_ext();
+
     let test = read_test_manifest(test_name)?;
     let is_handwritten = test.funcs.iter().any(|f| {
         f.conventions
@@ -144,31 +152,33 @@ fn do_test(out_dir: &Path, test_name: &str) -> Result<TestReport, BuildError> {
         return Err(BuildError::HandwrittenMixing);
     }
 
-    let base_dir = if is_handwritten {
+    let src_dir = if is_handwritten {
         PathBuf::from("handwritten_impls/")
     } else {
         PathBuf::from("generated_impls/")
     };
 
+    let caller_src = src_dir.join(format!("{caller_name}/{test_name}_{caller_name}_caller.{caller_src_ext}"));
+    let callee_src = src_dir.join(format!("{callee_name}/{test_name}_{callee_name}_callee.{callee_src_ext}"));
+    let caller_lib = format!("{test_name}_{caller_name}_caller");
+    let callee_lib = format!("{test_name}_{callee_name}_callee");
+
     if !is_handwritten {
         // If the impl isn't handwritten, then we need to generate it.
-        let rust_src = base_dir.join(format!("rust/{test_name}_rust_caller.rs"));
-        let c_src = base_dir.join(format!("c/{test_name}_c_callee.c"));
+        std::fs::create_dir_all(caller_src.parent().unwrap())?;
+        std::fs::create_dir_all(callee_src.parent().unwrap())?;
+        let mut caller_output = File::create(&caller_src)?;
+        caller.generate_caller(&mut caller_output, &test)?;
 
-        std::fs::create_dir_all(rust_src.parent().unwrap())?;
-        std::fs::create_dir_all(c_src.parent().unwrap())?;
-        let mut rust_output = File::create(rust_src)?;
-        abis::rust::generate_rust_caller(&mut rust_output, &test)?;
-
-        let mut c_output = File::create(c_src)?;
-        abis::c::generate_c_callee(&mut c_output, &test)?;
+        let mut callee_output = File::create(&callee_src)?;
+        callee.generate_callee(&mut callee_output, &test)?;
     }
 
-    let caller = abis::rust::build_rust_caller(&base_dir, test_name)?;
-    let callee = abis::c::build_cc_callee(&base_dir, test_name)?;
-    let dylib = build_harness(&base_dir, &caller, &callee, test_name)?;
+    let caller_lib = caller.compile_caller(&caller_src, &caller_lib)?;
+    let callee_lib = callee.compile_callee(&callee_src, &callee_lib)?;
+    let dylib = build_harness(caller_name, &caller_lib, callee_name, &callee_lib, test_name)?;
 
-    run_dynamic_test(&out_dir, test_name, &dylib, test)
+    run_dynamic_test(test_name, caller_name, callee_name, &dylib, test)
 }
 
 fn read_test_manifest(test_name: &str) -> Result<Test, BuildError> {
@@ -183,26 +193,25 @@ fn read_test_manifest(test_name: &str) -> Result<Test, BuildError> {
 }
 
 fn build_harness(
-    _base_path: &Path,
     caller_name: &str,
+    caller_lib: &str,
     callee_name: &str,
+    callee_lib: &str,
     test: &str,
 ) -> Result<String, BuildError> {
     let src = PathBuf::from("harness/harness.rs");
-    let caller = format!("target/temp/{caller_name}");
-    let callee = format!("target/temp/{callee_name}");
     let output = format!(
-        "target/temp/{test}{}{}_harness.dll",
-        caller_name.strip_prefix(test).unwrap(),
-        callee_name.strip_prefix(test).unwrap()
+        "target/temp/{test}_{caller_name}_calls_{callee_name}_harness.dll"
     );
 
     let out = Command::new("rustc")
         .arg("-v")
+        .arg("-L")
+        .arg("target/temp/")
         .arg("-l")
-        .arg(&callee)
+        .arg(&callee_lib)
         .arg("-l")
-        .arg(&caller)
+        .arg(&caller_lib)
         .arg("--crate-type")
         .arg("dylib")
         // .arg("--out-dir")
@@ -220,8 +229,9 @@ fn build_harness(
 }
 
 fn run_dynamic_test(
-    base_path: &Path,
     test_name: &str,
+    caller_name: &str,
+    callee_name: &str,
     dylib: &str,
     test: Test,
 ) -> Result<TestReport, BuildError> {
@@ -304,7 +314,7 @@ fn run_dynamic_test(
 
         let lib = libloading::Library::new(dylib)?;
         let do_test: libloading::Symbol<TestInit> = lib.get(b"test_start")?;
-        eprintln!("running test {test_name}");
+        eprintln!("running test");
         do_test(
             write_field,
             finished_val,
@@ -429,13 +439,14 @@ fn run_dynamic_test(
         }
 
         for (result, func) in results.iter().zip(test.funcs.iter()) {
+            let subtest_name = full_subtest_name(test_name, caller_name, callee_name, &func.name);
             // TODO: fix this abstraction boundary?
             match result {
                 Ok(()) => {
-                    eprintln!("Test {}::{}... passed!", test.name, func.name);
+                    eprintln!("Test {subtest_name}... passed!");
                 }
                 Err(e) => {
-                    eprintln!("Test {}::{}... failed!", test.name, func.name);
+                    eprintln!("Test {subtest_name}... failed!");
                     eprintln!("{}", e);
                 }
             }
@@ -444,3 +455,123 @@ fn run_dynamic_test(
         Ok(TestReport { test, results })
     }
 }
+
+fn full_test_name(test_name: &str, caller_name: &str, callee_name: &str) -> String {
+    format!("{test_name}::{caller_name}_calls_{callee_name}")
+}
+
+fn full_subtest_name(test_name: &str, caller_name: &str, callee_name: &str, func_name: &str) -> String {
+    format!("{test_name}::{caller_name}_calls_{callee_name}::{func_name}")
+}
+
+
+
+/*
+fn generate_primitive_tests() {
+    let vals = &[
+        IntVal::c__int128(0x1a2b3c4d_23eaf142_7a320c01_e0120a82),
+        IntVal::c_int64_t(0x1a2b3c4d_23eaf142),
+        IntVal::c_int32_t(0x1a2b3c4d),
+        IntVal::c_int16_t(0x1a2b),
+        IntVal::c_int8_t(0x1a),
+        IntVal::c__uint128(0x1a2b3c4d_23eaf142_7a320c01_e0120a82),
+        IntVal::c_uint64_t(0x1a2b3c4d_23eaf142),
+        IntVal::c_uint32_t(0x1a2b3c4d),
+        IntVal::c_uint16_t(0x1a2b),
+        IntVal::c_uint8_t(0x1a),
+    ];
+
+    for val in vals {
+        let new_val = || -> Val {
+            match val {
+                IntVal::c__int128(_) => Val::Int(val.clone()),
+                IntVal::c_int64_t(_) => Val::Int(val.clone()),
+                IntVal::c_int32_t(_) => Val::Int(val.clone()),
+                IntVal::c_int16_t(_) => Val::Int(val.clone()),
+                IntVal::c_int8_t(_) => Val::Int(val.clone()),
+                IntVal::c__uint128(_) => Val::Int(val.clone()),
+                IntVal::c_uint64_t(_) => Val::Int(val.clone()),
+                IntVal::c_uint32_t(_) => Val::Int(val.clone()),
+                IntVal::c_uint16_t(_) => Val::Int(val.clone()),
+                IntVal::c_uint8_t(_) => Val::Int(val.clone()),
+            }
+        };
+
+        let name = Val::Int(val.clone()).rust_arg_type().unwrap();
+        let mut test = Test {
+            name: name.clone(),
+            funcs: Vec::new(),
+        };
+
+        test.funcs.push(Func { 
+            name: format!("val_in"), 
+            conventions: vec![CallingConvention::All],
+            inputs: vec![new_val()], 
+            output: None 
+        });
+
+        test.funcs.push(Func { 
+            name: format!("val_out"), 
+            conventions: vec![CallingConvention::All],
+            inputs: vec![], 
+            output: Some(new_val()), 
+        });
+
+        test.funcs.push(Func { 
+            name: format!("val_in_out"), 
+            conventions: vec![CallingConvention::All],
+            inputs: vec![new_val()], 
+            output: Some(new_val()), 
+        });
+
+        for len in 2..=16 {
+            test.funcs.push(Func { 
+                name: format!("val_in_{len}"), 
+                conventions: vec![CallingConvention::All],
+                inputs: (0..len).map(|_| new_val()).collect(), 
+                output: None, 
+            });
+        }
+
+        for len in 1..=16 {
+            test.funcs.push(Func { 
+                name: format!("struct_val_in_{len}"), 
+                conventions: vec![CallingConvention::All],
+                inputs: vec![Val::Struct(
+                    format!("val_in_{len}"),
+                    (0..len).map(|_| new_val()).collect()
+                )], 
+                output: None, 
+            });
+        }
+        for idx in 0..=16 {
+            let mut inputs = (0..16).map(|_| new_val()).collect::<Vec<_>>();
+            inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xab)));
+            inputs.insert(17-idx, Val::Float(FloatVal::c_float(1234.456)));
+            test.funcs.push(Func { 
+                name: format!("val_in_{idx}_perturbed"), 
+                conventions: vec![CallingConvention::All],
+                inputs: inputs, 
+                output: None, 
+            });
+        }
+        for idx in 0..=16 {
+            let mut inputs = (0..16).map(|_| new_val()).collect::<Vec<_>>();
+            inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xab)));
+            inputs.insert(16-idx, Val::Float(FloatVal::c_float(1234.456)));
+            test.funcs.push(Func { 
+                name: format!("struct_val_in_{idx}_perturbed"), 
+                conventions: vec![CallingConvention::All],
+                inputs: vec![Val::Struct(
+                    format!("val_in_{idx}_perturbed"),
+                    inputs,
+                )], 
+                output: None, 
+            });
+        }
+        let mut file = std::fs::File::create(format!("tests/{name}.ron")).unwrap();
+        let output = ron::to_string(&test).unwrap();
+        file.write_all(output.as_bytes()).unwrap();
+    }
+}
+*/

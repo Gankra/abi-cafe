@@ -275,7 +275,7 @@ impl Val {
                 output
             }
             Float(FloatVal::c_double(val)) => format!("{val}"),
-            Float(FloatVal::c_float(val)) => format!("{val}"),
+            Float(FloatVal::c_float(val)) => format!("{val}f"),
             Int(int_val) => match int_val {
                 c__int128(val) => {
                     let lower = val & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;

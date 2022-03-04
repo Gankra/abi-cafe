@@ -39,36 +39,40 @@ impl Abi for RustAbi {
 
         for function in &test.funcs {
             writeln!(f, "   unsafe {{")?;
-            // writeln!(f, r#"        println!("test {}::{}\n");"#, test.name, function.name)?;
-            // writeln!(f, r#"        println!("\n{}::{} rust caller inputs: ");"#, test.name, function.name)?;
-            // writeln!(f)?;
+
+            // Inputs
             for (idx, input) in function.inputs.iter().enumerate() {
                 let ty = input.rust_arg_type()?;
                 writeln!(f, "        let arg{idx}: {ty} = {};", input.rust_val()?)?;
             }
             writeln!(f)?;
             for (idx, input) in function.inputs.iter().enumerate() {
-                //    writeln!(f, r#"        println!("{{}}", arg{idx});"#)?;
                 let val = format!("arg{idx}");
                 writeln!(f, "{}", input.rust_write_val("CALLER_INPUTS", &val)?)?;
             }
             writeln!(f)?;
+
+            // Outputs
             write!(f, "        ")?;
             if let Some(output) = &function.output {
                 let ty = output.rust_arg_type()?;
                 write!(f, "        let output: {ty} = ")?;
             }
+
+            // Do the call
             write!(f, "{}(", function.name)?;
             for (idx, _input) in function.inputs.iter().enumerate() {
                 write!(f, "arg{idx}, ")?;
             }
             writeln!(f, ");")?;
             writeln!(f)?;
+
+            // Report the output
             if let Some(output) = &function.output {
-                //    writeln!(f, r#"        println!("\n{}::{} rust caller outputs: ");"#, test.name, function.name)?;
-                //    writeln!(f, r#"        println!("{{}}", output);"#)?;
                 writeln!(f, "{}", output.rust_write_val("CALLER_OUTPUTS", "output")?)?;
             }
+
+            // Finished
             writeln!(
                 f,
                 "        FINISHED_FUNC.unwrap()(CALLER_INPUTS, CALLER_OUTPUTS);"
@@ -96,33 +100,32 @@ impl Abi for RustAbi {
                 let ty = output.rust_arg_type()?;
                 write!(f, " -> {ty}")?;
             }
-            writeln!(f, "{{")?;
+            writeln!(f, " {{")?;
 
             // Now the body
+
+            // Report Inputs
             for (idx, input) in function.inputs.iter().enumerate() {
                 let val = format!("arg{idx}");
                 writeln!(f, "{}", input.rust_write_val("CALLEE_INPUTS", &val)?)?;
             }
             writeln!(f)?;
-            write!(f, "        ")?;
+
+            // Report outputs and return
             if let Some(output) = &function.output {
                 let ty = output.rust_arg_type()?;
                 let val = output.rust_val()?;
-                writeln!(f, "    let output: {ty} = {val};")?;
+                writeln!(f, "        let output: {ty} = {val};")?;
+                writeln!(f, "{}", output.rust_write_val("CALLEE_OUTPUTS", "output")?)?;
                 writeln!(
                     f,
-                    "    {}",
-                    output.rust_write_val("CALLEE_OUTPUTS", "output")?
+                    "        FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
                 )?;
-                writeln!(
-                    f,
-                    "    FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
-                )?;
-                writeln!(f, "    return output;")?;
+                writeln!(f, "        return output;")?;
             } else {
                 writeln!(
                     f,
-                    "    FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
+                    "        FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
                 )?;
             }
             writeln!(f, "}}")?;
@@ -147,22 +150,13 @@ impl Abi for RustAbi {
         }
     }
     fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
-        let out = Command::new("rustc")
-            .arg("--crate-type")
-            .arg("staticlib")
-            .arg("--out-dir")
-            .arg("target/temp/")
-            .arg(src_path)
-            .output()?;
-
-        if !out.status.success() {
-            Err(BuildError::RustCompile(out))
-        } else {
-            Ok(String::from(lib_name))
-        }
+        // Currently no need to be different
+        self.compile_callee(src_path, lib_name)
     }
 }
 
+/// Every test should start by loading in the harness' "header"
+/// and forward-declaring any structs that will be used.
 fn write_rust_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
     // Load test harness "headers"
     write!(f, "{}", RUST_TEST_PREFIX)?;
@@ -195,7 +189,15 @@ fn write_rust_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
 }
 
 impl Val {
-    pub fn rust_forward_decl(&self) -> Result<Option<(String, String)>, GenerateError> {
+    /// If this value defines a nominal type, this will spit out:
+    ///
+    /// * The type name
+    /// * The forward-declaration of that type
+    ///
+    /// To catch buggy test definitions, you should validate that all
+    /// structs that claim a particular name have the same declaration.
+    /// This is done in write_rust_prefix.
+    fn rust_forward_decl(&self) -> Result<Option<(String, String)>, GenerateError> {
         use Val::*;
         if let Struct(name, fields) = self {
             let mut output = String::new();
@@ -206,23 +208,25 @@ impl Val {
                 let line = format!("    field{idx}: {},\n", field.rust_nested_type()?);
                 output.push_str(&line);
             }
-            output.push_str("}\n");
+            output.push_str("}");
             Ok(Some((ref_name, output)))
         } else {
             // Don't need to forward decl any other types
             Ok(None)
         }
     }
+
+    /// The type name to use for this value when it is stored in args/vars.
     pub fn rust_arg_type(&self) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
         let val = match self {
-            Ref(x) => format!("*mut {}", x.c_arg_type()?),
+            Ref(x) => format!("*mut {}", x.rust_arg_type()?),
             Ptr(_) => format!("*mut ()"),
             Bool(_) => format!("bool"),
             Array(vals) => format!(
                 "[{}; {}]",
-                vals.get(0).unwrap_or(&Val::Ptr(0)).c_arg_type()?,
+                vals.get(0).unwrap_or(&Val::Ptr(0)).rust_arg_type()?,
                 vals.len()
             ),
             Struct(name, _) => format!("{name}"),
@@ -243,7 +247,18 @@ impl Val {
         };
         Ok(val)
     }
-    pub fn rust_val(&self) -> Result<String, GenerateError> {
+
+    /// The type name to use for this value when it is stored in composite.
+    ///
+    /// This is separated out in case there's a type that needs different
+    /// handling in this context to conform to a layout (i.e. how C arrays
+    /// decay into pointers when used in function args).
+    fn rust_nested_type(&self) -> Result<String, GenerateError> {
+        self.rust_arg_type()
+    }
+
+    /// An expression that generates this value.
+    fn rust_val(&self) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
         let val = match self {
@@ -254,7 +269,7 @@ impl Val {
                 let mut output = String::new();
                 output.push_str(&format!("[",));
                 for val in vals {
-                    let part = format!("{},", val.rust_val()?);
+                    let part = format!("{}, ", val.rust_val()?);
                     output.push_str(&part);
                 }
                 output.push_str("]");
@@ -262,12 +277,12 @@ impl Val {
             }
             Struct(name, fields) => {
                 let mut output = String::new();
-                output.push_str(&format!("{name} {{"));
+                output.push_str(&format!("{name} {{ "));
                 for (idx, field) in fields.iter().enumerate() {
                     let part = format!("field{idx}: {},", field.rust_val()?);
                     output.push_str(&part);
                 }
-                output.push_str("}");
+                output.push_str(" }");
                 output
             }
             Float(FloatVal::c_double(val)) => format!("{val}"),
@@ -287,7 +302,11 @@ impl Val {
         };
         Ok(val)
     }
-    pub fn rust_write_val(&self, to: &str, from: &str) -> Result<String, GenerateError> {
+
+    /// Emit the WRITE calls and FINISHED_VAL for this value.
+    /// This will WRITE every leaf subfield of the type.
+    /// `to` is the BUFFER to use, `from` is the variable name of the value.
+    fn rust_write_val(&self, to: &str, from: &str) -> Result<String, GenerateError> {
         use std::fmt::Write;
         let mut output = String::new();
         for path in self.rust_var_paths(from)? {
@@ -297,7 +316,10 @@ impl Val {
 
         Ok(output)
     }
-    pub fn rust_var_paths(&self, from: &str) -> Result<Vec<String>, GenerateError> {
+
+    /// Compute the paths to every subfield of this value, with `from`
+    /// as the base path to that value, for rust_write_val's use.
+    fn rust_var_paths(&self, from: &str) -> Result<Vec<String>, GenerateError> {
         let paths = match self {
             Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
                 vec![format!("{from}")]
@@ -317,20 +339,5 @@ impl Val {
         };
 
         Ok(paths)
-    }
-    pub fn rust_nested_type(&self) -> Result<String, GenerateError> {
-        self.rust_arg_type()
-    }
-    pub fn rust_pass(&self, arg: String) -> String {
-        match self {
-            Val::Ref(..) | Val::Array(..) => format!("&{arg}"),
-            _ => arg,
-        }
-    }
-    pub fn rust_returned_as_out(&self) -> bool {
-        match self {
-            Val::Ref(..) | Val::Array(..) => true,
-            _ => false,
-        }
     }
 }

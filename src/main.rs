@@ -10,7 +10,14 @@ mod abis;
 
 use abis::*;
 
-pub static TESTS: &[&str] = &["opaque_example", "structs", "core_primitives", "ui128"];
+pub static TESTS: &[&str] = &[
+    "opaque_example",
+    "structs",
+    "signed_ints",
+    "unsigned_ints",
+    "floats",
+    "ui128",
+];
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
@@ -71,17 +78,23 @@ pub mod built_info {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // generate_primitive_tests();
+    // Before doing anything, procedurally generate tests
+    // (this is internally disabled by default, but left here
+    // to ensure it keeps compiling for whenever it's needed.)
+    generate_procedural_tests();
 
     let out_dir = PathBuf::from("target/temp/");
 
+    // Set up env vars for CC
     env::set_var("OUT_DIR", &out_dir);
     env::set_var("HOST", built_info::HOST);
     env::set_var("TARGET", built_info::TARGET);
     env::set_var("OPT_LEVEL", "3");
 
     let mut reports = Vec::new();
+    // Grab all the tests
     for test_name in TESTS {
+        // Create versions of the test for each "X calls Y" pair we care about.
         for (caller, callee) in TEST_PAIRS {
             let result = do_test(&out_dir, *caller, *callee, test_name);
 
@@ -130,6 +143,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Generate, Compile, Link, Load, and Run this test.
 fn do_test(
     _out_dir: &Path,
     caller: AbiRef,
@@ -142,7 +156,10 @@ fn do_test(
     let callee_name = callee.name();
     let callee_src_ext = callee.src_ext();
 
+    // Get the test description
     let test = read_test_manifest(test_name)?;
+
+    // Figure out if we need to generate the test's source code or not
     let is_handwritten = test.funcs.iter().any(|f| {
         f.conventions
             .iter()
@@ -184,8 +201,11 @@ fn do_test(
         callee.generate_callee(&mut callee_output, &test)?;
     }
 
+    // Compile the tests (and let them change the lib name).
     let caller_lib = caller.compile_caller(&caller_src, &caller_lib)?;
     let callee_lib = callee.compile_callee(&callee_src, &callee_lib)?;
+
+    // Compile the harness dylib and link in the tests.
     let dylib = build_harness(
         caller_name,
         &caller_lib,
@@ -194,9 +214,11 @@ fn do_test(
         test_name,
     )?;
 
+    // Load and run the test
     run_dynamic_test(test_name, caller_name, callee_name, &dylib, test)
 }
 
+/// Read a test .ron file
 fn read_test_manifest(test_name: &str) -> Result<Test, BuildError> {
     let test_file = format!("tests/{test_name}.ron");
     let file = File::open(&test_file)?;
@@ -208,6 +230,7 @@ fn read_test_manifest(test_name: &str) -> Result<Test, BuildError> {
     Ok(test)
 }
 
+/// Compile and link the test harness with the two sides of the FFI boundary.
 fn build_harness(
     caller_name: &str,
     caller_lib: &str,
@@ -242,6 +265,7 @@ fn build_harness(
     }
 }
 
+/// Run the test!
 fn run_dynamic_test(
     test_name: &str,
     caller_name: &str,
@@ -249,6 +273,14 @@ fn run_dynamic_test(
     dylib: &str,
     test: Test,
 ) -> Result<TestReport, BuildError> {
+    // See the README for a high-level description of this design.
+
+    ////////////////////////////////////////////////////////////////////
+    //////////////////// DEFINING THE TEST HARNESS /////////////////////
+    ////////////////////////////////////////////////////////////////////
+
+    // The signatures of the interface from our perspective.
+    // From the test's perspective the WriteBuffers are totally opaque.
     type WriteCallback = unsafe extern "C" fn(&mut WriteBuffer, *const u8, u32) -> ();
     type FinishedValCallback = unsafe extern "C" fn(&mut WriteBuffer) -> ();
     type FinishedFuncCallback = unsafe extern "C" fn(&mut WriteBuffer, &mut WriteBuffer) -> ();
@@ -262,8 +294,17 @@ fn run_dynamic_test(
         &mut WriteBuffer,
     ) -> ();
 
-    /// Tests write back the raw bytes of their values to a WriteBuffer in a
-    /// hierarchical way: tests (functions) => values => fields => bytes.
+    /// Tests write back the raw bytes of their values to a WriteBuffer.
+    ///
+    /// This hierarchical design is confusing as hell, but represents the
+    /// nested levels of abstraction we are concerned with:
+    ///
+    /// subtests (functions) => values (args/returns) => subfields => bytes.
+    ///
+    /// Having this much hierarchy means that we can specifically say
+    /// "ah yeah, on test 3 the two sides disagreed on arg2.field1.field2"
+    /// and also reduces the chance of failures in one test "cascading"
+    /// into the subsequent ones.
     struct WriteBuffer {
         funcs: Vec<Vec<Vec<Vec<u8>>>>,
     }
@@ -320,15 +361,23 @@ fn run_dynamic_test(
         output2.funcs.push(vec![vec![]]);
     }
 
+    ////////////////////////////////////////////////////////////////////
+    //////////////////// THE ACTUAL TEST EXECUTION /////////////////////
+    ////////////////////////////////////////////////////////////////////
+
     unsafe {
+        // Initialize all the buffers the tests will write to
         let mut caller_inputs = WriteBuffer::new();
         let mut caller_outputs = WriteBuffer::new();
         let mut callee_inputs = WriteBuffer::new();
         let mut callee_outputs = WriteBuffer::new();
 
+        // Load the dylib of the test, and get its test_start symbol
         let lib = libloading::Library::new(dylib)?;
         let do_test: libloading::Symbol<TestInit> = lib.get(b"test_start")?;
         eprintln!("running test");
+
+        // Actually run the test!
         do_test(
             write_field,
             finished_val,
@@ -339,11 +388,17 @@ fn run_dynamic_test(
             &mut callee_outputs,
         );
 
+        // Finalize the buffers (clear all the pending values).
         caller_inputs.finish_tests();
         caller_outputs.finish_tests();
         callee_inputs.finish_tests();
         callee_outputs.finish_tests();
 
+        // Now check the results
+
+        // As a basic sanity-check, make sure everything agrees on how
+        // many tests actually executed. If this fails, then something
+        // is very fundamentally broken and needs to be fixed.
         let expected_test_count = test.funcs.len();
         if caller_inputs.funcs.len() != expected_test_count
             || caller_outputs.funcs.len() != expected_test_count
@@ -359,18 +414,28 @@ fn run_dynamic_test(
             ));
         }
 
+        // Start peeling back the layers of the buffers.
+        // funcs (subtests) -> vals (args/returns) -> fields -> bytes
+
         let mut results: Vec<Result<(), TestFailure>> = Vec::new();
+
+        // Layer 1 is the funcs/subtests. Because we have already checked
+        // that they agree on their lengths, we can zip them together
+        // to walk through their views of each subtest's execution.
         'funcs: for (
             func_idx,
             (((caller_inputs, caller_outputs), callee_inputs), callee_outputs),
         ) in caller_inputs
             .funcs
             .into_iter()
-            .zip(caller_outputs.funcs.into_iter())
-            .zip(callee_inputs.funcs.into_iter())
-            .zip(callee_outputs.funcs.into_iter())
+            .zip(caller_outputs.funcs)
+            .zip(callee_inputs.funcs)
+            .zip(callee_outputs.funcs)
             .enumerate()
         {
+            // Now we must enforce that the caller and callee agree on how
+            // many inputs and outputs there were. If this fails that's a
+            // very fundamental issue, and indicative of a bad test generator.
             if caller_inputs.len() != callee_inputs.len() {
                 results.push(Err(TestFailure::InputCountMismatch(
                     func_idx,
@@ -388,22 +453,27 @@ fn run_dynamic_test(
                 continue 'funcs;
             }
 
+            // Layer 2 is the values (arguments/returns).
+            // The inputs and outputs loop do basically the same work,
+            // but are separate for the sake of error-reporting quality.
+
             // Process Inputs
-            for (input_idx, (caller_val, callee_val)) in caller_inputs
-                .into_iter()
-                .zip(callee_inputs.into_iter())
-                .enumerate()
+            for (input_idx, (caller_val, callee_val)) in
+                caller_inputs.into_iter().zip(callee_inputs).enumerate()
             {
+                // Now we must enforce that the caller and callee agree on how
+                // many fields each value had.
                 if caller_val.len() != callee_val.len() {
                     results.push(Err(TestFailure::InputFieldCountMismatch(
                         func_idx, input_idx, caller_val, callee_val,
                     )));
                     continue 'funcs;
                 }
-                for (field_idx, (caller_field, callee_field)) in caller_val
-                    .into_iter()
-                    .zip(callee_val.into_iter())
-                    .enumerate()
+
+                // Layer 3 is the leaf subfields of the values.
+                // At this point we just need to assert that they agree on the bytes.
+                for (field_idx, (caller_field, callee_field)) in
+                    caller_val.into_iter().zip(callee_val).enumerate()
                 {
                     if caller_field != callee_field {
                         results.push(Err(TestFailure::InputFieldMismatch(
@@ -419,21 +489,22 @@ fn run_dynamic_test(
             }
 
             // Process Outputs
-            for (output_idx, (caller_val, callee_val)) in caller_outputs
-                .into_iter()
-                .zip(callee_outputs.into_iter())
-                .enumerate()
+            for (output_idx, (caller_val, callee_val)) in
+                caller_outputs.into_iter().zip(callee_outputs).enumerate()
             {
+                // Now we must enforce that the caller and callee agree on how
+                // many fields each value had.
                 if caller_val.len() != callee_val.len() {
                     results.push(Err(TestFailure::OutputFieldCountMismatch(
                         func_idx, output_idx, caller_val, callee_val,
                     )));
                     continue 'funcs;
                 }
-                for (field_idx, (caller_field, callee_field)) in caller_val
-                    .into_iter()
-                    .zip(callee_val.into_iter())
-                    .enumerate()
+
+                // Layer 3 is the leaf subfields of the values.
+                // At this point we just need to assert that they agree on the bytes.
+                for (field_idx, (caller_field, callee_field)) in
+                    caller_val.into_iter().zip(callee_val).enumerate()
                 {
                     if caller_field != callee_field {
                         results.push(Err(TestFailure::OutputFieldMismatch(
@@ -452,9 +523,13 @@ fn run_dynamic_test(
             results.push(Ok(()));
         }
 
-        for (result, func) in results.iter().zip(test.funcs.iter()) {
+        // Report the results of each subtest
+        //
+        // This will be done again after all tests have been run, but it's
+        // useful to keep a version of this near the actual compilation/execution
+        // in case the compilers spit anything interesting to stdout/stderr.
+        for (result, func) in results.iter().zip(&test.funcs) {
             let subtest_name = full_subtest_name(test_name, caller_name, callee_name, &func.name);
-            // TODO: fix this abstraction boundary?
             match result {
                 Ok(()) => {
                     eprintln!("Test {subtest_name}... passed!");
@@ -470,10 +545,12 @@ fn run_dynamic_test(
     }
 }
 
+/// The name of a test for pretty-printing.
 fn full_test_name(test_name: &str, caller_name: &str, callee_name: &str) -> String {
     format!("{test_name}::{caller_name}_calls_{callee_name}")
 }
 
+/// The name of a subtest for pretty-printing.
 fn full_subtest_name(
     test_name: &str,
     caller_name: &str,
@@ -483,25 +560,58 @@ fn full_subtest_name(
     format!("{test_name}::{caller_name}_calls_{callee_name}::{func_name}")
 }
 
-/*
-fn generate_primitive_tests() {
+/// For tests that are too tedious to even hand-write the .ron file,
+/// this code generates it programmatically.
+///
+/// **NOTE: this is disabled by default, the results are checked in.
+/// If you want to regenerate these tests, just remove the early return.**
+fn generate_procedural_tests() {
+    // Regeneration disabled by default.
+    if true {
+        return;
+    }
+
     let tests: &[(&str, &[Val])] = &[
+        // Just run basic primitives that everyone should support through their paces.
+        // This is chunked out a bit to avoid stressing the compilers/linkers too much,
+        // in case some work scales non-linearly. It also keeps the test suite
+        // a bit more "responsive" instead of just stalling one enormous supertest.
         (
-            "core_primitives",
+            "signed_ints",
             &[
                 Val::Int(IntVal::c_int64_t(0x1a2b3c4d_23eaf142)),
                 Val::Int(IntVal::c_int32_t(0x1a2b3c4d)),
                 Val::Int(IntVal::c_int16_t(0x1a2b)),
                 Val::Int(IntVal::c_int8_t(0x1a)),
+            ],
+        ),
+        (
+            "unsigned_ints",
+            &[
                 Val::Int(IntVal::c_uint64_t(0x1a2b3c4d_23eaf142)),
                 Val::Int(IntVal::c_uint32_t(0x1a2b3c4d)),
                 Val::Int(IntVal::c_uint16_t(0x1a2b)),
                 Val::Int(IntVal::c_uint8_t(0x1a)),
-                Val::Bool(true),
+                Val::Bool(true), // Let's call bool honorary unsigned
+            ],
+        ),
+        (
+            "floats",
+            &[
                 Val::Float(FloatVal::c_float(-4921.3527)),
                 Val::Float(FloatVal::c_double(809239021.392)),
             ],
         ),
+        // These are split out because they are the buggy mess that inspired this whole enterprise!
+        // These types are a GCC exenstion. Windows is a huge dumpster fire where no one agrees on
+        // it (MSVC doesn't even define __(u)int128_t afaict, but has some equivalent extension).
+        //
+        // On linux-based platforms where this is a more established thing, current versions of
+        // rustc underalign the value (as if it's emulated, like u64 on x86). This isn't a problem
+        // in-and-of-itself because rustc accurately says "this isn't usable for FFI".
+        // Unfortunately platforms like aarch64 (arm64) use this type in their definitions for
+        // saving/restoring float registers, so it's very much so part of the platform ABI,
+        // and Rust should just *fix this*.
         (
             "ui128",
             &[
@@ -525,6 +635,7 @@ fn generate_primitive_tests() {
 
             let val_name = val.rust_arg_type().unwrap();
 
+            // Start gentle with basic one value in/out tests
             test.funcs.push(Func {
                 name: format!("{val_name}_val_in"),
                 conventions: vec![CallingConvention::All],
@@ -546,6 +657,9 @@ fn generate_primitive_tests() {
                 output: Some(new_val()),
             });
 
+            // Stress out the calling convention and try lots of different
+            // input counts. For many types this will result in register
+            // exhaustion and get some things passed on the stack.
             for len in 2..=16 {
                 test.funcs.push(Func {
                     name: format!("{val_name}_val_in_{len}"),
@@ -555,6 +669,9 @@ fn generate_primitive_tests() {
                 });
             }
 
+            // Stress out the calling convention with a struct full of values.
+            // Some conventions will just shove this in a pointer/stack,
+            // others will try to scalarize this into registers anyway.
             for len in 1..=16 {
                 test.funcs.push(Func {
                     name: format!("struct_{val_name}_val_in_{len}"),
@@ -566,26 +683,70 @@ fn generate_primitive_tests() {
                     output: None,
                 });
             }
-            for idx in 0..=16 {
-                let mut inputs = (0..16).map(|_| new_val()).collect::<Vec<_>>();
+
+            // Now perturb the arguments by including a byte and a float in
+            // the argument list. This will mess with alignment and also mix
+            // up the "type classes" (float vs int) and trigger more corner
+            // cases in the ABIs as things get distributed to different classes
+            // of register.
+
+            // We do small and big versions to check the cases where everything
+            // should fit in registers vs not.
+            let small_count = 4;
+            let big_count = 16;
+
+            for idx in 0..=small_count {
+                let mut inputs = (0..small_count).map(|_| new_val()).collect::<Vec<_>>();
                 inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
-                inputs.insert(17 - idx, Val::Float(FloatVal::c_float(1234.456)));
+                inputs.insert(
+                    small_count + 1 - idx,
+                    Val::Float(FloatVal::c_float(1234.456)),
+                );
                 test.funcs.push(Func {
-                    name: format!("{val_name}_val_in_{idx}_perturbed"),
+                    name: format!("{val_name}_val_in_{idx}_perturbed_small"),
                     conventions: vec![CallingConvention::All],
                     inputs: inputs,
                     output: None,
                 });
             }
-            for idx in 0..=16 {
-                let mut inputs = (0..16).map(|_| new_val()).collect::<Vec<_>>();
+            for idx in 0..=big_count {
+                let mut inputs = (0..big_count).map(|_| new_val()).collect::<Vec<_>>();
                 inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
-                inputs.insert(16 - idx, Val::Float(FloatVal::c_float(1234.456)));
+                inputs.insert(big_count + 1 - idx, Val::Float(FloatVal::c_float(1234.456)));
                 test.funcs.push(Func {
-                    name: format!("struct_{val_name}_val_in_{idx}_perturbed"),
+                    name: format!("{val_name}_val_in_{idx}_perturbed_big"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: inputs,
+                    output: None,
+                });
+            }
+
+            for idx in 0..=small_count {
+                let mut inputs = (0..small_count).map(|_| new_val()).collect::<Vec<_>>();
+                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
+                inputs.insert(
+                    small_count + 1 - idx,
+                    Val::Float(FloatVal::c_float(1234.456)),
+                );
+                test.funcs.push(Func {
+                    name: format!("struct_{val_name}_val_in_{idx}_perturbed_small"),
                     conventions: vec![CallingConvention::All],
                     inputs: vec![Val::Struct(
-                        format!("{val_name}_val_in_{idx}_perturbed"),
+                        format!("{val_name}_val_in_{idx}_perturbed_small"),
+                        inputs,
+                    )],
+                    output: None,
+                });
+            }
+            for idx in 0..=big_count {
+                let mut inputs = (0..big_count).map(|_| new_val()).collect::<Vec<_>>();
+                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
+                inputs.insert(big_count + 1 - idx, Val::Float(FloatVal::c_float(1234.456)));
+                test.funcs.push(Func {
+                    name: format!("struct_{val_name}_val_in_{idx}_perturbed_big"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: vec![Val::Struct(
+                        format!("{val_name}_val_in_{idx}_perturbed_big"),
                         inputs,
                     )],
                     output: None,
@@ -597,4 +758,3 @@ fn generate_primitive_tests() {
         file.write_all(output.as_bytes()).unwrap();
     }
 }
-*/

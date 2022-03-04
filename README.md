@@ -72,7 +72,7 @@ The "default" workflow is to handwrite a ron file, and the testing framework wil
 
 However, you have two "power user" options available:
 
-* Generate the ron itself with generate_primitive_tests in main.rs (example: ui128.ron). This is good for bruteforcing a bunch of different combinations if you just want to make sure a type/feature generally works in many different situations.
+* Generate the ron itself with generate_procedural_tests in main.rs (example: ui128.ron). This is good for bruteforcing a bunch of different combinations if you just want to make sure a type/feature generally works in many different situations.
 
 * Use the "Handwritten" convention and manually provide the implementations (example: opaque_example.ron). This lets you basically do *anything* without the testing framework having to understand your calling convention or type/feature. Manual impls go in handwritten_impls and use the same naming/structure as generated_impls.
 
@@ -138,9 +138,9 @@ uint64_t basic_val(struct MyStruct arg0, int32_t arg1) {
 }
 ```
 
-The high level ideas are:
+The high level idea is that each side:
 
-* Each side uses WRITE to report individual fields of values (to avoid padding)
+* Uses WRITE to report individual fields of values (to avoid padding)
 * Uses FINISHED_VAL to specify that all fields for a value have been written
 * Uses FINISHED_FUNC to specify that the current function is done (the caller will usually contain many subtests, FINISHED_FUNC delimits those)
 
@@ -148,6 +148,8 @@ There are 4 buffers: CALLER_INPUTS, CALLER_OUTPUTS, CALLEE_INPUTS, CALLEE_OUTPUT
 
 The signatures of the callbacks are:
 
-* `WRITE(Buffer buffer, char* &input, uint32_t size_of_input)`
+* `WRITE(Buffer buffer, char* input, uint32_t size_of_input)`
 * `FINISH_VAL(Buffer buffer)`
 * `FINISH_TEST(Buffer input_buffer, Buffer output_buffer)`
+
+Doing things in this very explicit way gives the test harness a better semantic understanding of what the implementations think is happening. This helps us emit better diagnostics and avoid cascading failures between subtests.

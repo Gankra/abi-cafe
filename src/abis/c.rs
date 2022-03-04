@@ -18,6 +18,7 @@ impl Abi for CAbi {
 
         // Generate the impls
         for function in &test.funcs {
+            // Function signature
             if let Some(output) = &function.output {
                 write!(f, "{} ", output.c_arg_type()?)?;
             } else {
@@ -35,25 +36,19 @@ impl Abi for CAbi {
             }
             writeln!(f, ") {{")?;
 
-            // writeln!(f, r#"    printf("\n{}::{} C callee inputs: \n");"#, test.name, function.name)?;
             writeln!(f)?;
             for (idx, input) in function.inputs.iter().enumerate() {
-                // let formatter = input.cfmt();
-                // writeln!(f, r#"    printf("%" {formatter} "\n", arg{idx});"#)?;
                 let val = format!("arg{idx}");
                 writeln!(f, "{}", input.c_write_val("CALLEE_INPUTS", &val)?)?;
             }
             writeln!(f)?;
             if let Some(output) = &function.output {
-                // let formatter = output.cfmt();
                 writeln!(
                     f,
                     "    {} output = {};",
                     output.c_arg_type()?,
                     output.c_val()?
                 )?;
-                // writeln!(f, r#"    printf("\n{}::{} C callee outputs: \n");"#, test.name, function.name)?;
-                // writeln!(f, r#"    printf("%" {formatter} "\n", output);"#)?;
                 writeln!(f, "{}", output.c_write_val("CALLEE_OUTPUTS", "output")?)?;
                 writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
                 writeln!(f, "    return output;")?;
@@ -95,25 +90,20 @@ impl Abi for CAbi {
 
         // Generate the impls
         for function in &test.funcs {
-            // Inputs
+            // Add an extra scope to avoid clashes between subtests
             writeln!(f, "{{")?;
+            // Inputs
             for (idx, input) in function.inputs.iter().enumerate() {
-                // let formatter = input.cfmt();
-                // writeln!(f, r#"    printf("%" {formatter} "\n", arg{idx});"#)?;
                 let var = format!("arg{idx}");
-                writeln!(
-                    f,
-                    "        {} {var} = {};",
-                    input.c_arg_type()?,
-                    input.c_val()?
-                )?;
+                writeln!(f, "    {} {var} = {};", input.c_arg_type()?, input.c_val()?)?;
                 writeln!(f, "{}", input.c_write_val("CALLER_INPUTS", &var)?)?;
             }
             writeln!(f)?;
 
             // Output
+            write!(f, "    ")?;
             if let Some(output) = &function.output {
-                write!(f, "        {} output = ", output.c_arg_type()?,)?;
+                write!(f, "{} output = ", output.c_arg_type()?,)?;
             }
 
             // Do the actual call
@@ -129,8 +119,8 @@ impl Abi for CAbi {
             if let Some(output) = &function.output {
                 writeln!(f, "{}", output.c_write_val("CALLER_OUTPUTS", "output")?)?;
             }
-            writeln!(f, "        FINISHED_FUNC(CALLER_INPUTS, CALLER_OUTPUTS);")?;
-            writeln!(f, "    }}")?;
+            writeln!(f, "    FINISHED_FUNC(CALLER_INPUTS, CALLER_OUTPUTS);")?;
+            writeln!(f, "}}")?;
             writeln!(f)?;
         }
         writeln!(f, "}}")?;
@@ -147,25 +137,36 @@ impl Abi for CAbi {
     }
 
     fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
-        cc::Build::new()
-            .file(src_path)
-            .cargo_metadata(false)
-            // .warnings_into_errors(true)
-            .try_compile(lib_name)?;
-        Ok(String::from(lib_name))
+        // Currently no need to be different
+        self.compile_callee(src_path, lib_name)
     }
 }
 
+/// Every test should start by loading in the harness' "header"
+/// and forward-declaring any structs that will be used.
 fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+    // Load test harness "headers"
     write!(f, "{}", C_TEST_PREFIX)?;
 
     // Forward-decl struct types
-    let mut forward_decls = std::collections::HashSet::new();
+    let mut forward_decls = std::collections::HashMap::<String, String>::new();
     for function in &test.funcs {
         for val in function.inputs.iter().chain(function.output.as_ref()) {
             if let Some((name, decl)) = val.c_forward_decl()? {
-                if forward_decls.insert(name) {
-                    writeln!(f, "{decl}")?;
+                match forward_decls.entry(name) {
+                    std::collections::hash_map::Entry::Occupied(entry) => {
+                        if entry.get() != &decl {
+                            return Err(BuildError::InconsistentStructDefinition {
+                                name: entry.key().clone(),
+                                old_decl: entry.remove(),
+                                new_decl: decl,
+                            });
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        writeln!(f, "{decl}")?;
+                        entry.insert(decl);
+                    }
                 }
             }
         }
@@ -175,7 +176,34 @@ fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
 }
 
 impl Val {
-    pub fn c_arg_type(&self) -> Result<String, GenerateError> {
+    /// If this value defines a nominal type, this will spit out:
+    ///
+    /// * The type name
+    /// * The forward-declaration of that type
+    ///
+    /// To catch buggy test definitions, you should validate that all
+    /// structs that claim a particular name have the same declaration.
+    /// This is done in write_rust_prefix.
+    fn c_forward_decl(&self) -> Result<Option<(String, String)>, GenerateError> {
+        use Val::*;
+        if let Struct(name, fields) = self {
+            let mut output = String::new();
+            let ref_name = format!("struct {name}");
+            output.push_str(&format!("struct {name} {{\n"));
+            for (idx, field) in fields.iter().enumerate() {
+                let line = format!("    {} field{idx};\n", field.c_nested_type()?);
+                output.push_str(&line);
+            }
+            output.push_str("};\n");
+            Ok(Some((ref_name, output)))
+        } else {
+            // Don't need to forward decl any other types
+            Ok(None)
+        }
+    }
+
+    /// The type name to use for this value when it is stored in args/vars.
+    fn c_arg_type(&self) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
         let val = match self {
@@ -202,28 +230,17 @@ impl Val {
         };
         Ok(val)
     }
-    pub fn c_nested_type(&self) -> Result<String, GenerateError> {
+
+    /// The type name to use for this value when it is stored in composite.
+    ///
+    /// This is separated out in case there's a type that needs different
+    /// handling in this context to conform to a layout (i.e. how C arrays
+    /// decay into pointers when used in function args).
+    fn c_nested_type(&self) -> Result<String, GenerateError> {
         self.c_arg_type()
     }
 
-    pub fn c_forward_decl(&self) -> Result<Option<(String, String)>, GenerateError> {
-        use Val::*;
-        if let Struct(name, fields) = self {
-            let mut output = String::new();
-            let ref_name = format!("struct {name}");
-            output.push_str(&format!("struct {name} {{\n"));
-            for (idx, field) in fields.iter().enumerate() {
-                let line = format!("    {} field{idx};\n", field.c_nested_type()?);
-                output.push_str(&line);
-            }
-            output.push_str("};\n");
-            Ok(Some((ref_name, output)))
-        } else {
-            // Don't need to forward decl any other types
-            Ok(None)
-        }
-    }
-
+    /// An expression that generates this value.
     pub fn c_val(&self) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
@@ -233,7 +250,7 @@ impl Val {
             Bool(val) => format!("{val}"),
             Array(vals) => {
                 let mut output = String::new();
-                output.push_str(&format!("{{",));
+                output.push_str("{ ");
                 for (idx, val) in vals.iter().enumerate() {
                     if idx != 0 {
                         output.push_str(", ");
@@ -241,12 +258,12 @@ impl Val {
                     let part = format!("{}", val.c_val()?);
                     output.push_str(&part);
                 }
-                output.push_str("}");
+                output.push_str(" }");
                 output
             }
             Struct(_name, fields) => {
                 let mut output = String::new();
-                output.push_str(&format!("{{"));
+                output.push_str("{ ");
                 for (idx, field) in fields.iter().enumerate() {
                     if idx != 0 {
                         output.push_str(", ");
@@ -254,7 +271,7 @@ impl Val {
                     let part = format!("{}", field.c_val()?);
                     output.push_str(&part);
                 }
-                output.push_str("}");
+                output.push_str(" }");
                 output
             }
             Float(FloatVal::c_double(val)) => format!("{val}"),
@@ -282,20 +299,11 @@ impl Val {
         };
         Ok(val)
     }
-    pub fn c_pass(&self, arg: String) -> String {
-        match self {
-            Val::Ref(..) => format!("&{arg}"),
-            _ => arg,
-        }
-    }
 
-    pub fn c_returned_as_out(&self) -> bool {
-        match self {
-            Val::Ref(..) | Val::Array(..) => true,
-            _ => false,
-        }
-    }
-    pub fn c_write_val(&self, to: &str, from: &str) -> Result<String, GenerateError> {
+    /// Emit the WRITE calls and FINISHED_VAL for this value.
+    /// This will WRITE every leaf subfield of the type.
+    /// `to` is the BUFFER to use, `from` is the variable name of the value.
+    fn c_write_val(&self, to: &str, from: &str) -> Result<String, GenerateError> {
         use std::fmt::Write;
         let mut output = String::new();
         for path in self.c_var_paths(from)? {
@@ -309,7 +317,10 @@ impl Val {
 
         Ok(output)
     }
-    pub fn c_var_paths(&self, from: &str) -> Result<Vec<String>, GenerateError> {
+
+    /// Compute the paths to every subfield of this value, with `from`
+    /// as the base path to that value, for c_write_val's use.
+    fn c_var_paths(&self, from: &str) -> Result<Vec<String>, GenerateError> {
         let paths = match self {
             Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
                 vec![format!("{from}")]
@@ -323,14 +334,17 @@ impl Val {
                 paths
             }
             // TODO: need to think about this
-            Val::Ref(_) => return Err(GenerateError::RustUnsupported),
+            Val::Ref(_) => return Err(GenerateError::CUnsupported),
             // TODO: not yet implemented
-            Val::Array(_) => return Err(GenerateError::RustUnsupported),
+            Val::Array(_) => return Err(GenerateError::CUnsupported),
         };
 
         Ok(paths)
     }
+
     /*
+    /// Format specifiers for C types, for print debugging.
+    /// This is no longer used but it's a shame to throw out.
     pub fn cfmt(&self) -> &'static str {
         use Val::*;
         use IntVal::*;

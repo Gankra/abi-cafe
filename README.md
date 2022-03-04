@@ -70,6 +70,51 @@ Tests are specified as [ron](https://github.com/ron-rs/ron) files in the test di
 
 The "default" workflow is to handwrite a ron file, and the testing framework will handle generating the actual code implementating that interface (example: structs.ron). Generated impls will be output to the generated_impls dir for debugging. Build artifacts will get dumped in target/temp/ if you want to debug those too.
 
+Example:
+
+```rust
+Test(
+    // name of this set of tests
+    name: "examples",  
+    // generate tests for the following function signatures
+    funcs: [
+        (
+            // base function/subtest name (but also subtest name)
+            name: "some_prims",
+            // what calling conventions to generate this test for
+            // (All = do them all, a good default)
+            conventions: [All],
+            // args
+            inputs: [
+               Int(c_int32_t(5)),
+               Int(c_uint64_t(0x123_abc)),
+            ]
+            // return value
+            output: Some(Bool(true)),
+        ),
+        (
+            name: "some_structs",
+            conventions: [All],
+            inputs: [
+               Int(c_int32_t(5)),
+               // Struct decls are implicit in usage.
+               // All structs with the same name must match!
+               Struct("MyStruct", [
+                  Int(c_uint8_t(0xf1)), 
+                  Float(c_double(1234.23)),
+               ]), 
+               Struct("MyStruct", [
+                  Int(c_uint8_t(0x1)), 
+                  Float(c_double(0.23)),
+               ]),
+            ],
+            // no return (void)
+            output: None,
+        ),
+    ]
+)
+```
+
 However, you have two "power user" options available:
 
 * Generate the ron itself with generate_procedural_tests in main.rs (example: ui128.ron). This is good for bruteforcing a bunch of different combinations if you just want to make sure a type/feature generally works in many different situations.

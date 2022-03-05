@@ -112,7 +112,7 @@ Test(
                         Struct("MyStruct2", [Float(c_float(0.1234)), Int(c_uint16_t(0xaef3))]),
                     ]),
                 ]),
-                Int(c_uint64_t(0xfae1_2345_2a01_318b)),
+                Int(c_uint64_t(0x3ae1_2345_2a01_318b)),
             ])],
             output: Some(
                 Struct("MyComplexArrayed", [

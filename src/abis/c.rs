@@ -300,15 +300,25 @@ impl Val {
 
     /// If the return type needs to be an out_param, this returns it
     fn c_out_param(&self, out_param_name: &str) -> Result<Option<String>, GenerateError> {
-        if let Val::Ref(x) = self {
+        let val = if let Val::Ref(x) = self {
             let mut cur_val = &**x;
+            let mut array_levels = String::new();
             while let Val::Array(vals) = cur_val {
+                array_levels.push_str(&format!("[{}]", vals.len()));
                 cur_val = &vals[0];
             }
-            Ok(Some(format!("{}* {out_param_name}", cur_val.c_arg_type()?)))
+            if array_levels.is_empty() {
+                Some(format!("{}* {out_param_name}", cur_val.c_arg_type()?))
+            } else {
+                Some(format!(
+                    "{} {out_param_name}{array_levels}",
+                    cur_val.c_arg_type()?
+                ))
+            }
         } else {
-            Ok(None)
-        }
+            None
+        };
+        Ok(val)
     }
 
     /// If the return type needs to be an out_param, this returns it

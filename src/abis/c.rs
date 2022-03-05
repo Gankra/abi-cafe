@@ -225,6 +225,8 @@ fn write_c_signature(f: &mut dyn Write, function: &Func) -> Result<(), BuildErro
     Ok(())
 }
 
+// FIXME: it would be nice if more of this stuff used `write!` instead of `fmt!`
+// but it's a bit of a pain in the ass to architect some of these operations that way.
 impl Val {
     /// If this value defines a nominal type, this will spit out:
     ///
@@ -368,11 +370,19 @@ impl Val {
             }
             Ptr(_) => format!("void*"),
             Bool(_) => format!("bool"),
-            // This API doesn't work for expressing C type syntax with arrays
             Array(_vals) => {
+                // C arrays are kinda fake due to how they decay in function arg
+                // position, so a ton of code needs to very delicately detect arrays
+                // and desugar them properly. Since most things eventually sink into
+                // c_arg_type, this is a good guard against something forgetting to
+                // specially handle arrays!
+                //
+                // But also it just isn't legal to pass an array by-value in C
+                // (it decays to a pointer, so you need to wrap it in Ref for
+                // other ABIs to understand that's what we're doing.
                 return Err(GenerateError::CUnsupported(format!(
-                    "C Arrays can't be passed directly, wrap this in ByRef"
-                )))
+                    "C Arrays can't be passed directly, wrap this in Ref"
+                )));
             }
             Struct(name, _) => format!("struct {name}"),
             Float(FloatVal::c_double(_)) => format!("double"),

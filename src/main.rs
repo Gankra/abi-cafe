@@ -10,6 +10,9 @@ mod abis;
 
 use abis::*;
 
+/// The tests to run (We don't just auto-spider the tests dir, but maybe we should?
+/// But it's often nice to be able to temporarily turn them on and off and I'm not
+/// in the mood to implement CLI test filtering right now.
 pub static TESTS: &[&str] = &[
     "opaque_example",
     "structs",
@@ -74,6 +77,9 @@ pub struct TestReport {
     results: Vec<Result<(), TestFailure>>,
 }
 
+/// Slurps up details of how this crate was compiled, which we can use
+/// to better compile the actual tests since we're currently compiling them on
+/// the same platform with the same toolchains!
 pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }

@@ -224,6 +224,8 @@ fn write_rust_signature(f: &mut dyn Write, function: &Func) -> Result<(), BuildE
     Ok(())
 }
 
+// FIXME: it would be nice if more of this stuff used `write!` instead of `fmt!`
+// but it's a bit of a pain in the ass to architect some of these operations that way.
 impl Val {
     /// If this value defines a nominal type, this will spit out:
     ///

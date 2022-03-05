@@ -4,6 +4,7 @@ use super::BuildError;
 use std::io::Write;
 use std::path::Path;
 
+// Backends that can generate + compile an implementation's code into a staticlib.
 pub mod c;
 pub mod rust;
 
@@ -12,11 +13,11 @@ pub type AbiRef = &'static (dyn Abi + Sync);
 pub static RUST_ABI: AbiRef = &rust::RustAbi;
 pub static C_ABI: AbiRef = &c::CAbi;
 
-/// The pairings of impls to run
+/// The pairings of impls to run. LHS calls RHS.
 pub static TEST_PAIRS: &[(AbiRef, AbiRef)] = &[(RUST_ABI, C_ABI), (C_ABI, RUST_ABI)];
 
-// pre-computed arg/field names to avoid a bunch of tedious formatting,
-// and to make it easy to refactor this detail.
+// pre-computed arg/field names to avoid a bunch of tedious formatting, and to make
+// it easy to refactor this detail if we decide we don't like this naming scheme.
 pub static ARG_NAMES: &[&str] = &[
     "arg0", "arg1", "arg2", "arg3", "arg4", "arg5", "arg6", "arg7", "arg8", "arg9", "arg10",
     "arg11", "arg12", "arg13", "arg14", "arg15", "arg16", "arg17", "arg18", "arg19", "arg20",
@@ -86,6 +87,9 @@ pub enum CallingConvention {
 pub enum Val {
     /// A Ref is passed-by-reference (is a pointer) but the
     /// pointee will be regarded as the real value that we check.
+    ///
+    /// If a Ref val is used as the return value for a function, it will
+    /// implicitly introduce an outparam that the callee memcpy's to.
     Ref(Box<Val>),
     /// Some integer
     Int(IntVal),
@@ -94,12 +98,37 @@ pub enum Val {
     /// A bool
     Bool(bool),
     /// An array (homogeneous types, checked on construction)
+    ///
+    /// Arrays must be wrapped in a Ref to directly use them as args/returns
+    /// when compiling to C. Rust is fine with passing them by-value, but of
+    /// course this is pointless when the other half of the equation pukes.
+    ///
+    /// FIXME: it isn't currently enforced that this is homogeneous, anything that needs
+    /// the type of the elements just grabs the type of element 0
+    ///
+    /// FIXME: it's illegal to have an array of length 0, because it's impossible to
+    /// attach a type to it
     Array(Vec<Val>),
     /// A named struct (heterogeneous type)
+    ///
+    /// Struct decls are implicitly derived from their usage as a value.
+    /// If any two structs claim the same name but have different layouts,
+    /// the ABI backends should notice this and return an error.
     Struct(String, Vec<Val>),
     /// An opaque pointer
+    ///
+    /// FIXME?: it's gross to just pick "u64" as the type here when ostensibly it would
+    /// be nice for this to be able to taget 32-bit platforms. But using usize doesn't really
+    /// make sense either because we're slurping these values out of a static config file!
+    /// I guess just truncating the pointer is "fine".
     Ptr(u64),
-    // TODO: vectors
+    // TODO: unions. This is hard to do with the current design where
+    // types are implicit in their values. You could maybe hack it in
+    // by having dummy vals for all the different cases and then a
+    // "real" value for the variant that's actually used, but, kinda gross.
+    //
+    // TODO: simd vectors (they have special passing rules!)
+    //
     // TODO: enums (enum classes?)
 }
 
@@ -116,12 +145,13 @@ pub enum IntVal {
     c_uint32_t(u32),
     c_uint16_t(u16),
     c_uint8_t(u8),
-    // TODO: nastier c-types?
-    // c_int(i64),
+    // TODO: nastier platform-specific-layout c-types?
+    // i.e. c_int(i64), c_long(i32), char(i8), ...
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum FloatVal {
     c_double(f64),
     c_float(f32),
+    // Is there a reason to mess with `long double`? Surely not.
 }

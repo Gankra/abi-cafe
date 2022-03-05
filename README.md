@@ -51,15 +51,16 @@ In the future we'd like to also be able to generate more specific ABIs like stdc
 
 ## Types
 
-The test format support for the following types/concepts, although the implementations need to fill in support for some of them:
+The test format support for the following types/concepts:
 
 * fixed-width integer types (uint8_t and friends)
 * float/double
 * bool
 * structs
 * opaque pointers (void*)
-* (TODO) arrays 
-* (TODO) all of the above but explicitly wrapped in "by-reference"
+* pass-by-ref (still checks the pointee's layout, and not the address)
+* arrays (including multi-dimensional arrays, although C often requires arrays to be wrapped in pass-by-ref)
+
 
 
 # Adding Tests

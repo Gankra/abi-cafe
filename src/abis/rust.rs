@@ -19,16 +19,8 @@ impl Abi for RustAbi {
         // Generate the extern block
         writeln!(f, "extern {{")?;
         for function in &test.funcs {
-            write!(f, "  fn {}(", function.name)?;
-            for (idx, input) in function.inputs.iter().enumerate() {
-                let ty = input.rust_arg_type()?;
-                write!(f, "arg{idx}: {ty}, ",)?;
-            }
-            write!(f, ")")?;
-            if let Some(output) = &function.output {
-                let ty = output.rust_arg_type()?;
-                write!(f, " -> {ty}")?;
-            }
+            write!(f, "  ")?;
+            write_rust_signature(f, function)?;
             writeln!(f, ";")?;
         }
         writeln!(f, "}}")?;
@@ -42,34 +34,55 @@ impl Abi for RustAbi {
 
             // Inputs
             for (idx, input) in function.inputs.iter().enumerate() {
-                let ty = input.rust_arg_type()?;
-                writeln!(f, "        let arg{idx}: {ty} = {};", input.rust_val()?)?;
+                writeln!(
+                    f,
+                    "        {} = {};",
+                    input.rust_var_decl(ARG_NAMES[idx])?,
+                    input.rust_val()?
+                )?;
             }
             writeln!(f)?;
             for (idx, input) in function.inputs.iter().enumerate() {
-                let val = format!("arg{idx}");
-                writeln!(f, "{}", input.rust_write_val("CALLER_INPUTS", &val)?)?;
+                writeln!(
+                    f,
+                    "{}",
+                    input.rust_write_val("CALLER_INPUTS", ARG_NAMES[idx], true)?
+                )?;
             }
             writeln!(f)?;
 
             // Outputs
             write!(f, "        ")?;
-            if let Some(output) = &function.output {
-                let ty = output.rust_arg_type()?;
-                write!(f, "        let output: {ty} = ")?;
-            }
+            let pass_out = if let Some(output) = &function.output {
+                if let Some(decl) = output.rust_out_param_var(OUTPUT_NAME)? {
+                    writeln!(f, "        {}", decl)?;
+                    true
+                } else {
+                    write!(f, "        {} = ", output.rust_var_decl(OUTPUT_NAME)?)?;
+                    false
+                }
+            } else {
+                false
+            };
 
             // Do the call
             write!(f, "{}(", function.name)?;
-            for (idx, _input) in function.inputs.iter().enumerate() {
-                write!(f, "arg{idx}, ")?;
+            for (idx, input) in function.inputs.iter().enumerate() {
+                write!(f, "{}, ", input.rust_arg_pass(ARG_NAMES[idx])?)?;
+            }
+            if pass_out {
+                writeln!(f, "&mut {OUTPUT_NAME}")?;
             }
             writeln!(f, ");")?;
             writeln!(f)?;
 
             // Report the output
             if let Some(output) = &function.output {
-                writeln!(f, "{}", output.rust_write_val("CALLER_OUTPUTS", "output")?)?;
+                writeln!(
+                    f,
+                    "{}",
+                    output.rust_write_val("CALLER_OUTPUTS", OUTPUT_NAME, true)?
+                )?;
             }
 
             // Finished
@@ -90,38 +103,41 @@ impl Abi for RustAbi {
         for function in &test.funcs {
             // Write the signature
             writeln!(f, "#[no_mangle]")?;
-            write!(f, "pub unsafe extern fn {}(", function.name)?;
-            for (idx, input) in function.inputs.iter().enumerate() {
-                let ty = input.rust_arg_type()?;
-                write!(f, "arg{idx}: {ty}, ",)?;
-            }
-            write!(f, ")")?;
-            if let Some(output) = &function.output {
-                let ty = output.rust_arg_type()?;
-                write!(f, " -> {ty}")?;
-            }
+            write!(f, "pub unsafe extern ")?;
+            write_rust_signature(f, function)?;
             writeln!(f, " {{")?;
 
             // Now the body
 
             // Report Inputs
             for (idx, input) in function.inputs.iter().enumerate() {
-                let val = format!("arg{idx}");
-                writeln!(f, "{}", input.rust_write_val("CALLEE_INPUTS", &val)?)?;
+                writeln!(
+                    f,
+                    "{}",
+                    input.rust_write_val("CALLEE_INPUTS", ARG_NAMES[idx], false)?
+                )?;
             }
             writeln!(f)?;
 
             // Report outputs and return
             if let Some(output) = &function.output {
-                let ty = output.rust_arg_type()?;
+                let decl = output.rust_var_decl(OUTPUT_NAME)?;
                 let val = output.rust_val()?;
-                writeln!(f, "        let output: {ty} = {val};")?;
-                writeln!(f, "{}", output.rust_write_val("CALLEE_OUTPUTS", "output")?)?;
+                writeln!(f, "        {decl} = {val};")?;
+                writeln!(
+                    f,
+                    "{}",
+                    output.rust_write_val("CALLEE_OUTPUTS", OUTPUT_NAME, true)?
+                )?;
                 writeln!(
                     f,
                     "        FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
                 )?;
-                writeln!(f, "        return output;")?;
+                writeln!(
+                    f,
+                    "        {}",
+                    output.rust_var_return(OUTPUT_NAME, OUT_PARAM_NAME)?
+                )?;
             } else {
                 writeln!(
                     f,
@@ -165,7 +181,7 @@ fn write_rust_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
     let mut forward_decls = std::collections::HashMap::<String, String>::new();
     for function in &test.funcs {
         for val in function.inputs.iter().chain(function.output.as_ref()) {
-            if let Some((name, decl)) = val.rust_forward_decl()? {
+            for (name, decl) in val.rust_forward_decl()? {
                 match forward_decls.entry(name) {
                     std::collections::hash_map::Entry::Occupied(entry) => {
                         if entry.get() != &decl {
@@ -188,6 +204,26 @@ fn write_rust_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
     Ok(())
 }
 
+fn write_rust_signature(f: &mut dyn Write, function: &Func) -> Result<(), BuildError> {
+    write!(f, "fn {}(", function.name)?;
+    for (idx, input) in function.inputs.iter().enumerate() {
+        write!(f, "{}, ", input.rust_arg_decl(ARG_NAMES[idx])?)?;
+    }
+    if let Some(output) = &function.output {
+        if let Some(out_param) = output.rust_out_param(OUT_PARAM_NAME)? {
+            write!(f, "{}", out_param)?;
+            write!(f, ")")?;
+        } else {
+            write!(f, ")")?;
+            let ty = output.rust_arg_type()?;
+            write!(f, " -> {ty}")?;
+        }
+    } else {
+        write!(f, ")")?;
+    }
+    Ok(())
+}
+
 impl Val {
     /// If this value defines a nominal type, this will spit out:
     ///
@@ -197,22 +233,95 @@ impl Val {
     /// To catch buggy test definitions, you should validate that all
     /// structs that claim a particular name have the same declaration.
     /// This is done in write_rust_prefix.
-    fn rust_forward_decl(&self) -> Result<Option<(String, String)>, GenerateError> {
+    fn rust_forward_decl(&self) -> Result<Vec<(String, String)>, GenerateError> {
         use Val::*;
-        if let Struct(name, fields) = self {
-            let mut output = String::new();
-            let ref_name = format!("{name}");
-            output.push_str("\n#[repr(C)]\n");
-            output.push_str(&format!("pub struct {name} {{\n"));
-            for (idx, field) in fields.iter().enumerate() {
-                let line = format!("    field{idx}: {},\n", field.rust_nested_type()?);
-                output.push_str(&line);
+        match self {
+            Struct(name, fields) => {
+                let mut results = vec![];
+                for field in fields.iter() {
+                    results.extend(field.rust_forward_decl()?);
+                }
+                let mut output = String::new();
+                let ref_name = format!("{name}");
+                output.push_str("\n#[repr(C)]\n");
+                output.push_str(&format!("pub struct {name} {{\n"));
+                for (idx, field) in fields.iter().enumerate() {
+                    let line =
+                        format!("    {}: {},\n", FIELD_NAMES[idx], field.rust_nested_type()?);
+                    output.push_str(&line);
+                }
+                output.push_str("}");
+                results.push((ref_name, output));
+                Ok(results)
             }
-            output.push_str("}");
-            Ok(Some((ref_name, output)))
+            Array(vals) => vals[0].rust_forward_decl(),
+            Ref(x) => x.rust_forward_decl(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    /// The decl to use for a local var (reference-ness stripped)
+    fn rust_var_decl(&self, var_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(x) = self {
+            Ok(x.rust_var_decl(var_name)?)
         } else {
-            // Don't need to forward decl any other types
+            Ok(format!("let {var_name}: {}", self.rust_arg_type()?))
+        }
+    }
+
+    /// The decl to use for a function arg (apply referenceness)
+    fn rust_arg_decl(&self, arg_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(x) = self {
+            Ok(format!("{arg_name}: &{}", x.rust_arg_type()?))
+        } else {
+            Ok(format!("{arg_name}: {}", self.rust_arg_type()?))
+        }
+    }
+
+    /// If the return type needs to be an out_param, this returns it
+    fn rust_out_param(&self, out_param_name: &str) -> Result<Option<String>, GenerateError> {
+        if let Val::Ref(x) = self {
+            Ok(Some(format!(
+                "{out_param_name}: &mut {}",
+                x.rust_arg_type()?
+            )))
+        } else {
             Ok(None)
+        }
+    }
+
+    /// If the return type needs to be an out_param, this returns it
+    fn rust_out_param_var(&self, output_name: &str) -> Result<Option<String>, GenerateError> {
+        if let Val::Ref(x) = self {
+            Ok(Some(format!(
+                "let mut {output_name}: {} = {};",
+                x.rust_arg_type()?,
+                x.rust_default_val()?
+            )))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// How to pass an argument
+    fn rust_arg_pass(&self, arg_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(_) = self {
+            Ok(format!("&{arg_name}"))
+        } else {
+            Ok(format!("{arg_name}"))
+        }
+    }
+
+    /// How to return a value
+    fn rust_var_return(
+        &self,
+        var_name: &str,
+        out_param_name: &str,
+    ) -> Result<String, GenerateError> {
+        if let Val::Ref(_) = self {
+            Ok(format!("*{out_param_name} = {var_name};"))
+        } else {
+            Ok(format!("return {var_name};"))
         }
     }
 
@@ -279,14 +388,26 @@ impl Val {
                 let mut output = String::new();
                 output.push_str(&format!("{name} {{ "));
                 for (idx, field) in fields.iter().enumerate() {
-                    let part = format!("field{idx}: {},", field.rust_val()?);
+                    let part = format!("{}: {},", FIELD_NAMES[idx], field.rust_val()?);
                     output.push_str(&part);
                 }
                 output.push_str(" }");
                 output
             }
-            Float(FloatVal::c_double(val)) => format!("{val}"),
-            Float(FloatVal::c_float(val)) => format!("{val}"),
+            Float(FloatVal::c_double(val)) => {
+                if val.fract() == 0.0 {
+                    format!("{val}.0")
+                } else {
+                    format!("{val}")
+                }
+            }
+            Float(FloatVal::c_float(val)) => {
+                if val.fract() == 0.0 {
+                    format!("{val}.0")
+                } else {
+                    format!("{val}")
+                }
+            }
             Int(int_val) => match int_val {
                 c__int128(val) => format!("{val}"),
                 c_int64_t(val) => format!("{val}"),
@@ -303,13 +424,51 @@ impl Val {
         Ok(val)
     }
 
+    /// A suitable default value for this type
+    fn rust_default_val(&self) -> Result<String, GenerateError> {
+        use Val::*;
+        let val = match self {
+            Ref(x) => x.rust_default_val()?,
+            Ptr(_) => format!("0 as *const ()"),
+            Bool(_) => format!("false"),
+            Array(vals) => {
+                let mut output = String::new();
+                output.push_str(&format!("[",));
+                for val in vals {
+                    let part = format!("{}, ", val.rust_default_val()?);
+                    output.push_str(&part);
+                }
+                output.push_str("]");
+                output
+            }
+            Struct(name, fields) => {
+                let mut output = String::new();
+                output.push_str(&format!("{name} {{ "));
+                for (idx, field) in fields.iter().enumerate() {
+                    let part = format!("{}: {},", FIELD_NAMES[idx], field.rust_default_val()?);
+                    output.push_str(&part);
+                }
+                output.push_str(" }");
+                output
+            }
+            Float(..) => format!("0.0"),
+            Int(..) => format!("0"),
+        };
+        Ok(val)
+    }
+
     /// Emit the WRITE calls and FINISHED_VAL for this value.
     /// This will WRITE every leaf subfield of the type.
     /// `to` is the BUFFER to use, `from` is the variable name of the value.
-    fn rust_write_val(&self, to: &str, from: &str) -> Result<String, GenerateError> {
+    fn rust_write_val(
+        &self,
+        to: &str,
+        from: &str,
+        is_var_root: bool,
+    ) -> Result<String, GenerateError> {
         use std::fmt::Write;
         let mut output = String::new();
-        for path in self.rust_var_paths(from)? {
+        for path in self.rust_var_paths(from, is_var_root)? {
             write!(output, "        WRITE.unwrap()({to}, &{path} as *const _ as *const _, core::mem::size_of_val(&{path}) as u32);\n").unwrap();
         }
         write!(output, "        FINISHED_VAL.unwrap()({to});").unwrap();
@@ -319,7 +478,7 @@ impl Val {
 
     /// Compute the paths to every subfield of this value, with `from`
     /// as the base path to that value, for rust_write_val's use.
-    fn rust_var_paths(&self, from: &str) -> Result<Vec<String>, GenerateError> {
+    fn rust_var_paths(&self, from: &str, is_var_root: bool) -> Result<Vec<String>, GenerateError> {
         let paths = match self {
             Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
                 vec![format!("{from}")]
@@ -327,15 +486,27 @@ impl Val {
             Val::Struct(_name, fields) => {
                 let mut paths = vec![];
                 for (idx, field) in fields.iter().enumerate() {
-                    let base = format!("{from}.field{idx}");
-                    paths.extend(field.rust_var_paths(&base)?);
+                    let base = format!("{from}.{}", FIELD_NAMES[idx]);
+                    paths.extend(field.rust_var_paths(&base, false)?);
                 }
                 paths
             }
-            // TODO: need to think about this
-            Val::Ref(_) => return Err(GenerateError::RustUnsupported),
-            // TODO: not yet implemented
-            Val::Array(_) => return Err(GenerateError::RustUnsupported),
+            Val::Ref(val) => {
+                if is_var_root {
+                    val.rust_var_paths(from, false)?
+                } else {
+                    let base = format!("(*{from})");
+                    val.rust_var_paths(&base, false)?
+                }
+            }
+            Val::Array(vals) => {
+                let mut paths = vec![];
+                for (i, val) in vals.iter().enumerate() {
+                    let base = format!("{from}[{i}]");
+                    paths.extend(val.rust_var_paths(&base, false)?);
+                }
+                paths
+            }
         };
 
         Ok(paths)

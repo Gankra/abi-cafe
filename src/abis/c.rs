@@ -18,40 +18,36 @@ impl Abi for CAbi {
 
         // Generate the impls
         for function in &test.funcs {
-            // Function signature
-            if let Some(output) = &function.output {
-                write!(f, "{} ", output.c_arg_type()?)?;
-            } else {
-                write!(f, "void ")?;
-            }
-            write!(f, "{}(", function.name)?;
-            for (idx, input) in function.inputs.iter().enumerate() {
-                if idx != 0 {
-                    write!(f, ", ")?;
-                }
-                write!(f, "{} arg{idx}", input.c_arg_type()?)?;
-            }
-            if function.inputs.is_empty() {
-                write!(f, "void")?;
-            }
-            writeln!(f, ") {{")?;
+            write_c_signature(f, function)?;
+            writeln!(f, " {{")?;
 
             writeln!(f)?;
             for (idx, input) in function.inputs.iter().enumerate() {
-                let val = format!("arg{idx}");
-                writeln!(f, "{}", input.c_write_val("CALLEE_INPUTS", &val)?)?;
+                writeln!(
+                    f,
+                    "{}",
+                    input.c_write_val("CALLEE_INPUTS", ARG_NAMES[idx], false)?
+                )?;
             }
             writeln!(f)?;
             if let Some(output) = &function.output {
                 writeln!(
                     f,
-                    "    {} output = {};",
-                    output.c_arg_type()?,
+                    "    {} = {};",
+                    output.c_var_decl(OUTPUT_NAME)?,
                     output.c_val()?
                 )?;
-                writeln!(f, "{}", output.c_write_val("CALLEE_OUTPUTS", "output")?)?;
+                writeln!(
+                    f,
+                    "{}",
+                    output.c_write_val("CALLEE_OUTPUTS", OUTPUT_NAME, true)?
+                )?;
                 writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
-                writeln!(f, "    return output;")?;
+                writeln!(
+                    f,
+                    "    {}",
+                    output.c_var_return(OUTPUT_NAME, OUT_PARAM_NAME)?
+                )?;
             } else {
                 writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
             }
@@ -67,22 +63,8 @@ impl Abi for CAbi {
 
         // Generate the extern block
         for function in &test.funcs {
-            if let Some(output) = &function.output {
-                write!(f, "{} ", output.c_arg_type()?)?;
-            } else {
-                write!(f, "void ")?;
-            }
-            write!(f, "{}(", function.name)?;
-            for (idx, input) in function.inputs.iter().enumerate() {
-                if idx != 0 {
-                    write!(f, ", ")?;
-                }
-                write!(f, "{} arg{idx}", input.c_arg_type()?)?;
-            }
-            if function.inputs.is_empty() {
-                write!(f, "void")?;
-            }
-            writeln!(f, ");")?;
+            write_c_signature(f, function)?;
+            writeln!(f, ";")?;
         }
 
         writeln!(f)?;
@@ -94,30 +76,59 @@ impl Abi for CAbi {
             writeln!(f, "{{")?;
             // Inputs
             for (idx, input) in function.inputs.iter().enumerate() {
-                let var = format!("arg{idx}");
-                writeln!(f, "    {} {var} = {};", input.c_arg_type()?, input.c_val()?)?;
-                writeln!(f, "{}", input.c_write_val("CALLER_INPUTS", &var)?)?;
+                writeln!(
+                    f,
+                    "    {} = {};",
+                    input.c_var_decl(ARG_NAMES[idx])?,
+                    input.c_val()?
+                )?;
+                writeln!(
+                    f,
+                    "{}",
+                    input.c_write_val("CALLER_INPUTS", ARG_NAMES[idx], true)?
+                )?;
             }
             writeln!(f)?;
 
             // Output
-            write!(f, "    ")?;
-            if let Some(output) = &function.output {
-                write!(f, "{} output = ", output.c_arg_type()?,)?;
-            }
+            let pass_out = if let Some(output) = &function.output {
+                if let Some(out_param_var) = output.c_out_param_var(OUTPUT_NAME)? {
+                    writeln!(f, "    {};", out_param_var)?;
+                    write!(f, "    ")?;
+                    true
+                } else {
+                    write!(f, "    {} = ", output.c_var_decl(OUTPUT_NAME)?)?;
+                    false
+                }
+            } else {
+                write!(f, "    ")?;
+                false
+            };
 
             // Do the actual call
             write!(f, "{}(", function.name)?;
-            for (idx, _input) in function.inputs.iter().enumerate() {
+            for (idx, input) in function.inputs.iter().enumerate() {
                 if idx != 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "arg{idx}")?;
+                write!(f, "{}", input.c_arg_pass(ARG_NAMES[idx])?)?;
+            }
+            if pass_out {
+                let pass = function.output.as_ref().unwrap().c_arg_pass(OUTPUT_NAME)?;
+                if function.inputs.is_empty() {
+                    write!(f, "{}", pass)?;
+                } else {
+                    write!(f, ", {}", pass)?;
+                }
             }
             writeln!(f, ");")?;
 
             if let Some(output) = &function.output {
-                writeln!(f, "{}", output.c_write_val("CALLER_OUTPUTS", "output")?)?;
+                writeln!(
+                    f,
+                    "{}",
+                    output.c_write_val("CALLER_OUTPUTS", OUTPUT_NAME, true)?
+                )?;
             }
             writeln!(f, "    FINISHED_FUNC(CALLER_INPUTS, CALLER_OUTPUTS);")?;
             writeln!(f, "}}")?;
@@ -152,7 +163,7 @@ fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
     let mut forward_decls = std::collections::HashMap::<String, String>::new();
     for function in &test.funcs {
         for val in function.inputs.iter().chain(function.output.as_ref()) {
-            if let Some((name, decl)) = val.c_forward_decl()? {
+            for (name, decl) in val.c_forward_decl()? {
                 match forward_decls.entry(name) {
                     std::collections::hash_map::Entry::Occupied(entry) => {
                         if entry.get() != &decl {
@@ -175,6 +186,45 @@ fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
     Ok(())
 }
 
+// Emit a function signature
+fn write_c_signature(f: &mut dyn Write, function: &Func) -> Result<(), BuildError> {
+    // First figure out the return (by-ref requires an out-param)
+    let out_param = if let Some(output) = &function.output {
+        let out_param = output.c_out_param(OUT_PARAM_NAME)?;
+        if out_param.is_none() {
+            write!(f, "{} ", output.c_arg_type()?)?;
+        } else {
+            write!(f, "void ")?;
+        }
+        out_param
+    } else {
+        write!(f, "void ")?;
+        None
+    };
+
+    // Now write out the args
+    write!(f, "{}(", function.name)?;
+    for (idx, input) in function.inputs.iter().enumerate() {
+        if idx != 0 {
+            write!(f, ", ")?;
+        }
+        write!(f, "{}", input.c_arg_decl(ARG_NAMES[idx])?)?;
+    }
+
+    // Add extra implicit args
+    if let Some(out_param) = out_param {
+        if !function.inputs.is_empty() {
+            write!(f, ", ")?;
+        }
+        write!(f, "{out_param}")?;
+    } else if function.inputs.is_empty() {
+        write!(f, "void")?;
+    }
+    write!(f, ")")?;
+
+    Ok(())
+}
+
 impl Val {
     /// If this value defines a nominal type, this will spit out:
     ///
@@ -184,21 +234,113 @@ impl Val {
     /// To catch buggy test definitions, you should validate that all
     /// structs that claim a particular name have the same declaration.
     /// This is done in write_rust_prefix.
-    fn c_forward_decl(&self) -> Result<Option<(String, String)>, GenerateError> {
+    fn c_forward_decl(&self) -> Result<Vec<(String, String)>, GenerateError> {
         use Val::*;
-        if let Struct(name, fields) = self {
-            let mut output = String::new();
-            let ref_name = format!("struct {name}");
-            output.push_str(&format!("struct {name} {{\n"));
-            for (idx, field) in fields.iter().enumerate() {
-                let line = format!("    {} field{idx};\n", field.c_nested_type()?);
-                output.push_str(&line);
+        match self {
+            Struct(name, fields) => {
+                let mut results = vec![];
+                for field in fields.iter() {
+                    results.extend(field.c_forward_decl()?);
+                }
+                let mut output = String::new();
+                let ref_name = format!("struct {name}");
+                output.push_str(&format!("struct {name} {{\n"));
+                for (idx, field) in fields.iter().enumerate() {
+                    let line = format!("    {};\n", field.c_field_decl(FIELD_NAMES[idx])?);
+                    output.push_str(&line);
+                }
+                output.push_str("};\n");
+                results.push((ref_name, output));
+                Ok(results)
             }
-            output.push_str("};\n");
-            Ok(Some((ref_name, output)))
+            Array(vals) => vals[0].c_forward_decl(),
+            Ref(x) => x.c_forward_decl(),
+            _ => Ok(vec![]),
+        }
+    }
+
+    /// The decl to use for a local var (reference-ness stripped)
+    fn c_var_decl(&self, var_name: &str) -> Result<String, GenerateError> {
+        use Val::*;
+        let val = match self {
+            Ref(x) => x.c_var_decl(var_name)?,
+            Array(_) => {
+                let mut cur_val = self;
+                let mut array_levels = String::new();
+                while let Val::Array(vals) = cur_val {
+                    array_levels.push_str(&format!("[{}]", vals.len()));
+                    cur_val = &vals[0];
+                }
+                format!("{} {var_name}{array_levels}", cur_val.c_arg_type()?)
+            }
+            normal_val => format!("{} {var_name}", normal_val.c_arg_type()?),
+        };
+        Ok(val)
+    }
+
+    /// The decl to use for a function arg (apply referenceness)
+    fn c_arg_decl(&self, arg_name: &str) -> Result<String, GenerateError> {
+        let val = if let Val::Ref(x) = self {
+            let mut cur_val = &**x;
+            let mut array_levels = String::new();
+            while let Val::Array(vals) = cur_val {
+                array_levels.push_str(&format!("[{}]", vals.len()));
+                cur_val = &vals[0];
+            }
+            if array_levels.is_empty() {
+                format!("{}* {arg_name}", cur_val.c_arg_type()?)
+            } else {
+                format!("{} {arg_name}{array_levels}", cur_val.c_arg_type()?)
+            }
         } else {
-            // Don't need to forward decl any other types
+            format!("{} {arg_name}", self.c_arg_type()?)
+        };
+        Ok(val)
+    }
+
+    /// If the return type needs to be an out_param, this returns it
+    fn c_out_param(&self, out_param_name: &str) -> Result<Option<String>, GenerateError> {
+        if let Val::Ref(x) = self {
+            let mut cur_val = &**x;
+            while let Val::Array(vals) = cur_val {
+                cur_val = &vals[0];
+            }
+            Ok(Some(format!("{}* {out_param_name}", cur_val.c_arg_type()?)))
+        } else {
             Ok(None)
+        }
+    }
+
+    /// If the return type needs to be an out_param, this returns it
+    fn c_out_param_var(&self, output_name: &str) -> Result<Option<String>, GenerateError> {
+        if let Val::Ref(x) = self {
+            Ok(Some(x.c_var_decl(output_name)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// How to pass an argument
+    fn c_arg_pass(&self, arg_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(x) = self {
+            if let Val::Array(_) = &**x {
+                Ok(format!("{arg_name}"))
+            } else {
+                Ok(format!("&{arg_name}"))
+            }
+        } else {
+            Ok(format!("{arg_name}"))
+        }
+    }
+
+    /// How to return a value
+    fn c_var_return(&self, var_name: &str, out_param_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(_) = self {
+            Ok(format!(
+                "memcpy({out_param_name}, &{var_name}, sizeof({var_name}));"
+            ))
+        } else {
+            Ok(format!("return {var_name};"))
         }
     }
 
@@ -207,11 +349,21 @@ impl Val {
         use IntVal::*;
         use Val::*;
         let val = match self {
-            Ref(x) => format!("{}*", x.c_arg_type()?),
+            Ref(x) => {
+                let mut cur_val = &**x;
+                while let Val::Array(vals) = cur_val {
+                    cur_val = &vals[0];
+                }
+                format!("{}*", cur_val.c_arg_type()?)
+            }
             Ptr(_) => format!("void*"),
             Bool(_) => format!("bool"),
             // This API doesn't work for expressing C type syntax with arrays
-            Array(_vals) => return Err(GenerateError::CUnsupported),
+            Array(_vals) => {
+                return Err(GenerateError::CUnsupported(format!(
+                    "C Arrays can't be passed directly, wrap this in ByRef"
+                )))
+            }
             Struct(name, _) => format!("struct {name}"),
             Float(FloatVal::c_double(_)) => format!("double"),
             Float(FloatVal::c_float(_)) => format!("float"),
@@ -236,8 +388,17 @@ impl Val {
     /// This is separated out in case there's a type that needs different
     /// handling in this context to conform to a layout (i.e. how C arrays
     /// decay into pointers when used in function args).
-    fn c_nested_type(&self) -> Result<String, GenerateError> {
-        self.c_arg_type()
+    fn c_field_decl(&self, field_name: &str) -> Result<String, GenerateError> {
+        let mut cur_val = self;
+        let mut array_levels = String::new();
+        while let Val::Array(vals) = cur_val {
+            array_levels.push_str(&format!("[{}]", vals.len()));
+            cur_val = &vals[0];
+        }
+        Ok(format!(
+            "{} {field_name}{array_levels}",
+            cur_val.c_arg_type()?
+        ))
     }
 
     /// An expression that generates this value.
@@ -268,14 +429,26 @@ impl Val {
                     if idx != 0 {
                         output.push_str(", ");
                     }
-                    let part = format!("{}", field.c_val()?);
+                    let part = format!(".{} = {}", FIELD_NAMES[idx], field.c_val()?);
                     output.push_str(&part);
                 }
                 output.push_str(" }");
                 output
             }
-            Float(FloatVal::c_double(val)) => format!("{val}"),
-            Float(FloatVal::c_float(val)) => format!("{val}f"),
+            Float(FloatVal::c_double(val)) => {
+                if val.fract() == 0.0 {
+                    format!("{val}.0")
+                } else {
+                    format!("{val}")
+                }
+            }
+            Float(FloatVal::c_float(val)) => {
+                if val.fract() == 0.0 {
+                    format!("{val}.0f")
+                } else {
+                    format!("{val}f")
+                }
+            }
             Int(int_val) => match int_val {
                 c__int128(val) => {
                     let lower = val & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
@@ -303,10 +476,15 @@ impl Val {
     /// Emit the WRITE calls and FINISHED_VAL for this value.
     /// This will WRITE every leaf subfield of the type.
     /// `to` is the BUFFER to use, `from` is the variable name of the value.
-    fn c_write_val(&self, to: &str, from: &str) -> Result<String, GenerateError> {
+    fn c_write_val(
+        &self,
+        to: &str,
+        from: &str,
+        is_var_root: bool,
+    ) -> Result<String, GenerateError> {
         use std::fmt::Write;
         let mut output = String::new();
-        for path in self.c_var_paths(from)? {
+        for path in self.c_var_paths(from, is_var_root)? {
             write!(
                 output,
                 "    WRITE({to}, (char*)&{path}, (uint32_t)sizeof({path}));\n"
@@ -320,7 +498,7 @@ impl Val {
 
     /// Compute the paths to every subfield of this value, with `from`
     /// as the base path to that value, for c_write_val's use.
-    fn c_var_paths(&self, from: &str) -> Result<Vec<String>, GenerateError> {
+    fn c_var_paths(&self, from: &str, is_var_root: bool) -> Result<Vec<String>, GenerateError> {
         let paths = match self {
             Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
                 vec![format!("{from}")]
@@ -328,15 +506,29 @@ impl Val {
             Val::Struct(_name, fields) => {
                 let mut paths = vec![];
                 for (idx, field) in fields.iter().enumerate() {
-                    let base = format!("{from}.field{idx}");
-                    paths.extend(field.c_var_paths(&base)?);
+                    let base = format!("{from}.{}", FIELD_NAMES[idx]);
+                    paths.extend(field.c_var_paths(&base, false)?);
                 }
                 paths
             }
-            // TODO: need to think about this
-            Val::Ref(_) => return Err(GenerateError::CUnsupported),
-            // TODO: not yet implemented
-            Val::Array(_) => return Err(GenerateError::CUnsupported),
+            Val::Ref(val) => {
+                if is_var_root {
+                    val.c_var_paths(from, false)?
+                } else if let Val::Array(_) = &**val {
+                    val.c_var_paths(from, false)?
+                } else {
+                    let base = format!("(*{from})");
+                    val.c_var_paths(&base, false)?
+                }
+            }
+            Val::Array(vals) => {
+                let mut paths = vec![];
+                for (i, val) in vals.iter().enumerate() {
+                    let base = format!("{from}[{i}]");
+                    paths.extend(val.c_var_paths(&base, false)?);
+                }
+                paths
+            }
         };
 
         Ok(paths)

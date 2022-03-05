@@ -13,6 +13,7 @@ use abis::*;
 pub static TESTS: &[&str] = &[
     "opaque_example",
     "structs",
+    "by_ref",
     "signed_ints",
     "unsigned_ints",
     "floats",

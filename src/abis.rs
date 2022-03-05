@@ -12,8 +12,27 @@ pub type AbiRef = &'static (dyn Abi + Sync);
 pub static RUST_ABI: AbiRef = &rust::RustAbi;
 pub static C_ABI: AbiRef = &c::CAbi;
 
+/// The pairings of impls to run
 pub static TEST_PAIRS: &[(AbiRef, AbiRef)] = &[(RUST_ABI, C_ABI), (C_ABI, RUST_ABI)];
 
+// pre-computed arg/field names to avoid a bunch of tedious formatting,
+// and to make it easy to refactor this detail.
+pub static ARG_NAMES: &[&str] = &[
+    "arg0", "arg1", "arg2", "arg3", "arg4", "arg5", "arg6", "arg7", "arg8", "arg9", "arg10",
+    "arg11", "arg12", "arg13", "arg14", "arg15", "arg16", "arg17", "arg18", "arg19", "arg20",
+    "arg21", "arg22", "arg23", "arg24", "arg25", "arg26", "arg27", "arg28", "arg29", "arg30",
+    "arg31", "arg32",
+];
+pub static FIELD_NAMES: &[&str] = &[
+    "field0", "field1", "field2", "field3", "field4", "field5", "field6", "field7", "field8",
+    "field9", "field10", "field11", "field12", "field13", "field14", "field15", "field16",
+    "field17", "field18", "field19", "field20", "field21", "field22", "field23", "field24",
+    "field25", "field26", "field27", "field28", "field29", "field30", "field31", "field32",
+];
+pub static OUTPUT_NAME: &str = "output";
+pub static OUT_PARAM_NAME: &str = "out";
+
+/// ABI is probably a bad name for this... it's like, a language/compiler impl. idk.
 pub trait Abi {
     fn name(&self) -> &'static str;
     fn src_ext(&self) -> &'static str;
@@ -25,10 +44,10 @@ pub trait Abi {
 
 #[derive(Debug, thiserror::Error)]
 pub enum GenerateError {
-    #[error("rust didn't support features of this test")]
-    RustUnsupported,
-    #[error("c didn't support features of this test")]
-    CUnsupported,
+    #[error("Unsupported Signature For Rust: {0}")]
+    RustUnsupported(String),
+    #[error("Unsupported Signature For C: {0}")]
+    CUnsupported(String),
     #[error("the function didn't have a valid convention")]
     NoCallingConvention,
 }

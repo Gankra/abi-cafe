@@ -17,9 +17,10 @@ pub static TESTS: &[&str] = &[
     "opaque_example",
     "structs",
     "by_ref",
-    "signed_ints",
-    "unsigned_ints",
-    "floats",
+    "i8", "i16", "i32", "i64", 
+    "u8", "u16", "u32", "u64",
+    "f32", "f64",
+    "ptr", "bool",
     "ui128",
 ];
 
@@ -120,25 +121,43 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut total_fails = 0;
     for (test_name, caller_name, callee_name, report) in reports {
         let pretty_test_name = full_test_name(test_name, caller_name, callee_name);
-        print!("{pretty_test_name}: ");
+        print!("{pretty_test_name:<32} ");
         match report {
             Err(_) => {
                 println!("failed completely (bad input?)");
                 total_fails += 1;
             }
             Ok(report) => {
-                let passed = report.results.iter().filter(|r| r.is_ok()).count();
-                println!("{passed}/{} passed!", report.results.len());
-                for (test_func, result) in report.test.funcs.iter().zip(report.results.iter()) {
-                    let subtest_name =
-                        full_subtest_name(test_name, caller_name, callee_name, &test_func.name);
-                    print!("  {}... ", subtest_name);
-                    if result.is_ok() {
+                let num_passed = report.results.iter().filter(|r| r.is_ok()).count();
+                let all_passed = num_passed == report.results.len();
+                
+                if all_passed {
+                    print!("all ");
+                } else {
+                    print!("    ");
+                }
+                print!("{num_passed:>3}/{:<3} ", report.results.len());
+                println!("passed!");
+                // If all the subtests pass, don't bother with a breakdown.
+                if all_passed {
+                    passes += num_passed;
+                    continue;
+                }
+
+                let names = report.test.funcs.iter().map(|test_func| {
+                    full_subtest_name(test_name, caller_name, callee_name, &test_func.name)
+                }).collect::<Vec<_>>();
+                let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
+                for (subtest_name, result) in names.iter().zip(report.results.iter()) {
+                    print!("  {:width$} ", subtest_name, width=max_name_len);
+                    if let Err(_e) = result {
+                        println!("failed!");
+                        // A bit too noisy?
+                        // println!("{}", e);
+                        fails += 1;
+                    } else {
                         println!("passed!");
                         passes += 1;
-                    } else {
-                        println!("failed!");
-                        fails += 1;
                     }
                 }
             }
@@ -535,14 +554,17 @@ fn run_dynamic_test(
         // This will be done again after all tests have been run, but it's
         // useful to keep a version of this near the actual compilation/execution
         // in case the compilers spit anything interesting to stdout/stderr.
-        for (result, func) in results.iter().zip(&test.funcs) {
-            let subtest_name = full_subtest_name(test_name, caller_name, callee_name, &func.name);
+        let names = test.funcs.iter().map(|test_func| {
+            full_subtest_name(test_name, caller_name, callee_name, &test_func.name)
+        }).collect::<Vec<_>>();
+        let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
+        for (subtest_name, result) in names.iter().zip(&results) {
             match result {
                 Ok(()) => {
-                    eprintln!("Test {subtest_name}... passed!");
+                    eprintln!("Test {subtest_name:width$} passed!", width = max_name_len);
                 }
                 Err(e) => {
-                    eprintln!("Test {subtest_name}... failed!");
+                    eprintln!("Test {subtest_name:width$} failed!", width = max_name_len);
                     eprintln!("{}", e);
                 }
             }
@@ -583,32 +605,18 @@ fn generate_procedural_tests() {
         // This is chunked out a bit to avoid stressing the compilers/linkers too much,
         // in case some work scales non-linearly. It also keeps the test suite
         // a bit more "responsive" instead of just stalling one enormous supertest.
-        (
-            "signed_ints",
-            &[
-                Val::Int(IntVal::c_int64_t(0x1a2b3c4d_23eaf142)),
-                Val::Int(IntVal::c_int32_t(0x1a2b3c4d)),
-                Val::Int(IntVal::c_int16_t(0x1a2b)),
-                Val::Int(IntVal::c_int8_t(0x1a)),
-            ],
-        ),
-        (
-            "unsigned_ints",
-            &[
-                Val::Int(IntVal::c_uint64_t(0x1a2b3c4d_23eaf142)),
-                Val::Int(IntVal::c_uint32_t(0x1a2b3c4d)),
-                Val::Int(IntVal::c_uint16_t(0x1a2b)),
-                Val::Int(IntVal::c_uint8_t(0x1a)),
-                Val::Bool(true), // Let's call bool honorary unsigned
-            ],
-        ),
-        (
-            "floats",
-            &[
-                Val::Float(FloatVal::c_float(-4921.3527)),
-                Val::Float(FloatVal::c_double(809239021.392)),
-            ],
-        ),
+        ("i64", &[Val::Int(IntVal::c_int64_t(0x1a2b3c4d_23eaf142))]),
+        ("i32", &[Val::Int(IntVal::c_int32_t(0x1a2b3c4d))]),
+        ("i16", &[Val::Int(IntVal::c_int16_t(0x1a2b))]),
+        ("i8", &[Val::Int(IntVal::c_int8_t(0x1a))]),
+        ("u64", &[Val::Int(IntVal::c_uint64_t(0x1a2b3c4d_23eaf142))]),
+        ("u32", &[Val::Int(IntVal::c_uint32_t(0x1a2b3c4d))]),
+        ("u16", &[Val::Int(IntVal::c_uint16_t(0x1a2b))]),
+        ("u8", &[Val::Int(IntVal::c_uint8_t(0x1a))]),
+        ("ptr", &[Val::Ptr(0x1a2b3c4d_23eaf142)]),
+        ("bool", &[Val::Bool(true)]),
+        ("f64", &[Val::Float(FloatVal::c_double(809239021.392))]),
+        ("f32", &[Val::Float(FloatVal::c_float(-4921.3527))]),
         // These are split out because they are the buggy mess that inspired this whole enterprise!
         // These types are a GCC exenstion. Windows is a huge dumpster fire where no one agrees on
         // it (MSVC doesn't even define __(u)int128_t afaict, but has some equivalent extension).
@@ -640,7 +648,7 @@ fn generate_procedural_tests() {
                 val.clone()
             };
 
-            let val_name = val.rust_arg_type().unwrap();
+            let val_name = arg_ty(val);
 
             // Start gentle with basic one value in/out tests
             test.funcs.push(Func {
@@ -664,6 +672,28 @@ fn generate_procedural_tests() {
                 output: Some(new_val()),
             });
 
+             // Start gentle with basic one value in/out tests
+             test.funcs.push(Func {
+                name: format!("{val_name}_ref_in"),
+                conventions: vec![CallingConvention::All],
+                inputs: vec![Val::Ref(Box::new(new_val()))],
+                output: None,
+            });
+
+            test.funcs.push(Func {
+                name: format!("{val_name}_ref_out"),
+                conventions: vec![CallingConvention::All],
+                inputs: vec![],
+                output: Some(Val::Ref(Box::new(new_val()))),
+            });
+
+            test.funcs.push(Func {
+                name: format!("{val_name}_ref_in_out"),
+                conventions: vec![CallingConvention::All],
+                inputs: vec![Val::Ref(Box::new(new_val()))],
+                output: Some(Val::Ref(Box::new(new_val()))),
+            });
+
             // Stress out the calling convention and try lots of different
             // input counts. For many types this will result in register
             // exhaustion and get some things passed on the stack.
@@ -681,12 +711,24 @@ fn generate_procedural_tests() {
             // others will try to scalarize this into registers anyway.
             for len in 1..=16 {
                 test.funcs.push(Func {
-                    name: format!("struct_{val_name}_val_in_{len}"),
+                    name: format!("{val_name}_struct_in_{len}"),
                     conventions: vec![CallingConvention::All],
                     inputs: vec![Val::Struct(
-                        format!("{val_name}_val_in_{len}"),
+                        format!("{val_name}_{len}"),
                         (0..len).map(|_| new_val()).collect(),
                     )],
+                    output: None,
+                });
+            }
+            // Check that by-ref works, for good measure
+            for len in 1..=16 {
+                test.funcs.push(Func {
+                    name: format!("{val_name}_ref_struct_in_{len}"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: vec![Val::Ref(Box::new(Val::Struct(
+                        format!("{val_name}_{len}"),
+                        (0..len).map(|_| new_val()).collect(),
+                    )))],
                     output: None,
                 });
             }
@@ -736,10 +778,10 @@ fn generate_procedural_tests() {
                     Val::Float(FloatVal::c_float(1234.456)),
                 );
                 test.funcs.push(Func {
-                    name: format!("struct_{val_name}_val_in_{idx}_perturbed_small"),
+                    name: format!("{val_name}_struct_in_{idx}_perturbed_small"),
                     conventions: vec![CallingConvention::All],
                     inputs: vec![Val::Struct(
-                        format!("{val_name}_val_in_{idx}_perturbed_small"),
+                        format!("{val_name}_{idx}_perturbed_small"),
                         inputs,
                     )],
                     output: None,
@@ -750,12 +792,45 @@ fn generate_procedural_tests() {
                 inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
                 inputs.insert(big_count + 1 - idx, Val::Float(FloatVal::c_float(1234.456)));
                 test.funcs.push(Func {
-                    name: format!("struct_{val_name}_val_in_{idx}_perturbed_big"),
+                    name: format!("{val_name}_struct_in_{idx}_perturbed_big"),
                     conventions: vec![CallingConvention::All],
                     inputs: vec![Val::Struct(
-                        format!("{val_name}_val_in_{idx}_perturbed_big"),
+                        format!("{val_name}_{idx}_perturbed_big"),
                         inputs,
                     )],
+                    output: None,
+                });
+            }
+
+            // Should be an exact copy-paste of the above but with Ref's added
+            for idx in 0..=small_count {
+                let mut inputs = (0..small_count).map(|_| new_val()).collect::<Vec<_>>();
+                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
+                inputs.insert(
+                    small_count + 1 - idx,
+                    Val::Float(FloatVal::c_float(1234.456)),
+                );
+                test.funcs.push(Func {
+                    name: format!("{val_name}_ref_struct_in_{idx}_perturbed_small"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: vec![Val::Ref(Box::new(Val::Struct(
+                        format!("{val_name}_{idx}_perturbed_small"),
+                        inputs,
+                    )))],
+                    output: None,
+                });
+            }
+            for idx in 0..=big_count {
+                let mut inputs = (0..big_count).map(|_| new_val()).collect::<Vec<_>>();
+                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
+                inputs.insert(big_count + 1 - idx, Val::Float(FloatVal::c_float(1234.456)));
+                test.funcs.push(Func {
+                    name: format!("{val_name}_ref_struct_in_{idx}_perturbed_big"),
+                    conventions: vec![CallingConvention::All],
+                    inputs: vec![Val::Ref(Box::new(Val::Struct(
+                        format!("{val_name}_{idx}_perturbed_big"),
+                        inputs,
+                    )))],
                     output: None,
                 });
             }
@@ -763,5 +838,36 @@ fn generate_procedural_tests() {
         let mut file = std::fs::File::create(format!("tests/{test_name}.ron")).unwrap();
         let output = ron::to_string(&test).unwrap();
         file.write_all(output.as_bytes()).unwrap();
+    }
+}
+
+/// The type name to use for this value when it is stored in args/vars.
+pub fn arg_ty(val: &Val) -> String {
+    use IntVal::*;
+    use Val::*;
+    match val {
+        Ref(x) => format!("ref_{}", arg_ty(x)),
+        Ptr(_) => format!("ptr"),
+        Bool(_) => format!("bool"),
+        Array(vals) => format!(
+            "arr_{}_{}",
+            vals.len(),
+            arg_ty(vals.get(0).expect("arrays must have length > 0")),
+        ),
+        Struct(name, _) => format!("struct_{name}"),
+        Float(FloatVal::c_double(_)) => format!("f64"),
+        Float(FloatVal::c_float(_)) => format!("f32"),
+        Int(int_val) => match int_val {
+            c__int128(_) => format!("i128"),
+            c_int64_t(_) => format!("i64"),
+            c_int32_t(_) => format!("i32"),
+            c_int16_t(_) => format!("i16"),
+            c_int8_t(_) => format!("i8"),
+            c__uint128(_) => format!("u128"),
+            c_uint64_t(_) => format!("u64"),
+            c_uint32_t(_) => format!("u32"),
+            c_uint16_t(_) => format!("u16"),
+            c_uint8_t(_) => format!("u8"),
+        },
     }
 }

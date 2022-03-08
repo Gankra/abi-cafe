@@ -328,7 +328,7 @@ impl Val {
     }
 
     /// The type name to use for this value when it is stored in args/vars.
-    pub fn rust_arg_type(&self) -> Result<String, GenerateError> {
+    fn rust_arg_type(&self) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
         let val = match self {
@@ -374,7 +374,7 @@ impl Val {
         use Val::*;
         let val = match self {
             Ref(x) => x.rust_val()?,
-            Ptr(addr) => format!("{addr} as *const ()"),
+            Ptr(addr) => format!("{addr} as *mut ()"),
             Bool(val) => format!("{val}"),
             Array(vals) => {
                 let mut output = String::new();
@@ -431,7 +431,7 @@ impl Val {
         use Val::*;
         let val = match self {
             Ref(x) => x.rust_default_val()?,
-            Ptr(_) => format!("0 as *const ()"),
+            Ptr(_) => format!("0 as *mut ()"),
             Bool(_) => format!("false"),
             Array(vals) => {
                 let mut output = String::new();

@@ -17,10 +17,18 @@ pub static TESTS: &[&str] = &[
     "opaque_example",
     "structs",
     "by_ref",
-    "i8", "i16", "i32", "i64", 
-    "u8", "u16", "u32", "u64",
-    "f32", "f64",
-    "ptr", "bool",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "f32",
+    "f64",
+    "ptr",
+    "bool",
     "ui128",
 ];
 
@@ -130,39 +138,44 @@ fn main() -> Result<(), Box<dyn Error>> {
             Ok(report) => {
                 let num_passed = report.results.iter().filter(|r| r.is_ok()).count();
                 let all_passed = num_passed == report.results.len();
-                
+
                 if all_passed {
                     print!("all ");
                 } else {
                     print!("    ");
                 }
                 print!("{num_passed:>3}/{:<3} ", report.results.len());
-                println!("passed!");
+                println!("passed");
                 // If all the subtests pass, don't bother with a breakdown.
                 if all_passed {
                     passes += num_passed;
                     continue;
                 }
 
-                let names = report.test.funcs.iter().map(|test_func| {
-                    full_subtest_name(test_name, caller_name, callee_name, &test_func.name)
-                }).collect::<Vec<_>>();
+                let names = report
+                    .test
+                    .funcs
+                    .iter()
+                    .map(|test_func| {
+                        full_subtest_name(test_name, caller_name, callee_name, &test_func.name)
+                    })
+                    .collect::<Vec<_>>();
                 let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
                 for (subtest_name, result) in names.iter().zip(report.results.iter()) {
-                    print!("  {:width$} ", subtest_name, width=max_name_len);
+                    print!("  {:width$} ", subtest_name, width = max_name_len);
                     if let Err(_e) = result {
                         println!("failed!");
                         // A bit too noisy?
                         // println!("{}", e);
                         fails += 1;
                     } else {
-                        println!("passed!");
+                        println!("passed");
                         passes += 1;
                     }
                 }
+                println!();
             }
         }
-        println!();
     }
     println!("total: {passes} passed, {fails} failed, {total_fails} completely failed");
 
@@ -554,14 +567,18 @@ fn run_dynamic_test(
         // This will be done again after all tests have been run, but it's
         // useful to keep a version of this near the actual compilation/execution
         // in case the compilers spit anything interesting to stdout/stderr.
-        let names = test.funcs.iter().map(|test_func| {
-            full_subtest_name(test_name, caller_name, callee_name, &test_func.name)
-        }).collect::<Vec<_>>();
+        let names = test
+            .funcs
+            .iter()
+            .map(|test_func| {
+                full_subtest_name(test_name, caller_name, callee_name, &test_func.name)
+            })
+            .collect::<Vec<_>>();
         let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
         for (subtest_name, result) in names.iter().zip(&results) {
             match result {
                 Ok(()) => {
-                    eprintln!("Test {subtest_name:width$} passed!", width = max_name_len);
+                    eprintln!("Test {subtest_name:width$} passed", width = max_name_len);
                 }
                 Err(e) => {
                     eprintln!("Test {subtest_name:width$} failed!", width = max_name_len);
@@ -672,8 +689,8 @@ fn generate_procedural_tests() {
                 output: Some(new_val()),
             });
 
-             // Start gentle with basic one value in/out tests
-             test.funcs.push(Func {
+            // Start gentle with basic one value in/out tests
+            test.funcs.push(Func {
                 name: format!("{val_name}_ref_in"),
                 conventions: vec![CallingConvention::All],
                 inputs: vec![Val::Ref(Box::new(new_val()))],

@@ -177,7 +177,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    println!("total: {passes} passed, {fails} failed, {total_fails} completely failed");
+    println!();
+    println!("{passes} passed, {fails} failed, {total_fails} completely failed");
 
     Ok(())
 }
@@ -575,6 +576,9 @@ fn run_dynamic_test(
             })
             .collect::<Vec<_>>();
         let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
+        let num_passed = results.iter().filter(|r| r.is_ok()).count();
+        let all_passed = num_passed == results.len();
+
         for (subtest_name, result) in names.iter().zip(&results) {
             match result {
                 Ok(()) => {
@@ -586,6 +590,13 @@ fn run_dynamic_test(
                 }
             }
         }
+
+        if all_passed {
+            eprintln!("all tests passed");
+        } else {
+            eprintln!("only {}/{} tests passed!", num_passed, results.len());
+        }
+        eprintln!();
 
         Ok(TestReport { test, results })
     }

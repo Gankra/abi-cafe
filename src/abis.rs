@@ -16,6 +16,19 @@ pub static C_ABI: AbiRef = &c::CAbi;
 /// The pairings of impls to run. LHS calls RHS.
 pub static TEST_PAIRS: &[(AbiRef, AbiRef)] = &[(RUST_ABI, C_ABI), (C_ABI, RUST_ABI)];
 
+// pub static ALL_ABIS: &[AbiRef] = &[RUST_ABI, C_ABI];
+pub static ALL_CONVENTIONS: &[CallingConvention] = &[
+    CallingConvention::Handwritten,
+    CallingConvention::C,
+    CallingConvention::System,
+    CallingConvention::Win64,
+    CallingConvention::Sysv64,
+    CallingConvention::Aapcs,
+    CallingConvention::Stdcall,
+    CallingConvention::Fastcall,
+    CallingConvention::Vectorcall,
+];
+
 // pre-computed arg/field names to avoid a bunch of tedious formatting, and to make
 // it easy to refactor this detail if we decide we don't like this naming scheme.
 pub static ARG_NAMES: &[&str] = &[
@@ -37,8 +50,21 @@ pub static OUT_PARAM_NAME: &str = "out";
 pub trait Abi {
     fn name(&self) -> &'static str;
     fn src_ext(&self) -> &'static str;
-    fn generate_callee(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError>;
-    fn generate_caller(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError>;
+    fn supports_convention(&self, _convention: CallingConvention) -> bool;
+
+    fn generate_callee(
+        &self,
+        f: &mut dyn Write,
+        test: &Test,
+        convention: CallingConvention,
+    ) -> Result<(), BuildError>;
+    fn generate_caller(
+        &self,
+        f: &mut dyn Write,
+        test: &Test,
+        convention: CallingConvention,
+    ) -> Result<(), BuildError>;
+
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
     fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
 }
@@ -49,8 +75,8 @@ pub enum GenerateError {
     RustUnsupported(String),
     #[error("Unsupported Signature For C: {0}")]
     CUnsupported(String),
-    #[error("the function didn't have a valid convention")]
-    NoCallingConvention,
+    #[error("ABI impl doesn't support this calling convention.")]
+    UnsupportedConvention,
 }
 
 /// A test, containing several subtests, each its own function
@@ -70,16 +96,43 @@ pub struct Func {
     pub output: Option<Val>,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum CallingConvention {
+    // These conventions are special ones that "desugar" to others
     /// Sugar for "every possible convention"
     All,
     /// A complete opaque convention, the implementation must be manually
     /// written in the handwritten_impls directory.
     Handwritten,
-    /// The platform's default C convention
+    /// The platform's default C convention (cdecl?)
     C,
-    // TODO: more specific CC's like stdcall, fastcall, thiscall, ...
+    /// The platorm's default OS convention (usually C, but Windows is Weird).
+    System,
+
+    // These conventions are specific ones
+    /// x64 windows C convention
+    Win64,
+    /// x64 non-windows C convention
+    Sysv64,
+    /// ARM C convention
+    Aapcs,
+    /// Win32 x86 system APIs
+    Stdcall,
+    /// Microsoft fastcall
+    /// MSVC` __fastcall`
+    /// GCC/Clang `__attribute__((fastcall))`
+    Fastcall,
+    /// Microsoft vectorcall
+    /// MSCV `__vectorcall`
+    /// GCC/Clang `__attribute__((vectorcall))`
+    Vectorcall,
+    // NOTE: Rust spits out:
+    // Rust, C, C-unwind, cdecl, stdcall, stdcall-unwind, fastcall,
+    // vectorcall, thiscall, thiscall-unwind, aapcs, win64, sysv64,
+    // ptx-kernel, msp430-interrupt, x86-interrupt, amdgpu-kernel,
+    // efiapi, avr-interrupt, avr-non-blocking-interrupt, C-cmse-nonsecure-call,
+    // wasm, system, system-unwind, rust-intrinsic, rust-call,
+    // platform-intrinsic, unadjusted
 }
 
 /// A typed value.
@@ -154,4 +207,40 @@ pub enum FloatVal {
     c_double(f64),
     c_float(f32),
     // Is there a reason to mess with `long double`? Surely not.
+}
+
+impl CallingConvention {
+    pub fn name(&self) -> &'static str {
+        match self {
+            CallingConvention::All => {
+                unreachable!("CallingConvention::All is sugar and shouldn't reach here!")
+            }
+            CallingConvention::Handwritten => "handwritten",
+            CallingConvention::C => "c",
+            CallingConvention::System => "system",
+            CallingConvention::Win64 => "win64",
+            CallingConvention::Sysv64 => "sysv64",
+            CallingConvention::Aapcs => "aapcs",
+            CallingConvention::Stdcall => "stdcall",
+            CallingConvention::Fastcall => "fastcall",
+            CallingConvention::Vectorcall => "vectorcall",
+        }
+    }
+}
+
+impl Func {
+    pub fn has_convention(&self, convention: CallingConvention) -> bool {
+        self.conventions.iter().any(|&func_cc| {
+            (func_cc == CallingConvention::All && convention != CallingConvention::Handwritten)
+                || func_cc == convention
+        })
+    }
+}
+
+impl Test {
+    pub fn has_convention(&self, convention: CallingConvention) -> bool {
+        self.funcs
+            .iter()
+            .any(|func| func.has_convention(convention))
+    }
 }

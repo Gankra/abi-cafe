@@ -12,12 +12,40 @@ impl Abi for RustAbi {
     fn src_ext(&self) -> &'static str {
         "rs"
     }
+    fn supports_convention(&self, convention: CallingConvention) -> bool {
+        // NOTE: Rustc spits out:
+        //
+        // Rust, C, C-unwind, cdecl, stdcall, stdcall-unwind, fastcall,
+        // vectorcall, thiscall, thiscall-unwind, aapcs, win64, sysv64,
+        // ptx-kernel, msp430-interrupt, x86-interrupt, amdgpu-kernel,
+        // efiapi, avr-interrupt, avr-non-blocking-interrupt, C-cmse-nonsecure-call,
+        // wasm, system, system-unwind, rust-intrinsic, rust-call,
+        // platform-intrinsic, unadjusted
+        match convention {
+            CallingConvention::All => unreachable!(),
+            CallingConvention::Handwritten => true,
+            CallingConvention::C => true,
+            CallingConvention::System => true,
+            CallingConvention::Win64 => true,
+            CallingConvention::Sysv64 => true,
+            CallingConvention::Aapcs => true,
+            CallingConvention::Stdcall => true,
+            CallingConvention::Fastcall => true,
+            CallingConvention::Vectorcall => false, // experimental
+        }
+    }
 
-    fn generate_caller(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+    fn generate_caller(
+        &self,
+        f: &mut dyn Write,
+        test: &Test,
+        convention: CallingConvention,
+    ) -> Result<(), BuildError> {
         write_rust_prefix(f, test)?;
+        let convention_decl = convention.rust_convention_decl();
 
         // Generate the extern block
-        writeln!(f, "extern {{")?;
+        writeln!(f, "extern \"{convention_decl}\" {{",)?;
         for function in &test.funcs {
             write!(f, "  ")?;
             write_rust_signature(f, function)?;
@@ -27,9 +55,12 @@ impl Abi for RustAbi {
         writeln!(f)?;
 
         // Now generate the body
-        writeln!(f, "#[no_mangle] pub extern fn do_test() {{")?;
+        writeln!(f, "#[no_mangle] pub extern \"C\" fn do_test() {{")?;
 
         for function in &test.funcs {
+            if !function.has_convention(convention) {
+                continue;
+            }
             writeln!(f, "   unsafe {{")?;
 
             // Inputs
@@ -97,13 +128,21 @@ impl Abi for RustAbi {
 
         Ok(())
     }
-    fn generate_callee(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+    fn generate_callee(
+        &self,
+        f: &mut dyn Write,
+        test: &Test,
+        convention: CallingConvention,
+    ) -> Result<(), BuildError> {
         write_rust_prefix(f, test)?;
-
+        let convention_decl = convention.rust_convention_decl();
         for function in &test.funcs {
+            if !function.has_convention(convention) {
+                continue;
+            }
             // Write the signature
             writeln!(f, "#[no_mangle]")?;
-            write!(f, "pub unsafe extern ")?;
+            write!(f, "pub unsafe extern \"{convention_decl}\" ")?;
             write_rust_signature(f, function)?;
             writeln!(f, " {{")?;
 
@@ -512,5 +551,26 @@ impl Val {
         };
 
         Ok(paths)
+    }
+}
+
+impl CallingConvention {
+    fn rust_convention_decl(&self) -> &'static str {
+        match self {
+            CallingConvention::All => {
+                unreachable!("CallingConvention::All is sugar that shouldn't reach here")
+            }
+            CallingConvention::Handwritten => {
+                unreachable!("CallingConvention::Handwritten shouldn't reach codegen backends!")
+            }
+            CallingConvention::C => "C",
+            CallingConvention::System => "system",
+            CallingConvention::Win64 => "win64",
+            CallingConvention::Sysv64 => "sysv64",
+            CallingConvention::Aapcs => "aapcs",
+            CallingConvention::Stdcall => "stdcall",
+            CallingConvention::Fastcall => "fastcall",
+            CallingConvention::Vectorcall => "vectorcall",
+        }
     }
 }

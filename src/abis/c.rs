@@ -13,12 +13,50 @@ impl Abi for CAbi {
         "c"
     }
 
-    fn generate_callee(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+    fn supports_convention(&self, convention: CallingConvention) -> bool {
+        // GCC (as __attribute__'s)
+        //
+        //  * x86: cdecl, fastcall, thiscall, stdcall,
+        //         sysv_abi, ms_abi (64-bit: -maccumulate-outgoing-args?),
+        //         naked, interrupt, sseregparm
+        //  * ARM: pcs="aapcs", pcs="aapcs-vfp",
+        //         long_call, short_call, naked,
+        //         interrupt("IRQ", "FIQ", "SWI", "ABORT", "UNDEF"),
+        //
+        // MSVC (as ~keywords)
+        //
+        //  * __cdecl, __clrcall, __stdcall, __fastcall, __thiscall, __vectorcall
+
+        // NOTE: currently disabling everything to checkpoint progress.
+        // Need to think harder about specifying calling conventions
+        match convention {
+            CallingConvention::All => unreachable!(),
+            CallingConvention::Handwritten => true,
+            CallingConvention::C => true,
+            CallingConvention::System => false,
+            CallingConvention::Win64 => false,
+            CallingConvention::Sysv64 => false,
+            CallingConvention::Aapcs => false,
+            CallingConvention::Stdcall => false,
+            CallingConvention::Fastcall => false,
+            CallingConvention::Vectorcall => false,
+        }
+    }
+
+    fn generate_callee(
+        &self,
+        f: &mut dyn Write,
+        test: &Test,
+        convention: CallingConvention,
+    ) -> Result<(), BuildError> {
         write_c_prefix(f, test)?;
 
         // Generate the impls
         for function in &test.funcs {
-            write_c_signature(f, function)?;
+            if !function.has_convention(convention) {
+                continue;
+            }
+            write_c_signature(f, function, convention)?;
             writeln!(f, " {{")?;
 
             writeln!(f)?;
@@ -58,12 +96,17 @@ impl Abi for CAbi {
         Ok(())
     }
 
-    fn generate_caller(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+    fn generate_caller(
+        &self,
+        f: &mut dyn Write,
+        test: &Test,
+        convention: CallingConvention,
+    ) -> Result<(), BuildError> {
         write_c_prefix(f, test)?;
 
         // Generate the extern block
         for function in &test.funcs {
-            write_c_signature(f, function)?;
+            write_c_signature(f, function, convention)?;
             writeln!(f, ";")?;
         }
 
@@ -72,6 +115,9 @@ impl Abi for CAbi {
 
         // Generate the impls
         for function in &test.funcs {
+            if !function.has_convention(convention) {
+                continue;
+            }
             // Add an extra scope to avoid clashes between subtests
             writeln!(f, "{{")?;
             // Inputs
@@ -187,7 +233,13 @@ fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
 }
 
 // Emit a function signature
-fn write_c_signature(f: &mut dyn Write, function: &Func) -> Result<(), BuildError> {
+fn write_c_signature(
+    f: &mut dyn Write,
+    function: &Func,
+    convention: CallingConvention,
+) -> Result<(), BuildError> {
+    let convention_decl = convention.c_convention_decl();
+
     // First figure out the return (by-ref requires an out-param)
     let out_param = if let Some(output) = &function.output {
         let out_param = output.c_out_param(OUT_PARAM_NAME)?;
@@ -201,6 +253,8 @@ fn write_c_signature(f: &mut dyn Write, function: &Func) -> Result<(), BuildErro
         write!(f, "void ")?;
         None
     };
+
+    write!(f, "{}", convention_decl)?;
 
     // Now write out the args
     write!(f, "{}(", function.name)?;
@@ -588,4 +642,33 @@ impl Val {
         }
     }
     */
+}
+
+impl CallingConvention {
+    fn c_convention_decl(&self) -> &'static str {
+        match self {
+            CallingConvention::All => {
+                unreachable!("CallingConvention::All is sugar that shouldn't reach here")
+            }
+            CallingConvention::Handwritten => {
+                unreachable!("CallingConvention::Handwritten shouldn't reach codegen backends!")
+            }
+            CallingConvention::C => "",
+            CallingConvention::System => "system",
+            CallingConvention::Win64 => "win64 ",
+            CallingConvention::Sysv64 => "sysv64 ",
+            CallingConvention::Aapcs => "aapcs ",
+            CallingConvention::Stdcall => "stdcall ",
+            CallingConvention::Fastcall => "fastcall ",
+            CallingConvention::Vectorcall => "vectorcall ",
+            /*
+            CallingConvention::Win64 => "__win64 ",
+            CallingConvention::Sysv64 => "__sysv64 ",
+            CallingConvention::Aapcs => "__aapcs ",
+            CallingConvention::Stdcall => "__stdcall ",
+            CallingConvention::Fastcall => "__fastcall ",
+            CallingConvention::Vectorcall => "__vectorcall ",
+             */
+        }
+    }
 }

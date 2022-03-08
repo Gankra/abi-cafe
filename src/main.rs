@@ -108,16 +108,53 @@ fn main() -> Result<(), Box<dyn Error>> {
     env::set_var("OPT_LEVEL", "3");
 
     let mut reports = Vec::new();
+    let mut skips = 0;
     // Grab all the tests
     for test_name in TESTS {
-        // Create versions of the test for each "X calls Y" pair we care about.
-        for (caller, callee) in TEST_PAIRS {
-            let result = do_test(&out_dir, *caller, *callee, test_name);
-
-            if let Err(e) = &result {
-                eprintln!("test failed: {}", e);
+        // Get the test description
+        let test = match read_test_manifest(test_name) {
+            Ok(test) => test,
+            Err(e) => {
+                eprintln!("test {test_name}'s .ron file couldn't be parsed {}", e);
+                continue;
             }
-            reports.push((test_name, caller.name(), callee.name(), result));
+        };
+
+        let mut had_some_convention = false;
+        for &convention in ALL_CONVENTIONS {
+            if !test.has_convention(convention) {
+                // Don't bother with a convention if the test doesn't use it.
+                continue;
+            }
+            // Create versions of the test for each "X calls Y" pair we care about.
+            for (caller, callee) in TEST_PAIRS {
+                let caller_name = caller.name();
+                let callee_name = callee.name();
+                let convention_name = convention.name();
+                let full_test_name =
+                    full_test_name(&test.name, convention_name, caller_name, callee_name);
+                if !caller.supports_convention(convention) {
+                    eprintln!("skipping {full_test_name}: {caller_name} doesn't support convention {convention_name}");
+                    skips += 1;
+                    continue;
+                }
+                if !callee.supports_convention(convention) {
+                    eprintln!("skipping {full_test_name}: {callee_name} doesn't support convention {convention_name}");
+                    skips += 1;
+                    continue;
+                }
+                had_some_convention = true;
+
+                let result = do_test(&test, convention, *caller, *callee, &out_dir);
+
+                if let Err(e) = &result {
+                    eprintln!("test failed: {}", e);
+                }
+                reports.push((test_name, convention, caller.name(), callee.name(), result));
+            }
+        }
+        if !had_some_convention {
+            panic!("test {test_name}'s .ron file had no calling conventions!");
         }
     }
 
@@ -127,8 +164,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut passes = 0;
     let mut fails = 0;
     let mut total_fails = 0;
-    for (test_name, caller_name, callee_name, report) in reports {
-        let pretty_test_name = full_test_name(test_name, caller_name, callee_name);
+    for (test_name, convention, caller_name, callee_name, report) in reports {
+        let convention_name = convention.name();
+        let pretty_test_name = full_test_name(test_name, convention_name, caller_name, callee_name);
         print!("{pretty_test_name:<32} ");
         match report {
             Err(_) => {
@@ -157,7 +195,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .funcs
                     .iter()
                     .map(|test_func| {
-                        full_subtest_name(test_name, caller_name, callee_name, &test_func.name)
+                        full_subtest_name(
+                            test_name,
+                            convention_name,
+                            caller_name,
+                            callee_name,
+                            &test_func.name,
+                        )
                     })
                     .collect::<Vec<_>>();
                 let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
@@ -178,67 +222,53 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     println!();
-    println!("{passes} passed, {fails} failed, {total_fails} completely failed");
+    println!("{passes} passed, {fails} failed, {total_fails} completely failed, {skips} skipped");
 
     Ok(())
 }
 
 /// Generate, Compile, Link, Load, and Run this test.
 fn do_test(
-    _out_dir: &Path,
+    test: &Test,
+    convention: CallingConvention,
     caller: AbiRef,
     callee: AbiRef,
-    test_name: &str,
+    _out_dir: &Path,
 ) -> Result<TestReport, BuildError> {
-    eprintln!("preparing test {test_name}");
+    let test_name = &test.name;
+    let convention_name = convention.name();
     let caller_name = caller.name();
     let caller_src_ext = caller.src_ext();
     let callee_name = callee.name();
     let callee_src_ext = callee.src_ext();
+    let full_test_name = full_test_name(test_name, convention_name, caller_name, callee_name);
 
-    // Get the test description
-    let test = read_test_manifest(test_name)?;
+    eprintln!("preparing {full_test_name}");
 
-    // Figure out if we need to generate the test's source code or not
-    let is_handwritten = test.funcs.iter().any(|f| {
-        f.conventions
-            .iter()
-            .any(|c| matches!(c, CallingConvention::Handwritten))
-    });
-    let is_all_handwritten = test.funcs.iter().all(|f| {
-        f.conventions
-            .iter()
-            .all(|c| matches!(c, CallingConvention::Handwritten))
-    });
-
-    if is_handwritten && !is_all_handwritten {
-        return Err(BuildError::HandwrittenMixing);
-    }
-
-    let src_dir = if is_handwritten {
+    let src_dir = if convention == CallingConvention::Handwritten {
         PathBuf::from("handwritten_impls/")
     } else {
         PathBuf::from("generated_impls/")
     };
 
     let caller_src = src_dir.join(format!(
-        "{caller_name}/{test_name}_{caller_name}_caller.{caller_src_ext}"
+        "{caller_name}/{test_name}_{convention_name}_{caller_name}_caller.{caller_src_ext}"
     ));
     let callee_src = src_dir.join(format!(
-        "{callee_name}/{test_name}_{callee_name}_callee.{callee_src_ext}"
+        "{callee_name}/{test_name}_{convention_name}_{callee_name}_callee.{callee_src_ext}"
     ));
-    let caller_lib = format!("{test_name}_{caller_name}_caller");
-    let callee_lib = format!("{test_name}_{callee_name}_callee");
+    let caller_lib = format!("{test_name}_{convention_name}_{caller_name}_caller");
+    let callee_lib = format!("{test_name}_{convention_name}_{callee_name}_callee");
 
-    if !is_handwritten {
+    if convention != CallingConvention::Handwritten {
         // If the impl isn't handwritten, then we need to generate it.
         std::fs::create_dir_all(caller_src.parent().unwrap())?;
         std::fs::create_dir_all(callee_src.parent().unwrap())?;
         let mut caller_output = File::create(&caller_src)?;
-        caller.generate_caller(&mut caller_output, &test)?;
+        caller.generate_caller(&mut caller_output, &test, convention)?;
 
         let mut callee_output = File::create(&callee_src)?;
-        callee.generate_callee(&mut callee_output, &test)?;
+        callee.generate_callee(&mut callee_output, &test, convention)?;
     }
 
     // Compile the tests (and let them change the lib name).
@@ -246,16 +276,10 @@ fn do_test(
     let callee_lib = callee.compile_callee(&callee_src, &callee_lib)?;
 
     // Compile the harness dylib and link in the tests.
-    let dylib = build_harness(
-        caller_name,
-        &caller_lib,
-        callee_name,
-        &callee_lib,
-        test_name,
-    )?;
+    let dylib = build_harness(test, caller_name, &caller_lib, callee_name, &callee_lib)?;
 
     // Load and run the test
-    run_dynamic_test(test_name, caller_name, callee_name, &dylib, test)
+    run_dynamic_test(test, convention_name, caller_name, callee_name, &dylib)
 }
 
 /// Read a test .ron file
@@ -272,14 +296,15 @@ fn read_test_manifest(test_name: &str) -> Result<Test, BuildError> {
 
 /// Compile and link the test harness with the two sides of the FFI boundary.
 fn build_harness(
+    test: &Test,
     caller_name: &str,
     caller_lib: &str,
     callee_name: &str,
     callee_lib: &str,
-    test: &str,
 ) -> Result<String, BuildError> {
+    let test_name = &test.name;
     let src = PathBuf::from("harness/harness.rs");
-    let output = format!("target/temp/{test}_{caller_name}_calls_{callee_name}_harness.dll");
+    let output = format!("target/temp/{test_name}_{caller_name}_calls_{callee_name}_harness.dll");
 
     let out = Command::new("rustc")
         .arg("-v")
@@ -307,11 +332,11 @@ fn build_harness(
 
 /// Run the test!
 fn run_dynamic_test(
-    test_name: &str,
+    test: &Test,
+    convention_name: &str,
     caller_name: &str,
     callee_name: &str,
     dylib: &str,
-    test: Test,
 ) -> Result<TestReport, BuildError> {
     // See the README for a high-level description of this design.
 
@@ -568,11 +593,18 @@ fn run_dynamic_test(
         // This will be done again after all tests have been run, but it's
         // useful to keep a version of this near the actual compilation/execution
         // in case the compilers spit anything interesting to stdout/stderr.
+        let test_name = &test.name;
         let names = test
             .funcs
             .iter()
             .map(|test_func| {
-                full_subtest_name(test_name, caller_name, callee_name, &test_func.name)
+                full_subtest_name(
+                    test_name,
+                    convention_name,
+                    caller_name,
+                    callee_name,
+                    &test_func.name,
+                )
             })
             .collect::<Vec<_>>();
         let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
@@ -598,23 +630,32 @@ fn run_dynamic_test(
         }
         eprintln!();
 
-        Ok(TestReport { test, results })
+        Ok(TestReport {
+            test: test.clone(),
+            results,
+        })
     }
 }
 
 /// The name of a test for pretty-printing.
-fn full_test_name(test_name: &str, caller_name: &str, callee_name: &str) -> String {
-    format!("{test_name}::{caller_name}_calls_{callee_name}")
+fn full_test_name(
+    test_name: &str,
+    convention_name: &str,
+    caller_name: &str,
+    callee_name: &str,
+) -> String {
+    format!("{test_name}::{convention_name}::{caller_name}_calls_{callee_name}")
 }
 
 /// The name of a subtest for pretty-printing.
 fn full_subtest_name(
     test_name: &str,
+    convention_name: &str,
     caller_name: &str,
     callee_name: &str,
     func_name: &str,
 ) -> String {
-    format!("{test_name}::{caller_name}_calls_{callee_name}::{func_name}")
+    format!("{test_name}::{convention_name}::{caller_name}_calls_{callee_name}::{func_name}")
 }
 
 /// For tests that are too tedious to even hand-write the .ron file,

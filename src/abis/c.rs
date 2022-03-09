@@ -3,9 +3,25 @@ use super::*;
 
 pub static C_TEST_PREFIX: &str = include_str!("../../harness/c_test_prefix.h");
 
-pub struct CAbi;
+pub struct CcAbiImpl {
+    flavor: CCFlavor,
+    platform: Platform,
+}
 
-impl Abi for CAbi {
+#[derive(PartialEq)]
+enum CCFlavor {
+    Clang,
+    Gcc,
+    Msvc,
+}
+
+#[derive(PartialEq)]
+enum Platform {
+    Windows,
+    Unixy,
+}
+
+impl AbiImpl for CcAbiImpl {
     fn name(&self) -> &'static str {
         "c"
     }
@@ -14,33 +30,7 @@ impl Abi for CAbi {
     }
 
     fn supports_convention(&self, convention: CallingConvention) -> bool {
-        // GCC (as __attribute__'s)
-        //
-        //  * x86: cdecl, fastcall, thiscall, stdcall,
-        //         sysv_abi, ms_abi (64-bit: -maccumulate-outgoing-args?),
-        //         naked, interrupt, sseregparm
-        //  * ARM: pcs="aapcs", pcs="aapcs-vfp",
-        //         long_call, short_call, naked,
-        //         interrupt("IRQ", "FIQ", "SWI", "ABORT", "UNDEF"),
-        //
-        // MSVC (as ~keywords)
-        //
-        //  * __cdecl, __clrcall, __stdcall, __fastcall, __thiscall, __vectorcall
-
-        // NOTE: currently disabling everything to checkpoint progress.
-        // Need to think harder about specifying calling conventions
-        match convention {
-            CallingConvention::All => unreachable!(),
-            CallingConvention::Handwritten => true,
-            CallingConvention::C => true,
-            CallingConvention::System => false,
-            CallingConvention::Win64 => false,
-            CallingConvention::Sysv64 => false,
-            CallingConvention::Aapcs => false,
-            CallingConvention::Stdcall => false,
-            CallingConvention::Fastcall => false,
-            CallingConvention::Vectorcall => false,
-        }
+        self.c_convention_decl(convention).is_ok()
     }
 
     fn generate_callee(
@@ -56,7 +46,7 @@ impl Abi for CAbi {
             if !function.has_convention(convention) {
                 continue;
             }
-            write_c_signature(f, function, convention)?;
+            self.write_c_signature(f, function, convention)?;
             writeln!(f, " {{")?;
 
             writeln!(f)?;
@@ -106,7 +96,7 @@ impl Abi for CAbi {
 
         // Generate the extern block
         for function in &test.funcs {
-            write_c_signature(f, function, convention)?;
+            self.write_c_signature(f, function, convention)?;
             writeln!(f, ";")?;
         }
 
@@ -199,6 +189,144 @@ impl Abi for CAbi {
     }
 }
 
+impl CcAbiImpl {
+    pub fn new(_system_info: &SystemInfo) -> Self {
+        let compiler = cc::Build::new().get_compiler();
+        let flavor = if compiler.is_like_msvc() {
+            CCFlavor::Msvc
+        } else if compiler.is_like_gnu() {
+            CCFlavor::Gcc
+        } else if compiler.is_like_clang() {
+            CCFlavor::Clang
+        } else {
+            panic!("Unknown compiler flavour for CC");
+        };
+
+        let platform = if cfg!(target = "windows") {
+            Platform::Windows
+        } else {
+            Platform::Unixy
+        };
+
+        Self { flavor, platform }
+    }
+
+    fn c_convention_decl(
+        &self,
+        convention: CallingConvention,
+    ) -> Result<&'static str, GenerateError> {
+        use CCFlavor::*;
+        use CallingConvention::*;
+        use Platform::*;
+        // GCC (as __attribute__'s)
+        //
+        //  * x86: cdecl, fastcall, thiscall, stdcall,
+        //         sysv_abi, ms_abi (64-bit: -maccumulate-outgoing-args?),
+        //         naked, interrupt, sseregparm
+        //  * ARM: pcs="aapcs", pcs="aapcs-vfp",
+        //         long_call, short_call, naked,
+        //         interrupt("IRQ", "FIQ", "SWI", "ABORT", "UNDEF"),
+        //
+        // MSVC (as ~keywords)
+        //
+        //  * __cdecl, __clrcall, __stdcall, __fastcall, __thiscall, __vectorcall
+
+        let val = match convention {
+            Handwritten => "handwritten",
+            All => {
+                // All is sugar, we shouldn't get here!
+                return Err(GenerateError::UnsupportedConvention);
+            }
+            System | Win64 | Sysv64 | Aapcs => {
+                // Don't want to think about these yet, I think they're
+                // all properly convered by other ABIs
+                return Err(GenerateError::UnsupportedConvention);
+            }
+            C => "",
+            Stdcall => {
+                if self.platform == Windows {
+                    match self.flavor {
+                        Msvc => "stdcall ",
+                        Gcc | Clang => "__attribute__((stdcall)) ",
+                    }
+                } else {
+                    return Err(GenerateError::UnsupportedConvention);
+                }
+            }
+            Fastcall => {
+                if self.platform == Windows {
+                    match self.flavor {
+                        Msvc => "fastcall ",
+                        Gcc | Clang => "__attribute__((fastcall)) ",
+                    }
+                } else {
+                    return Err(GenerateError::UnsupportedConvention);
+                }
+            }
+            Vectorcall => {
+                if self.platform == Windows {
+                    match self.flavor {
+                        Msvc => "vectorcall ",
+                        Gcc | Clang => "__attribute__((vectorcall)) ",
+                    }
+                } else {
+                    return Err(GenerateError::UnsupportedConvention);
+                }
+            }
+        };
+
+        Ok(val)
+    }
+
+    // Emit a function signature
+    fn write_c_signature(
+        &self,
+        f: &mut dyn Write,
+        function: &Func,
+        convention: CallingConvention,
+    ) -> Result<(), BuildError> {
+        let convention_decl = self.c_convention_decl(convention)?;
+
+        // First figure out the return (by-ref requires an out-param)
+        let out_param = if let Some(output) = &function.output {
+            let out_param = output.c_out_param(OUT_PARAM_NAME)?;
+            if out_param.is_none() {
+                write!(f, "{} ", output.c_arg_type()?)?;
+            } else {
+                write!(f, "void ")?;
+            }
+            out_param
+        } else {
+            write!(f, "void ")?;
+            None
+        };
+
+        write!(f, "{}", convention_decl)?;
+
+        // Now write out the args
+        write!(f, "{}(", function.name)?;
+        for (idx, input) in function.inputs.iter().enumerate() {
+            if idx != 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", input.c_arg_decl(ARG_NAMES[idx])?)?;
+        }
+
+        // Add extra implicit args
+        if let Some(out_param) = out_param {
+            if !function.inputs.is_empty() {
+                write!(f, ", ")?;
+            }
+            write!(f, "{out_param}")?;
+        } else if function.inputs.is_empty() {
+            write!(f, "void")?;
+        }
+        write!(f, ")")?;
+
+        Ok(())
+    }
+}
+
 /// Every test should start by loading in the harness' "header"
 /// and forward-declaring any structs that will be used.
 fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
@@ -228,53 +356,6 @@ fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
             }
         }
     }
-
-    Ok(())
-}
-
-// Emit a function signature
-fn write_c_signature(
-    f: &mut dyn Write,
-    function: &Func,
-    convention: CallingConvention,
-) -> Result<(), BuildError> {
-    let convention_decl = convention.c_convention_decl();
-
-    // First figure out the return (by-ref requires an out-param)
-    let out_param = if let Some(output) = &function.output {
-        let out_param = output.c_out_param(OUT_PARAM_NAME)?;
-        if out_param.is_none() {
-            write!(f, "{} ", output.c_arg_type()?)?;
-        } else {
-            write!(f, "void ")?;
-        }
-        out_param
-    } else {
-        write!(f, "void ")?;
-        None
-    };
-
-    write!(f, "{}", convention_decl)?;
-
-    // Now write out the args
-    write!(f, "{}(", function.name)?;
-    for (idx, input) in function.inputs.iter().enumerate() {
-        if idx != 0 {
-            write!(f, ", ")?;
-        }
-        write!(f, "{}", input.c_arg_decl(ARG_NAMES[idx])?)?;
-    }
-
-    // Add extra implicit args
-    if let Some(out_param) = out_param {
-        if !function.inputs.is_empty() {
-            write!(f, ", ")?;
-        }
-        write!(f, "{out_param}")?;
-    } else if function.inputs.is_empty() {
-        write!(f, "void")?;
-    }
-    write!(f, ")")?;
 
     Ok(())
 }
@@ -642,33 +723,4 @@ impl Val {
         }
     }
     */
-}
-
-impl CallingConvention {
-    fn c_convention_decl(&self) -> &'static str {
-        match self {
-            CallingConvention::All => {
-                unreachable!("CallingConvention::All is sugar that shouldn't reach here")
-            }
-            CallingConvention::Handwritten => {
-                unreachable!("CallingConvention::Handwritten shouldn't reach codegen backends!")
-            }
-            CallingConvention::C => "",
-            CallingConvention::System => "system",
-            CallingConvention::Win64 => "win64 ",
-            CallingConvention::Sysv64 => "sysv64 ",
-            CallingConvention::Aapcs => "aapcs ",
-            CallingConvention::Stdcall => "stdcall ",
-            CallingConvention::Fastcall => "fastcall ",
-            CallingConvention::Vectorcall => "vectorcall ",
-            /*
-            CallingConvention::Win64 => "__win64 ",
-            CallingConvention::Sysv64 => "__sysv64 ",
-            CallingConvention::Aapcs => "__aapcs ",
-            CallingConvention::Stdcall => "__stdcall ",
-            CallingConvention::Fastcall => "__fastcall ",
-            CallingConvention::Vectorcall => "__vectorcall ",
-             */
-        }
-    }
 }

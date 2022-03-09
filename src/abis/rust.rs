@@ -3,9 +3,19 @@ use super::*;
 
 pub static RUST_TEST_PREFIX: &str = include_str!("../../harness/rust_test_prefix.rs");
 
-pub struct RustAbi;
+pub struct RustcAbiImpl {
+    is_nightly: bool,
+}
 
-impl Abi for RustAbi {
+impl RustcAbiImpl {
+    pub fn new(_system_info: &SystemInfo) -> Self {
+        Self {
+            is_nightly: built_info::RUSTC_VERSION.contains("nightly"),
+        }
+    }
+}
+
+impl AbiImpl for RustcAbiImpl {
     fn name(&self) -> &'static str {
         "rust"
     }
@@ -31,7 +41,7 @@ impl Abi for RustAbi {
             CallingConvention::Aapcs => true,
             CallingConvention::Stdcall => true,
             CallingConvention::Fastcall => true,
-            CallingConvention::Vectorcall => false, // experimental
+            CallingConvention::Vectorcall => self.is_nightly, // experimental
         }
     }
 
@@ -41,7 +51,7 @@ impl Abi for RustAbi {
         test: &Test,
         convention: CallingConvention,
     ) -> Result<(), BuildError> {
-        write_rust_prefix(f, test)?;
+        write_rust_prefix(f, test, convention)?;
         let convention_decl = convention.rust_convention_decl();
 
         // Generate the extern block
@@ -134,7 +144,7 @@ impl Abi for RustAbi {
         test: &Test,
         convention: CallingConvention,
     ) -> Result<(), BuildError> {
-        write_rust_prefix(f, test)?;
+        write_rust_prefix(f, test, convention)?;
         let convention_decl = convention.rust_convention_decl();
         for function in &test.funcs {
             if !function.has_convention(convention) {
@@ -212,7 +222,14 @@ impl Abi for RustAbi {
 
 /// Every test should start by loading in the harness' "header"
 /// and forward-declaring any structs that will be used.
-fn write_rust_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+fn write_rust_prefix(
+    f: &mut dyn Write,
+    test: &Test,
+    convention: CallingConvention,
+) -> Result<(), BuildError> {
+    if convention == CallingConvention::Vectorcall {
+        writeln!(f, "#![feature(abi_vectorcall)]")?;
+    }
     // Load test harness "headers"
     write!(f, "{}", RUST_TEST_PREFIX)?;
 

@@ -8,13 +8,14 @@ use std::path::Path;
 pub mod c;
 pub mod rust;
 
-pub type AbiRef = &'static (dyn Abi + Sync);
-
-pub static RUST_ABI: AbiRef = &rust::RustAbi;
-pub static C_ABI: AbiRef = &c::CAbi;
+pub static ABI_IMPL_RUSTC: &str = "rustc";
+pub static ABI_IMPL_CC: &str = "cc";
 
 /// The pairings of impls to run. LHS calls RHS.
-pub static TEST_PAIRS: &[(AbiRef, AbiRef)] = &[(RUST_ABI, C_ABI), (C_ABI, RUST_ABI)];
+pub static TEST_PAIRS: &[(&str, &str)] = &[
+    (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
+    (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
+];
 
 // pub static ALL_ABIS: &[AbiRef] = &[RUST_ABI, C_ABI];
 pub static ALL_CONVENTIONS: &[CallingConvention] = &[
@@ -47,7 +48,7 @@ pub static OUTPUT_NAME: &str = "output";
 pub static OUT_PARAM_NAME: &str = "out";
 
 /// ABI is probably a bad name for this... it's like, a language/compiler impl. idk.
-pub trait Abi {
+pub trait AbiImpl {
     fn name(&self) -> &'static str;
     fn src_ext(&self) -> &'static str;
     fn supports_convention(&self, _convention: CallingConvention) -> bool;
@@ -78,6 +79,9 @@ pub enum GenerateError {
     #[error("ABI impl doesn't support this calling convention.")]
     UnsupportedConvention,
 }
+
+#[derive(Debug, Clone)]
+pub struct SystemInfo {}
 
 /// A test, containing several subtests, each its own function
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
@@ -126,13 +130,6 @@ pub enum CallingConvention {
     /// MSCV `__vectorcall`
     /// GCC/Clang `__attribute__((vectorcall))`
     Vectorcall,
-    // NOTE: Rust spits out:
-    // Rust, C, C-unwind, cdecl, stdcall, stdcall-unwind, fastcall,
-    // vectorcall, thiscall, thiscall-unwind, aapcs, win64, sysv64,
-    // ptx-kernel, msp430-interrupt, x86-interrupt, amdgpu-kernel,
-    // efiapi, avr-interrupt, avr-non-blocking-interrupt, C-cmse-nonsecure-call,
-    // wasm, system, system-unwind, rust-intrinsic, rust-call,
-    // platform-intrinsic, unadjusted
 }
 
 /// A typed value.

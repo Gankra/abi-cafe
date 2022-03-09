@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fs::File;
@@ -107,6 +108,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     env::set_var("TARGET", built_info::TARGET);
     env::set_var("OPT_LEVEL", "3");
 
+    let system_info = SystemInfo {
+        // whatever
+    };
+
+    let mut abi_impls: HashMap<&str, Box<dyn AbiImpl>> = HashMap::new();
+    abi_impls.insert(
+        ABI_IMPL_RUSTC,
+        Box::new(abis::rust::RustcAbiImpl::new(&system_info)),
+    );
+    abi_impls.insert(ABI_IMPL_CC, Box::new(abis::c::CcAbiImpl::new(&system_info)));
+
     let mut reports = Vec::new();
     let mut skips = 0;
     // Grab all the tests
@@ -127,7 +139,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 continue;
             }
             // Create versions of the test for each "X calls Y" pair we care about.
-            for (caller, callee) in TEST_PAIRS {
+            for (caller_id, callee_id) in TEST_PAIRS {
+                let caller = &**abi_impls.get(caller_id).expect("invalid id for caller!");
+                let callee = &**abi_impls.get(callee_id).expect("invalid id for callee!");
+
                 let caller_name = caller.name();
                 let callee_name = callee.name();
                 let convention_name = convention.name();
@@ -145,7 +160,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 had_some_convention = true;
 
-                let result = do_test(&test, convention, *caller, *callee, &out_dir);
+                let result = do_test(&test, convention, caller, callee, &out_dir);
 
                 if let Err(e) = &result {
                     eprintln!("test failed: {}", e);
@@ -231,8 +246,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn do_test(
     test: &Test,
     convention: CallingConvention,
-    caller: AbiRef,
-    callee: AbiRef,
+    caller: &dyn AbiImpl,
+    callee: &dyn AbiImpl,
     _out_dir: &Path,
 ) -> Result<TestReport, BuildError> {
     let test_name = &test.name;

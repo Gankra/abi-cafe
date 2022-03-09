@@ -21,13 +21,15 @@ pub static TEST_PAIRS: &[(&str, &str)] = &[
 pub static ALL_CONVENTIONS: &[CallingConvention] = &[
     CallingConvention::Handwritten,
     CallingConvention::C,
-    CallingConvention::System,
-    CallingConvention::Win64,
-    CallingConvention::Sysv64,
-    CallingConvention::Aapcs,
+    CallingConvention::Cdecl,
     CallingConvention::Stdcall,
     CallingConvention::Fastcall,
     CallingConvention::Vectorcall,
+    // Note sure if these have a purpose, so omitting them for now
+    // CallingConvention::System,
+    // CallingConvention::Win64,
+    // CallingConvention::Sysv64,
+    // CallingConvention::Aapcs,
 ];
 
 // pre-computed arg/field names to avoid a bunch of tedious formatting, and to make
@@ -110,6 +112,8 @@ pub enum CallingConvention {
     Handwritten,
     /// The platform's default C convention (cdecl?)
     C,
+    /// ???
+    Cdecl,
     /// The platorm's default OS convention (usually C, but Windows is Weird).
     System,
 
@@ -214,6 +218,7 @@ impl CallingConvention {
             }
             CallingConvention::Handwritten => "handwritten",
             CallingConvention::C => "c",
+            CallingConvention::Cdecl => "cdecl",
             CallingConvention::System => "system",
             CallingConvention::Win64 => "win64",
             CallingConvention::Sysv64 => "sysv64",

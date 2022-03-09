@@ -3,6 +3,7 @@ use super::*;
 
 pub static RUST_TEST_PREFIX: &str = include_str!("../../harness/rust_test_prefix.rs");
 
+#[allow(dead_code)]
 pub struct RustcAbiImpl {
     is_nightly: bool,
 }
@@ -35,13 +36,14 @@ impl AbiImpl for RustcAbiImpl {
             CallingConvention::All => unreachable!(),
             CallingConvention::Handwritten => true,
             CallingConvention::C => true,
+            CallingConvention::Cdecl => true,
             CallingConvention::System => true,
             CallingConvention::Win64 => true,
             CallingConvention::Sysv64 => true,
             CallingConvention::Aapcs => true,
             CallingConvention::Stdcall => true,
             CallingConvention::Fastcall => true,
-            CallingConvention::Vectorcall => self.is_nightly, // experimental
+            CallingConvention::Vectorcall => false, // too experimental even for nightly use?
         }
     }
 
@@ -581,6 +583,7 @@ impl CallingConvention {
                 unreachable!("CallingConvention::Handwritten shouldn't reach codegen backends!")
             }
             CallingConvention::C => "C",
+            CallingConvention::Cdecl => "cdecl",
             CallingConvention::System => "system",
             CallingConvention::Win64 => "win64",
             CallingConvention::Sysv64 => "sysv64",

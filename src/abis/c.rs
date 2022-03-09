@@ -202,7 +202,7 @@ impl CcAbiImpl {
             panic!("Unknown compiler flavour for CC");
         };
 
-        let platform = if cfg!(target = "windows") {
+        let platform = if cfg!(target_os = "windows") {
             Platform::Windows
         } else {
             Platform::Unixy
@@ -243,10 +243,14 @@ impl CcAbiImpl {
                 return Err(GenerateError::UnsupportedConvention);
             }
             C => "",
+            Cdecl => match self.flavor {
+                Msvc => "__cdecl ",
+                Gcc | Clang => "__attribute__((cdecl)) ",
+            },
             Stdcall => {
                 if self.platform == Windows {
                     match self.flavor {
-                        Msvc => "stdcall ",
+                        Msvc => "__stdcall ",
                         Gcc | Clang => "__attribute__((stdcall)) ",
                     }
                 } else {
@@ -256,7 +260,7 @@ impl CcAbiImpl {
             Fastcall => {
                 if self.platform == Windows {
                     match self.flavor {
-                        Msvc => "fastcall ",
+                        Msvc => "__fastcall ",
                         Gcc | Clang => "__attribute__((fastcall)) ",
                     }
                 } else {
@@ -266,7 +270,7 @@ impl CcAbiImpl {
             Vectorcall => {
                 if self.platform == Windows {
                     match self.flavor {
-                        Msvc => "vectorcall ",
+                        Msvc => "__vectorcall ",
                         Gcc | Clang => "__attribute__((vectorcall)) ",
                     }
                 } else {

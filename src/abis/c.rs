@@ -243,10 +243,16 @@ impl CcAbiImpl {
                 return Err(GenerateError::UnsupportedConvention);
             }
             C => "",
-            Cdecl => match self.flavor {
-                Msvc => "__cdecl ",
-                Gcc | Clang => "__attribute__((cdecl)) ",
-            },
+            Cdecl => {
+                if self.platform == Windows {
+                    match self.flavor {
+                        Msvc => "__cdecl ",
+                        Gcc | Clang => "__attribute__((cdecl)) ",
+                    }
+                } else {
+                    return Err(GenerateError::UnsupportedConvention);
+                }
+            }
             Stdcall => {
                 if self.platform == Windows {
                     match self.flavor {

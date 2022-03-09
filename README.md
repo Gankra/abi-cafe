@@ -23,15 +23,19 @@ Here are the current things that work.
 
 ## Implementations
 
+"ABI Implementations" refer to a specific compiler or language which claims to implement some ABIs.
+The currently supported AbiImpls are:
+
 * System rustc (via your PATH)
-* System C (via the CC crate, which can also grab a local msvc)
+* System cc (via the CC crate, which can also grab a local msvc)
 
 We automatically test both "Rust calls C" and "C calls Rust".
 
 In theory other implementations aren't *too bad* to add. You just need to:
 
-* Add an implementation of abis::Abi
-    * Specify the name/extension of the impl
+* Add an implementation of abis::AbiImpl
+    * Specify the name and source-file extension
+    * Specify supported calling conventions
     * Specify how to generate a caller from a signature
     * Specify how to generate a callee from a signature
     * Specify how to compile a source file to a static lib
@@ -43,10 +47,24 @@ See the Test Harness section below for details on how to use it.
 
 ## Calling Conventions
 
-* Platform Default C Convention (extern "C")
-* Handwritten Conventions (opaque to the framework, lets you do whatever)
+Each language may claim to support a particular set of calling conventions
+(and may use knowledge of the target platform to adjust their decisions).
+We try to generate and test all supported conventions.
 
-In the future we'd like to also be able to generate more specific ABIs like stdcall/fastcall/etc. Any test which specifies the "All" convention would implicitly combinatorically generate every known convention (constrained to the platform, presumably).
+Universal Conventions:
+
+* Handwritten Conventions (opaque to the framework, lets you do whatever)
+* Platform Default C Convention (extern "C")
+
+Windows Conventions:
+
+* cdecl
+* fastcall
+* stdcall
+* ~~vectorcall~~ (code is there, but disabled due to linking issues)
+
+Any test which specifies the "All" will implicitly combinatorically generate every known convention.
+"Nonsensical" situations like stdcall on linux are the responsibility of the AbiImpls to identify and disable.
 
 
 ## Types

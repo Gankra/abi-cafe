@@ -1,0 +1,83 @@
+Test(
+    name: "sysv_i128_emulation",
+    funcs: [
+        (
+            name: "callee_native_layout",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+        (
+            name: "callee_emulated_layout",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+        (
+            name: "callee_unaligned_emulated_layout",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+
+
+        (
+            name: "native_to_native",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+        (
+            name: "native_to_emulated",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+        (
+            name: "native_to_unaligned_emulated",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+
+
+        (
+            name: "emulated_to_native",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+        (
+            name: "emulated_to_emulated",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+        (
+            name: "emulated_to_unaligned_emulated",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+
+
+        (
+            name: "unaligned_emulated_to_native",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+        (
+            name: "unaligned_emulated_to_emulated",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+        (
+            name: "unaligned_emulated_to_unaligned_emulated",
+            conventions: [Handwritten],
+            inputs: [],
+            output: None,
+        ),
+    ]
+)

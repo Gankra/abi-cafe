@@ -31,6 +31,7 @@ pub static TESTS: &[&str] = &[
     "ptr",
     "bool",
     "ui128",
+    "sysv_i128_emulation",
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -63,6 +64,8 @@ pub enum BuildError {
     },
     #[error("If you use the Handwritten calling convention, all functions in the test must use only that.")]
     HandwrittenMixing,
+    #[error("No handwritten source for this pairing (skipping)")]
+    NoHandwrittenSource,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -162,7 +165,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 let result = do_test(&test, convention, caller, callee, &out_dir);
 
-                if let Err(e) = &result {
+                if let Err(BuildError::NoHandwrittenSource) = &result {
+                    eprintln!(
+                        "skipping {full_test_name}: source for callee and caller doesn't exist"
+                    );
+                    skips += 1;
+                    continue;
+                } else if let Err(e) = &result {
                     eprintln!("test failed: {}", e);
                 }
                 reports.push((test_name, convention, caller.name(), callee.name(), result));
@@ -258,8 +267,6 @@ fn do_test(
     let callee_src_ext = callee.src_ext();
     let full_test_name = full_test_name(test_name, convention_name, caller_name, callee_name);
 
-    eprintln!("preparing {full_test_name}");
-
     let src_dir = if convention == CallingConvention::Handwritten {
         PathBuf::from("handwritten_impls/")
     } else {
@@ -275,7 +282,12 @@ fn do_test(
     let caller_lib = format!("{test_name}_{convention_name}_{caller_name}_caller");
     let callee_lib = format!("{test_name}_{convention_name}_{callee_name}_callee");
 
-    if convention != CallingConvention::Handwritten {
+    if convention == CallingConvention::Handwritten {
+        if !caller_src.exists() || !callee_src.exists() {
+            return Err(BuildError::NoHandwrittenSource);
+        }
+    } else {
+        eprintln!("generating {full_test_name}");
         // If the impl isn't handwritten, then we need to generate it.
         std::fs::create_dir_all(caller_src.parent().unwrap())?;
         std::fs::create_dir_all(callee_src.parent().unwrap())?;
@@ -285,7 +297,7 @@ fn do_test(
         let mut callee_output = File::create(&callee_src)?;
         callee.generate_callee(&mut callee_output, &test, convention)?;
     }
-
+    eprintln!("compiling  {full_test_name}");
     // Compile the tests (and let them change the lib name).
     let caller_lib = caller.compile_caller(&caller_src, &caller_lib)?;
     let callee_lib = callee.compile_callee(&callee_src, &callee_lib)?;
@@ -446,6 +458,7 @@ fn run_dynamic_test(
     ////////////////////////////////////////////////////////////////////
 
     unsafe {
+        let full_test_name = full_test_name(&test.name, convention_name, caller_name, callee_name);
         // Initialize all the buffers the tests will write to
         let mut caller_inputs = WriteBuffer::new();
         let mut caller_outputs = WriteBuffer::new();
@@ -455,7 +468,7 @@ fn run_dynamic_test(
         // Load the dylib of the test, and get its test_start symbol
         let lib = libloading::Library::new(dylib)?;
         let do_test: libloading::Symbol<TestInit> = lib.get(b"test_start")?;
-        eprintln!("running test");
+        eprintln!("running    {full_test_name}");
 
         // Actually run the test!
         do_test(

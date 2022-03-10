@@ -3,6 +3,8 @@ use super::*;
 
 pub static RUST_TEST_PREFIX: &str = include_str!("../../harness/rust_test_prefix.rs");
 
+static STRUCT_128: bool = false; // cfg!(target_arch="x86_64");
+
 #[allow(dead_code)]
 pub struct RustcAbiImpl {
     is_nightly: bool,
@@ -402,12 +404,24 @@ impl Val {
             Float(FloatVal::c_double(_)) => format!("f64"),
             Float(FloatVal::c_float(_)) => format!("f32"),
             Int(int_val) => match int_val {
-                c__int128(_) => format!("i128"),
+                c__int128(_) => {
+                    if STRUCT_128 {
+                        format!("FfiI128")
+                    } else {
+                        format!("i128")
+                    }
+                }
                 c_int64_t(_) => format!("i64"),
                 c_int32_t(_) => format!("i32"),
                 c_int16_t(_) => format!("i16"),
                 c_int8_t(_) => format!("i8"),
-                c__uint128(_) => format!("u128"),
+                c__uint128(_) => {
+                    if STRUCT_128 {
+                        format!("FfiU128")
+                    } else {
+                        format!("u128")
+                    }
+                }
                 c_uint64_t(_) => format!("u64"),
                 c_uint32_t(_) => format!("u32"),
                 c_uint16_t(_) => format!("u16"),
@@ -469,12 +483,24 @@ impl Val {
                 }
             }
             Int(int_val) => match int_val {
-                c__int128(val) => format!("{val}"),
+                c__int128(val) => {
+                    if STRUCT_128 {
+                        format!("FfiI128::new({val})")
+                    } else {
+                        format!("{val}")
+                    }
+                }
                 c_int64_t(val) => format!("{val}"),
                 c_int32_t(val) => format!("{val}"),
                 c_int16_t(val) => format!("{val}"),
                 c_int8_t(val) => format!("{val}"),
-                c__uint128(val) => format!("{val}"),
+                c__uint128(val) => {
+                    if STRUCT_128 {
+                        format!("FfiU128::new({val})")
+                    } else {
+                        format!("{val}")
+                    }
+                }
                 c_uint64_t(val) => format!("{val}"),
                 c_uint32_t(val) => format!("{val}"),
                 c_uint16_t(val) => format!("{val}"),
@@ -512,6 +538,20 @@ impl Val {
                 output
             }
             Float(..) => format!("0.0"),
+            Int(IntVal::c__int128(..)) => {
+                if STRUCT_128 {
+                    format!("FfiI128::new(0)")
+                } else {
+                    format!("0")
+                }
+            }
+            Int(IntVal::c__uint128(..)) => {
+                if STRUCT_128 {
+                    format!("FfiU128::new(0)")
+                } else {
+                    format!("0")
+                }
+            }
             Int(..) => format!("0"),
         };
         Ok(val)

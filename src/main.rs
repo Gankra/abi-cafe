@@ -115,8 +115,8 @@ fn make_app() -> Config {
                 .long_help("Regenerate the procgen test manifests"),
         )
         .arg(
-            Arg::new("convention")
-                .long("convention")
+            Arg::new("conventions")
+                .long("conventions")
                 .long_help("Only run the given calling conventions")
                 .possible_values(&[
                     "c",
@@ -127,33 +127,29 @@ fn make_app() -> Config {
                     "handwritten",
                 ])
                 .multiple_values(true)
-                .takes_value(true)
-                .number_of_values(1),
+                .takes_value(true),
         )
         .arg(
-            Arg::new("impl")
-                .long("impl")
+            Arg::new("impls")
+                .long("impls")
                 .long_help("Only run the given impls (compilers/languages)")
                 .possible_values(ABI_IMPLS)
                 .multiple_values(true)
-                .takes_value(true)
-                .number_of_values(1),
+                .takes_value(true),
         )
         .arg(
-            Arg::new("test")
-                .long("test")
+            Arg::new("tests")
+                .long("tests")
                 .long_help("Only run the given tests")
                 .multiple_values(true)
-                .takes_value(true)
-                .number_of_values(1),
+                .takes_value(true),
         )
         .arg(
-            Arg::new("pair")
-                .long("pair")
+            Arg::new("pairs")
+                .long("pairs")
                 .long_help("Only run the given impl pairs, in the form of impl_calls_impl")
                 .multiple_values(true)
-                .takes_value(true)
-                .number_of_values(1),
+                .takes_value(true),
         )
         .after_help("");
 
@@ -161,7 +157,7 @@ fn make_app() -> Config {
     let procgen_tests = matches.is_present("procgen-tests");
 
     let mut run_conventions: Vec<_> = matches
-        .values_of("convention")
+        .values_of("conventions")
         .into_iter()
         .flatten()
         .map(|conv| CallingConvention::from_str(conv).unwrap())
@@ -172,14 +168,14 @@ fn make_app() -> Config {
     }
 
     let run_impls = matches
-        .values_of("impl")
+        .values_of("impls")
         .into_iter()
         .flatten()
         .map(String::from)
         .collect();
 
     let mut run_pairs: Vec<_> = matches
-        .values_of("pair")
+        .values_of("pairs")
         .into_iter()
         .flatten()
         .map(|pair| {
@@ -197,7 +193,7 @@ fn make_app() -> Config {
     }
 
     let run_tests = matches
-        .values_of("test")
+        .values_of("tests")
         .into_iter()
         .flatten()
         .map(String::from)
@@ -214,13 +210,13 @@ fn make_app() -> Config {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let cfg = make_app();
-    // Before doing anything, procedurally generate tests
-    // (this is internally disabled by default, but left here
-    // to ensure it keeps compiling for whenever it's needed.)
-    generate_procedural_tests(cfg.procgen_tests);
+    // Before doing anything, regenerate the procgen tests, if needed.
+    procgen_tests(cfg.procgen_tests);
 
     let out_dir = PathBuf::from("target/temp/");
-    std::fs::create_dir_all(&out_dir).expect("couldn't write to target/temp??");
+    std::fs::create_dir_all(&out_dir).unwrap();
+    std::fs::remove_dir_all(&out_dir).unwrap();
+    std::fs::create_dir_all(&out_dir).unwrap();
 
     // Set up env vars for CC
     env::set_var("OUT_DIR", &out_dir);
@@ -252,20 +248,32 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Grab all the tests
     let mut tests = vec![];
-    for entry in std::fs::read_dir("tests")? {
-        let entry = entry?;
-        // Get the test description
-        let test = match read_test_manifest(&entry.path()) {
-            Ok(test) => test,
-            Err(e) => {
-                eprintln!("test {:?}'s .ron file couldn't be parsed {}", entry, e);
+    let mut dirs = vec![PathBuf::from("tests")];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+
+            // If it's a dir, add it to the working set
+            if entry.file_type()?.is_dir() {
+                dirs.push(entry.path());
                 continue;
             }
-        };
-        tests.push(test);
+
+            // Otherwise, assume it's a test and parse it
+            let test = match read_test_manifest(&entry.path()) {
+                Ok(test) => test,
+                Err(e) => {
+                    eprintln!("test {:?}'s .ron file couldn't be parsed {}", entry, e);
+                    continue;
+                }
+            };
+            tests.push(test);
+        }
     }
     tests.sort_by(|t1, t2| t1.name.cmp(&t2.name));
+    // FIXME: assert test names don't collide!
 
+    // Run the tests
     for test in tests {
         if !cfg.run_tests.is_empty() && !cfg.run_tests.contains(&test.name) {
             continue;
@@ -432,6 +440,8 @@ fn do_test(
     } else {
         eprintln!("generating {full_test_name}");
         // If the impl isn't handwritten, then we need to generate it.
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::remove_dir_all(&src_dir).unwrap();
         std::fs::create_dir_all(caller_src.parent().unwrap())?;
         std::fs::create_dir_all(callee_src.parent().unwrap())?;
         let mut caller_output = File::create(&caller_src)?;
@@ -833,11 +843,18 @@ fn full_subtest_name(
 ///
 /// **NOTE: this is disabled by default, the results are checked in.
 /// If you want to regenerate these tests, just remove the early return.**
-fn generate_procedural_tests(regenerate: bool) {
+fn procgen_tests(regenerate: bool) {
     // Regeneration disabled by default.
     if !regenerate {
         return;
     }
+
+    let proc_gen_root = PathBuf::from("tests/procgen");
+
+    // Make sure the path exists, then delete its contents, then recreate the empty dir.
+    std::fs::create_dir_all(&proc_gen_root).unwrap();
+    std::fs::remove_dir_all(&proc_gen_root).unwrap();
+    std::fs::create_dir_all(&proc_gen_root).unwrap();
 
     let tests: &[(&str, &[Val])] = &[
         // Just run basic primitives that everyone should support through their paces.
@@ -1074,7 +1091,8 @@ fn generate_procedural_tests(regenerate: bool) {
                 });
             }
         }
-        let mut file = std::fs::File::create(format!("tests/{test_name}.ron")).unwrap();
+        let mut file =
+            std::fs::File::create(proc_gen_root.join(format!("{test_name}.ron"))).unwrap();
         let output = ron::to_string(&test).unwrap();
         file.write_all(output.as_bytes()).unwrap();
     }

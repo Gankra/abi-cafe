@@ -21,7 +21,7 @@ By default we will:
 * under every possible calling convention
 * for a selection of reasonable "impl calls impl" pairings (e.g. rustc_calls_cc)
 
-But you can the CLI interface lets you override these defaults. This is especially useful for --pair because it lets you access *more* specific pairings, like if you really want to specifically test gcc_calls_clang.
+But you can the CLI interface lets you override these defaults. This is especially useful for --pairs because it lets you access *more* specific pairings, like if you really want to specifically test gcc_calls_clang.
 
 
 

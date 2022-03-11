@@ -263,7 +263,7 @@ impl CcAbiImpl {
         let base_path = PathBuf::from("target/temp/");
         let obj_path = base_path.join(format!("{lib_name}.o"));
         let lib_path = base_path.join(format!("lib{lib_name}.a"));
-        Command::new("clang")
+        Command::new("gcc")
             .arg("-ffunction-sections")
             .arg("-fdata-sections")
             .arg("-fPIC")

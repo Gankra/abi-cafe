@@ -649,7 +649,7 @@ impl CcAbiImpl {
         use Val::*;
         let val = match val {
             Ref(pointee) => self.c_val(pointee)?,
-            Ptr(addr) => format!("(void*){addr}"),
+            Ptr(addr) => format!("(void*){addr:#X}ull"),
             Bool(val) => format!("{val}"),
             Array(vals) => {
                 let mut output = String::new();
@@ -694,22 +694,22 @@ impl CcAbiImpl {
             Int(int_val) => match *int_val {
                 c__int128(val) => {
                     let lower = (val as u128) & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
-                    let higher = ((val as u128) & 0xFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
-                    format!("((__int128_t){lower}ull) | (((__int128_t){higher}ull) << 64)")
+                    let higher = ((val as u128) & 0xFFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
+                    format!("((__int128_t){lower:#X}ull) | (((__int128_t){higher:#X}ull) << 64)")
                 }
                 c__uint128(val) => {
                     let lower = val & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
-                    let higher = (val & 0xFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
-                    format!("((__uint128_t){lower}ull) | (((__uint128_t){higher}ull) << 64)")
+                    let higher = (val & 0xFFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
+                    format!("((__uint128_t){lower:#X}ull) | (((__uint128_t){higher:#X}ull) << 64)")
                 }
                 c_int64_t(val) => format!("{val}"),
                 c_int32_t(val) => format!("{val}"),
                 c_int16_t(val) => format!("{val}"),
                 c_int8_t(val) => format!("{val}"),
                 c_uint64_t(val) => format!("{val}ull"),
-                c_uint32_t(val) => format!("{val}"),
-                c_uint16_t(val) => format!("{val}"),
-                c_uint8_t(val) => format!("{val}"),
+                c_uint32_t(val) => format!("{val:#X}"),
+                c_uint16_t(val) => format!("{val:#X}"),
+                c_uint8_t(val) => format!("{val:#X}"),
             },
         };
         Ok(val)

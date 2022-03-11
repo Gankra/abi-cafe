@@ -60,13 +60,19 @@ pub enum BuildError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum TestFailure {
-    #[error("test {0} input {1} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}")]
+    #[error("test {0} {} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}", ARG_NAMES[*.1])]
     InputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>),
-    #[error("test {0} output {1} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}")]
+    #[error(
+        "test {0} {} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}",
+        OUTPUT_NAME
+    )]
     OutputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>),
-    #[error("test {0} input {1} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}")]
+    #[error("test {0} {} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}", ARG_NAMES[*.1])]
     InputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>),
-    #[error("test {0} output {1} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}")]
+    #[error(
+        "test {0} {} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}",
+        OUTPUT_NAME
+    )]
     OutputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>),
     #[error("test {0} input count mismatch \ncaller: {1:#02X?} \ncallee: {2:#02X?}")]
     InputCountMismatch(usize, Vec<Vec<Vec<u8>>>, Vec<Vec<Vec<u8>>>),
@@ -898,10 +904,44 @@ fn procgen_tests(regenerate: bool) {
             funcs: Vec::new(),
         };
 
+        let mut perturb_float = 0.0f32;
+        let mut perturb_byte = 0u8;
+
         for val in vals.iter() {
-            let new_val = || -> Val {
+            let new_val = |i| -> Val {
                 // TODO: actually perturb the values?
-                val.clone()
+                let mut new_val = val.clone();
+                let mut cur_val = Some(&mut new_val);
+                while let Some(temp) = cur_val.take() {
+                    match temp {
+                        Val::Ref(pointee) => {
+                            cur_val = Some(&mut **pointee);
+                            continue;
+                        }
+                        Val::Struct(_, _) => unimplemented!(),
+                        Val::Array(_) => unimplemented!(),
+                        Val::Ptr(out) => graffiti_primitive(out, i),
+                        Val::Int(int_val) => match int_val {
+                            IntVal::c__int128(out) => graffiti_primitive(out, i),
+                            IntVal::c_int64_t(out) => graffiti_primitive(out, i),
+                            IntVal::c_int32_t(out) => graffiti_primitive(out, i),
+                            IntVal::c_int16_t(out) => graffiti_primitive(out, i),
+                            IntVal::c_int8_t(out) => graffiti_primitive(out, i),
+                            IntVal::c__uint128(out) => graffiti_primitive(out, i),
+                            IntVal::c_uint64_t(out) => graffiti_primitive(out, i),
+                            IntVal::c_uint32_t(out) => graffiti_primitive(out, i),
+                            IntVal::c_uint16_t(out) => graffiti_primitive(out, i),
+                            IntVal::c_uint8_t(out) => graffiti_primitive(out, i),
+                        },
+                        Val::Float(float_val) => match float_val {
+                            FloatVal::c_double(out) => graffiti_primitive(out, i),
+                            FloatVal::c_float(out) => graffiti_primitive(out, i),
+                        },
+                        Val::Bool(out) => *out = true,
+                    }
+                }
+
+                new_val
             };
 
             let val_name = arg_ty(val);
@@ -910,7 +950,7 @@ fn procgen_tests(regenerate: bool) {
             test.funcs.push(Func {
                 name: format!("{val_name}_val_in"),
                 conventions: vec![CallingConvention::All],
-                inputs: vec![new_val()],
+                inputs: vec![new_val(0)],
                 output: None,
             });
 
@@ -918,21 +958,21 @@ fn procgen_tests(regenerate: bool) {
                 name: format!("{val_name}_val_out"),
                 conventions: vec![CallingConvention::All],
                 inputs: vec![],
-                output: Some(new_val()),
+                output: Some(new_val(0)),
             });
 
             test.funcs.push(Func {
                 name: format!("{val_name}_val_in_out"),
                 conventions: vec![CallingConvention::All],
-                inputs: vec![new_val()],
-                output: Some(new_val()),
+                inputs: vec![new_val(0)],
+                output: Some(new_val(1)),
             });
 
             // Start gentle with basic one value in/out tests
             test.funcs.push(Func {
                 name: format!("{val_name}_ref_in"),
                 conventions: vec![CallingConvention::All],
-                inputs: vec![Val::Ref(Box::new(new_val()))],
+                inputs: vec![Val::Ref(Box::new(new_val(0)))],
                 output: None,
             });
 
@@ -940,14 +980,14 @@ fn procgen_tests(regenerate: bool) {
                 name: format!("{val_name}_ref_out"),
                 conventions: vec![CallingConvention::All],
                 inputs: vec![],
-                output: Some(Val::Ref(Box::new(new_val()))),
+                output: Some(Val::Ref(Box::new(new_val(0)))),
             });
 
             test.funcs.push(Func {
                 name: format!("{val_name}_ref_in_out"),
                 conventions: vec![CallingConvention::All],
-                inputs: vec![Val::Ref(Box::new(new_val()))],
-                output: Some(Val::Ref(Box::new(new_val()))),
+                inputs: vec![Val::Ref(Box::new(new_val(0)))],
+                output: Some(Val::Ref(Box::new(new_val(1)))),
             });
 
             // Stress out the calling convention and try lots of different
@@ -957,7 +997,7 @@ fn procgen_tests(regenerate: bool) {
                 test.funcs.push(Func {
                     name: format!("{val_name}_val_in_{len}"),
                     conventions: vec![CallingConvention::All],
-                    inputs: (0..len).map(|_| new_val()).collect(),
+                    inputs: (0..len).map(|i| new_val(i)).collect(),
                     output: None,
                 });
             }
@@ -971,7 +1011,7 @@ fn procgen_tests(regenerate: bool) {
                     conventions: vec![CallingConvention::All],
                     inputs: vec![Val::Struct(
                         format!("{val_name}_{len}"),
-                        (0..len).map(|_| new_val()).collect(),
+                        (0..len).map(|i| new_val(i)).collect(),
                     )],
                     output: None,
                 });
@@ -983,7 +1023,7 @@ fn procgen_tests(regenerate: bool) {
                     conventions: vec![CallingConvention::All],
                     inputs: vec![Val::Ref(Box::new(Val::Struct(
                         format!("{val_name}_{len}"),
-                        (0..len).map(|_| new_val()).collect(),
+                        (0..len).map(|i| new_val(i)).collect(),
                     )))],
                     output: None,
                 });
@@ -1000,13 +1040,16 @@ fn procgen_tests(regenerate: bool) {
             let small_count = 4;
             let big_count = 16;
 
-            for idx in 0..=small_count {
-                let mut inputs = (0..small_count).map(|_| new_val()).collect::<Vec<_>>();
-                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
-                inputs.insert(
-                    small_count + 1 - idx,
-                    Val::Float(FloatVal::c_float(1234.456)),
-                );
+            for idx in 0..small_count {
+                let mut inputs = (0..small_count).map(|i| new_val(i)).collect::<Vec<_>>();
+
+                let byte_idx = idx;
+                let float_idx = small_count - 1 - idx;
+                graffiti_primitive(&mut perturb_byte, byte_idx);
+                graffiti_primitive(&mut perturb_float, float_idx);
+                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
+                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
+
                 test.funcs.push(Func {
                     name: format!("{val_name}_val_in_{idx}_perturbed_small"),
                     conventions: vec![CallingConvention::All],
@@ -1014,10 +1057,16 @@ fn procgen_tests(regenerate: bool) {
                     output: None,
                 });
             }
-            for idx in 0..=big_count {
-                let mut inputs = (0..big_count).map(|_| new_val()).collect::<Vec<_>>();
-                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
-                inputs.insert(big_count + 1 - idx, Val::Float(FloatVal::c_float(1234.456)));
+            for idx in 0..big_count {
+                let mut inputs = (0..big_count).map(|i| new_val(i)).collect::<Vec<_>>();
+
+                let byte_idx = idx;
+                let float_idx = big_count - 1 - idx;
+                graffiti_primitive(&mut perturb_byte, byte_idx);
+                graffiti_primitive(&mut perturb_float, float_idx);
+                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
+                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
+
                 test.funcs.push(Func {
                     name: format!("{val_name}_val_in_{idx}_perturbed_big"),
                     conventions: vec![CallingConvention::All],
@@ -1026,13 +1075,16 @@ fn procgen_tests(regenerate: bool) {
                 });
             }
 
-            for idx in 0..=small_count {
-                let mut inputs = (0..small_count).map(|_| new_val()).collect::<Vec<_>>();
-                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
-                inputs.insert(
-                    small_count + 1 - idx,
-                    Val::Float(FloatVal::c_float(1234.456)),
-                );
+            for idx in 0..small_count {
+                let mut inputs = (0..small_count).map(|i| new_val(i)).collect::<Vec<_>>();
+
+                let byte_idx = idx;
+                let float_idx = small_count - 1 - idx;
+                graffiti_primitive(&mut perturb_byte, byte_idx);
+                graffiti_primitive(&mut perturb_float, float_idx);
+                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
+                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
+
                 test.funcs.push(Func {
                     name: format!("{val_name}_struct_in_{idx}_perturbed_small"),
                     conventions: vec![CallingConvention::All],
@@ -1043,10 +1095,16 @@ fn procgen_tests(regenerate: bool) {
                     output: None,
                 });
             }
-            for idx in 0..=big_count {
-                let mut inputs = (0..big_count).map(|_| new_val()).collect::<Vec<_>>();
-                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
-                inputs.insert(big_count + 1 - idx, Val::Float(FloatVal::c_float(1234.456)));
+            for idx in 0..big_count {
+                let mut inputs = (0..big_count).map(|i| new_val(i)).collect::<Vec<_>>();
+
+                let byte_idx = idx;
+                let float_idx = big_count - 1 - idx;
+                graffiti_primitive(&mut perturb_byte, byte_idx);
+                graffiti_primitive(&mut perturb_float, float_idx);
+                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
+                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
+
                 test.funcs.push(Func {
                     name: format!("{val_name}_struct_in_{idx}_perturbed_big"),
                     conventions: vec![CallingConvention::All],
@@ -1059,13 +1117,16 @@ fn procgen_tests(regenerate: bool) {
             }
 
             // Should be an exact copy-paste of the above but with Ref's added
-            for idx in 0..=small_count {
-                let mut inputs = (0..small_count).map(|_| new_val()).collect::<Vec<_>>();
-                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
-                inputs.insert(
-                    small_count + 1 - idx,
-                    Val::Float(FloatVal::c_float(1234.456)),
-                );
+            for idx in 0..small_count {
+                let mut inputs = (0..small_count).map(|i| new_val(i)).collect::<Vec<_>>();
+
+                let byte_idx = idx;
+                let float_idx = small_count - 1 - idx;
+                graffiti_primitive(&mut perturb_byte, byte_idx);
+                graffiti_primitive(&mut perturb_float, float_idx);
+                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
+                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
+
                 test.funcs.push(Func {
                     name: format!("{val_name}_ref_struct_in_{idx}_perturbed_small"),
                     conventions: vec![CallingConvention::All],
@@ -1076,10 +1137,16 @@ fn procgen_tests(regenerate: bool) {
                     output: None,
                 });
             }
-            for idx in 0..=big_count {
-                let mut inputs = (0..big_count).map(|_| new_val()).collect::<Vec<_>>();
-                inputs.insert(idx, Val::Int(IntVal::c_uint8_t(0xeb)));
-                inputs.insert(big_count + 1 - idx, Val::Float(FloatVal::c_float(1234.456)));
+            for idx in 0..big_count {
+                let mut inputs = (0..big_count).map(|i| new_val(i)).collect::<Vec<_>>();
+
+                let byte_idx = idx;
+                let float_idx = big_count - 1 - idx;
+                graffiti_primitive(&mut perturb_byte, byte_idx);
+                graffiti_primitive(&mut perturb_float, float_idx);
+                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
+                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
+
                 test.funcs.push(Func {
                     name: format!("{val_name}_ref_struct_in_{idx}_perturbed_big"),
                     conventions: vec![CallingConvention::All],
@@ -1126,5 +1193,21 @@ pub fn arg_ty(val: &Val) -> String {
             c_uint16_t(_) => format!("u16"),
             c_uint8_t(_) => format!("u8"),
         },
+    }
+}
+
+fn graffiti_primitive<T>(output: &mut T, idx: usize) {
+    let mut input = [
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
+        0x0F,
+    ];
+    for byte in &mut input {
+        *byte |= 0x10 * idx as u8;
+    }
+    unsafe {
+        let out_size = std::mem::size_of::<T>();
+        assert!(out_size <= input.len());
+        let raw_out = output as *mut T as *mut u8;
+        raw_out.copy_from(input.as_ptr(), out_size)
     }
 }

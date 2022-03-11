@@ -474,7 +474,7 @@ impl RustcAbiImpl {
         use Val::*;
         let out = match val {
             Ref(pointee) => self.rust_val(pointee)?,
-            Ptr(addr) => format!("{addr} as *mut ()"),
+            Ptr(addr) => format!("{addr:#X} as *mut ()"),
             Bool(val) => format!("{val}"),
             Array(vals) => {
                 let mut output = String::new();
@@ -524,15 +524,15 @@ impl RustcAbiImpl {
                 c_int8_t(val) => format!("{val}"),
                 c__uint128(val) => {
                     if STRUCT_128 {
-                        format!("FfiU128::new({val})")
+                        format!("FfiU128::new({val:#X})")
                     } else {
-                        format!("{val}")
+                        format!("{val:#X}")
                     }
                 }
-                c_uint64_t(val) => format!("{val}"),
-                c_uint32_t(val) => format!("{val}"),
-                c_uint16_t(val) => format!("{val}"),
-                c_uint8_t(val) => format!("{val}"),
+                c_uint64_t(val) => format!("{val:#X}"),
+                c_uint32_t(val) => format!("{val:#X}"),
+                c_uint16_t(val) => format!("{val:#X}"),
+                c_uint8_t(val) => format!("{val:#X}"),
             },
         };
         Ok(out)

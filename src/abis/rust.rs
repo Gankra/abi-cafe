@@ -10,16 +10,11 @@ pub struct RustcAbiImpl {
     is_nightly: bool,
 }
 
-impl RustcAbiImpl {
-    pub fn new(_system_info: &SystemInfo) -> Self {
-        Self {
-            is_nightly: built_info::RUSTC_VERSION.contains("nightly"),
-        }
-    }
-}
-
 impl AbiImpl for RustcAbiImpl {
     fn name(&self) -> &'static str {
+        "rustc"
+    }
+    fn lang(&self) -> &'static str {
         "rust"
     }
     fn src_ext(&self) -> &'static str {
@@ -55,14 +50,14 @@ impl AbiImpl for RustcAbiImpl {
         test: &Test,
         convention: CallingConvention,
     ) -> Result<(), BuildError> {
-        write_rust_prefix(f, test, convention)?;
-        let convention_decl = convention.rust_convention_decl();
+        self.write_rust_prefix(f, test, convention)?;
+        let convention_decl = self.rust_convention_decl(convention);
 
         // Generate the extern block
         writeln!(f, "extern \"{convention_decl}\" {{",)?;
         for function in &test.funcs {
             write!(f, "  ")?;
-            write_rust_signature(f, function)?;
+            self.write_rust_signature(f, function)?;
             writeln!(f, ";")?;
         }
         writeln!(f, "}}")?;
@@ -82,8 +77,8 @@ impl AbiImpl for RustcAbiImpl {
                 writeln!(
                     f,
                     "        {} = {};",
-                    input.rust_var_decl(ARG_NAMES[idx])?,
-                    input.rust_val()?
+                    self.rust_var_decl(input, ARG_NAMES[idx])?,
+                    self.rust_val(input)?
                 )?;
             }
             writeln!(f)?;
@@ -91,7 +86,7 @@ impl AbiImpl for RustcAbiImpl {
                 writeln!(
                     f,
                     "{}",
-                    input.rust_write_val("CALLER_INPUTS", ARG_NAMES[idx], true)?
+                    self.rust_write_val(input, "CALLER_INPUTS", ARG_NAMES[idx], true)?
                 )?;
             }
             writeln!(f)?;
@@ -99,11 +94,11 @@ impl AbiImpl for RustcAbiImpl {
             // Outputs
             write!(f, "        ")?;
             let pass_out = if let Some(output) = &function.output {
-                if let Some(decl) = output.rust_out_param_var(OUTPUT_NAME)? {
+                if let Some(decl) = self.rust_out_param_var(output, OUTPUT_NAME)? {
                     writeln!(f, "        {}", decl)?;
                     true
                 } else {
-                    write!(f, "        {} = ", output.rust_var_decl(OUTPUT_NAME)?)?;
+                    write!(f, "        {} = ", self.rust_var_decl(output, OUTPUT_NAME)?)?;
                     false
                 }
             } else {
@@ -113,7 +108,7 @@ impl AbiImpl for RustcAbiImpl {
             // Do the call
             write!(f, "{}(", function.name)?;
             for (idx, input) in function.inputs.iter().enumerate() {
-                write!(f, "{}, ", input.rust_arg_pass(ARG_NAMES[idx])?)?;
+                write!(f, "{}, ", self.rust_arg_pass(input, ARG_NAMES[idx])?)?;
             }
             if pass_out {
                 writeln!(f, "&mut {OUTPUT_NAME}")?;
@@ -126,7 +121,7 @@ impl AbiImpl for RustcAbiImpl {
                 writeln!(
                     f,
                     "{}",
-                    output.rust_write_val("CALLER_OUTPUTS", OUTPUT_NAME, true)?
+                    self.rust_write_val(output, "CALLER_OUTPUTS", OUTPUT_NAME, true)?
                 )?;
             }
 
@@ -148,8 +143,8 @@ impl AbiImpl for RustcAbiImpl {
         test: &Test,
         convention: CallingConvention,
     ) -> Result<(), BuildError> {
-        write_rust_prefix(f, test, convention)?;
-        let convention_decl = convention.rust_convention_decl();
+        self.write_rust_prefix(f, test, convention)?;
+        let convention_decl = self.rust_convention_decl(convention);
         for function in &test.funcs {
             if !function.has_convention(convention) {
                 continue;
@@ -157,7 +152,7 @@ impl AbiImpl for RustcAbiImpl {
             // Write the signature
             writeln!(f, "#[no_mangle]")?;
             write!(f, "pub unsafe extern \"{convention_decl}\" ")?;
-            write_rust_signature(f, function)?;
+            self.write_rust_signature(f, function)?;
             writeln!(f, " {{")?;
 
             // Now the body
@@ -167,20 +162,20 @@ impl AbiImpl for RustcAbiImpl {
                 writeln!(
                     f,
                     "{}",
-                    input.rust_write_val("CALLEE_INPUTS", ARG_NAMES[idx], false)?
+                    self.rust_write_val(input, "CALLEE_INPUTS", ARG_NAMES[idx], false)?
                 )?;
             }
             writeln!(f)?;
 
             // Report outputs and return
             if let Some(output) = &function.output {
-                let decl = output.rust_var_decl(OUTPUT_NAME)?;
-                let val = output.rust_val()?;
+                let decl = self.rust_var_decl(output, OUTPUT_NAME)?;
+                let val = self.rust_val(output)?;
                 writeln!(f, "        {decl} = {val};")?;
                 writeln!(
                     f,
                     "{}",
-                    output.rust_write_val("CALLEE_OUTPUTS", OUTPUT_NAME, true)?
+                    self.rust_write_val(output, "CALLEE_OUTPUTS", OUTPUT_NAME, true)?
                 )?;
                 writeln!(
                     f,
@@ -189,7 +184,7 @@ impl AbiImpl for RustcAbiImpl {
                 writeln!(
                     f,
                     "        {}",
-                    output.rust_var_return(OUTPUT_NAME, OUT_PARAM_NAME)?
+                    self.rust_var_return(output, OUTPUT_NAME, OUT_PARAM_NAME)?
                 )?;
             } else {
                 writeln!(
@@ -224,69 +219,94 @@ impl AbiImpl for RustcAbiImpl {
     }
 }
 
-/// Every test should start by loading in the harness' "header"
-/// and forward-declaring any structs that will be used.
-fn write_rust_prefix(
-    f: &mut dyn Write,
-    test: &Test,
-    convention: CallingConvention,
-) -> Result<(), BuildError> {
-    if convention == CallingConvention::Vectorcall {
-        writeln!(f, "#![feature(abi_vectorcall)]")?;
+impl RustcAbiImpl {
+    pub fn new(_system_info: &Config) -> Self {
+        Self {
+            is_nightly: built_info::RUSTC_VERSION.contains("nightly"),
+        }
     }
-    // Load test harness "headers"
-    write!(f, "{}", RUST_TEST_PREFIX)?;
 
-    // Forward-decl struct types
-    let mut forward_decls = std::collections::HashMap::<String, String>::new();
-    for function in &test.funcs {
-        for val in function.inputs.iter().chain(function.output.as_ref()) {
-            for (name, decl) in val.rust_forward_decl()? {
-                match forward_decls.entry(name) {
-                    std::collections::hash_map::Entry::Occupied(entry) => {
-                        if entry.get() != &decl {
-                            return Err(BuildError::InconsistentStructDefinition {
-                                name: entry.key().clone(),
-                                old_decl: entry.remove(),
-                                new_decl: decl,
-                            });
+    fn rust_convention_decl(&self, convention: CallingConvention) -> &'static str {
+        match convention {
+            CallingConvention::All => {
+                unreachable!("CallingConvention::All is sugar that shouldn't reach here")
+            }
+            CallingConvention::Handwritten => {
+                unreachable!("CallingConvention::Handwritten shouldn't reach codegen backends!")
+            }
+            CallingConvention::C => "C",
+            CallingConvention::Cdecl => "cdecl",
+            CallingConvention::System => "system",
+            CallingConvention::Win64 => "win64",
+            CallingConvention::Sysv64 => "sysv64",
+            CallingConvention::Aapcs => "aapcs",
+            CallingConvention::Stdcall => "stdcall",
+            CallingConvention::Fastcall => "fastcall",
+            CallingConvention::Vectorcall => "vectorcall",
+        }
+    }
+
+    /// Every test should start by loading in the harness' "header"
+    /// and forward-declaring any structs that will be used.
+    fn write_rust_prefix(
+        &self,
+        f: &mut dyn Write,
+        test: &Test,
+        convention: CallingConvention,
+    ) -> Result<(), BuildError> {
+        if convention == CallingConvention::Vectorcall {
+            writeln!(f, "#![feature(abi_vectorcall)]")?;
+        }
+        // Load test harness "headers"
+        write!(f, "{}", RUST_TEST_PREFIX)?;
+
+        // Forward-decl struct types
+        let mut forward_decls = std::collections::HashMap::<String, String>::new();
+        for function in &test.funcs {
+            for val in function.inputs.iter().chain(function.output.as_ref()) {
+                for (name, decl) in self.rust_forward_decl(val)? {
+                    match forward_decls.entry(name) {
+                        std::collections::hash_map::Entry::Occupied(entry) => {
+                            if entry.get() != &decl {
+                                return Err(BuildError::InconsistentStructDefinition {
+                                    name: entry.key().clone(),
+                                    old_decl: entry.remove(),
+                                    new_decl: decl,
+                                });
+                            }
                         }
-                    }
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        writeln!(f, "{decl}")?;
-                        entry.insert(decl);
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            writeln!(f, "{decl}")?;
+                            entry.insert(decl);
+                        }
                     }
                 }
             }
         }
+
+        Ok(())
     }
 
-    Ok(())
-}
-
-fn write_rust_signature(f: &mut dyn Write, function: &Func) -> Result<(), BuildError> {
-    write!(f, "fn {}(", function.name)?;
-    for (idx, input) in function.inputs.iter().enumerate() {
-        write!(f, "{}, ", input.rust_arg_decl(ARG_NAMES[idx])?)?;
-    }
-    if let Some(output) = &function.output {
-        if let Some(out_param) = output.rust_out_param(OUT_PARAM_NAME)? {
-            write!(f, "{}", out_param)?;
-            write!(f, ")")?;
+    fn write_rust_signature(&self, f: &mut dyn Write, function: &Func) -> Result<(), BuildError> {
+        write!(f, "fn {}(", function.name)?;
+        for (idx, input) in function.inputs.iter().enumerate() {
+            write!(f, "{}, ", self.rust_arg_decl(input, ARG_NAMES[idx])?)?;
+        }
+        if let Some(output) = &function.output {
+            if let Some(out_param) = self.rust_out_param(output, OUT_PARAM_NAME)? {
+                write!(f, "{}", out_param)?;
+                write!(f, ")")?;
+            } else {
+                write!(f, ")")?;
+                let ty = self.rust_arg_type(output)?;
+                write!(f, " -> {ty}")?;
+            }
         } else {
             write!(f, ")")?;
-            let ty = output.rust_arg_type()?;
-            write!(f, " -> {ty}")?;
         }
-    } else {
-        write!(f, ")")?;
+        Ok(())
     }
-    Ok(())
-}
 
-// FIXME: it would be nice if more of this stuff used `write!` instead of `fmt!`
-// but it's a bit of a pain in the ass to architect some of these operations that way.
-impl Val {
     /// If this value defines a nominal type, this will spit out:
     ///
     /// * The type name
@@ -295,57 +315,64 @@ impl Val {
     /// To catch buggy test definitions, you should validate that all
     /// structs that claim a particular name have the same declaration.
     /// This is done in write_rust_prefix.
-    fn rust_forward_decl(&self) -> Result<Vec<(String, String)>, GenerateError> {
+    fn rust_forward_decl(&self, val: &Val) -> Result<Vec<(String, String)>, GenerateError> {
         use Val::*;
-        match self {
+        match val {
             Struct(name, fields) => {
                 let mut results = vec![];
                 for field in fields.iter() {
-                    results.extend(field.rust_forward_decl()?);
+                    results.extend(self.rust_forward_decl(field)?);
                 }
                 let mut output = String::new();
                 let ref_name = format!("{name}");
                 output.push_str("\n#[repr(C)]\n");
                 output.push_str(&format!("pub struct {name} {{\n"));
                 for (idx, field) in fields.iter().enumerate() {
-                    let line =
-                        format!("    {}: {},\n", FIELD_NAMES[idx], field.rust_nested_type()?);
+                    let line = format!(
+                        "    {}: {},\n",
+                        FIELD_NAMES[idx],
+                        self.rust_nested_type(field)?
+                    );
                     output.push_str(&line);
                 }
                 output.push_str("}");
                 results.push((ref_name, output));
                 Ok(results)
             }
-            Array(vals) => vals[0].rust_forward_decl(),
-            Ref(x) => x.rust_forward_decl(),
+            Array(vals) => self.rust_forward_decl(&vals[0]),
+            Ref(pointee) => self.rust_forward_decl(pointee),
             _ => Ok(vec![]),
         }
     }
 
     /// The decl to use for a local var (reference-ness stripped)
-    fn rust_var_decl(&self, var_name: &str) -> Result<String, GenerateError> {
-        if let Val::Ref(x) = self {
-            Ok(x.rust_var_decl(var_name)?)
+    fn rust_var_decl(&self, val: &Val, var_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(pointee) = val {
+            Ok(self.rust_var_decl(pointee, var_name)?)
         } else {
-            Ok(format!("let {var_name}: {}", self.rust_arg_type()?))
+            Ok(format!("let {var_name}: {}", self.rust_arg_type(val)?))
         }
     }
 
     /// The decl to use for a function arg (apply referenceness)
-    fn rust_arg_decl(&self, arg_name: &str) -> Result<String, GenerateError> {
-        if let Val::Ref(x) = self {
-            Ok(format!("{arg_name}: &{}", x.rust_arg_type()?))
+    fn rust_arg_decl(&self, val: &Val, arg_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(pointee) = val {
+            Ok(format!("{arg_name}: &{}", self.rust_arg_type(pointee)?))
         } else {
-            Ok(format!("{arg_name}: {}", self.rust_arg_type()?))
+            Ok(format!("{arg_name}: {}", self.rust_arg_type(val)?))
         }
     }
 
     /// If the return type needs to be an out_param, this returns it
-    fn rust_out_param(&self, out_param_name: &str) -> Result<Option<String>, GenerateError> {
-        if let Val::Ref(x) = self {
+    fn rust_out_param(
+        &self,
+        val: &Val,
+        out_param_name: &str,
+    ) -> Result<Option<String>, GenerateError> {
+        if let Val::Ref(pointee) = val {
             Ok(Some(format!(
                 "{out_param_name}: &mut {}",
-                x.rust_arg_type()?
+                self.rust_arg_type(pointee)?
             )))
         } else {
             Ok(None)
@@ -353,12 +380,16 @@ impl Val {
     }
 
     /// If the return type needs to be an out_param, this returns it
-    fn rust_out_param_var(&self, output_name: &str) -> Result<Option<String>, GenerateError> {
-        if let Val::Ref(x) = self {
+    fn rust_out_param_var(
+        &self,
+        val: &Val,
+        output_name: &str,
+    ) -> Result<Option<String>, GenerateError> {
+        if let Val::Ref(pointee) = val {
             Ok(Some(format!(
                 "let mut {output_name}: {} = {};",
-                x.rust_arg_type()?,
-                x.rust_default_val()?
+                self.rust_arg_type(pointee)?,
+                self.rust_default_val(pointee)?
             )))
         } else {
             Ok(None)
@@ -366,8 +397,8 @@ impl Val {
     }
 
     /// How to pass an argument
-    fn rust_arg_pass(&self, arg_name: &str) -> Result<String, GenerateError> {
-        if let Val::Ref(_) = self {
+    fn rust_arg_pass(&self, val: &Val, arg_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(_) = val {
             Ok(format!("&{arg_name}"))
         } else {
             Ok(format!("{arg_name}"))
@@ -377,10 +408,11 @@ impl Val {
     /// How to return a value
     fn rust_var_return(
         &self,
+        val: &Val,
         var_name: &str,
         out_param_name: &str,
     ) -> Result<String, GenerateError> {
-        if let Val::Ref(_) = self {
+        if let Val::Ref(_) = val {
             Ok(format!("*{out_param_name} = {var_name};"))
         } else {
             Ok(format!("return {var_name};"))
@@ -388,18 +420,14 @@ impl Val {
     }
 
     /// The type name to use for this value when it is stored in args/vars.
-    fn rust_arg_type(&self) -> Result<String, GenerateError> {
+    fn rust_arg_type(&self, val: &Val) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
-        let val = match self {
-            Ref(x) => format!("*mut {}", x.rust_arg_type()?),
+        let out = match val {
+            Ref(pointee) => format!("*mut {}", self.rust_arg_type(pointee)?),
             Ptr(_) => format!("*mut ()"),
             Bool(_) => format!("bool"),
-            Array(vals) => format!(
-                "[{}; {}]",
-                vals.get(0).unwrap_or(&Val::Ptr(0)).rust_arg_type()?,
-                vals.len()
-            ),
+            Array(vals) => format!("[{}; {}]", self.rust_arg_type(&vals[0])?, vals.len()),
             Struct(name, _) => format!("{name}"),
             Float(FloatVal::c_double(_)) => format!("f64"),
             Float(FloatVal::c_float(_)) => format!("f32"),
@@ -428,7 +456,7 @@ impl Val {
                 c_uint8_t(_) => format!("u8"),
             },
         };
-        Ok(val)
+        Ok(out)
     }
 
     /// The type name to use for this value when it is stored in composite.
@@ -436,23 +464,23 @@ impl Val {
     /// This is separated out in case there's a type that needs different
     /// handling in this context to conform to a layout (i.e. how C arrays
     /// decay into pointers when used in function args).
-    fn rust_nested_type(&self) -> Result<String, GenerateError> {
-        self.rust_arg_type()
+    fn rust_nested_type(&self, val: &Val) -> Result<String, GenerateError> {
+        self.rust_arg_type(val)
     }
 
     /// An expression that generates this value.
-    fn rust_val(&self) -> Result<String, GenerateError> {
+    fn rust_val(&self, val: &Val) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
-        let val = match self {
-            Ref(x) => x.rust_val()?,
+        let out = match val {
+            Ref(pointee) => self.rust_val(pointee)?,
             Ptr(addr) => format!("{addr} as *mut ()"),
             Bool(val) => format!("{val}"),
             Array(vals) => {
                 let mut output = String::new();
                 output.push_str(&format!("[",));
-                for val in vals {
-                    let part = format!("{}, ", val.rust_val()?);
+                for elem in vals {
+                    let part = format!("{}, ", self.rust_val(elem)?);
                     output.push_str(&part);
                 }
                 output.push_str("]");
@@ -462,7 +490,7 @@ impl Val {
                 let mut output = String::new();
                 output.push_str(&format!("{name} {{ "));
                 for (idx, field) in fields.iter().enumerate() {
-                    let part = format!("{}: {},", FIELD_NAMES[idx], field.rust_val()?);
+                    let part = format!("{}: {},", FIELD_NAMES[idx], self.rust_val(field)?);
                     output.push_str(&part);
                 }
                 output.push_str(" }");
@@ -507,21 +535,21 @@ impl Val {
                 c_uint8_t(val) => format!("{val}"),
             },
         };
-        Ok(val)
+        Ok(out)
     }
 
     /// A suitable default value for this type
-    fn rust_default_val(&self) -> Result<String, GenerateError> {
+    fn rust_default_val(&self, val: &Val) -> Result<String, GenerateError> {
         use Val::*;
-        let val = match self {
-            Ref(x) => x.rust_default_val()?,
+        let out = match val {
+            Ref(pointee) => self.rust_default_val(pointee)?,
             Ptr(_) => format!("0 as *mut ()"),
             Bool(_) => format!("false"),
             Array(vals) => {
                 let mut output = String::new();
                 output.push_str(&format!("[",));
-                for val in vals {
-                    let part = format!("{}, ", val.rust_default_val()?);
+                for elem in vals {
+                    let part = format!("{}, ", self.rust_default_val(elem)?);
                     output.push_str(&part);
                 }
                 output.push_str("]");
@@ -531,7 +559,7 @@ impl Val {
                 let mut output = String::new();
                 output.push_str(&format!("{name} {{ "));
                 for (idx, field) in fields.iter().enumerate() {
-                    let part = format!("{}: {},", FIELD_NAMES[idx], field.rust_default_val()?);
+                    let part = format!("{}: {},", FIELD_NAMES[idx], self.rust_default_val(field)?);
                     output.push_str(&part);
                 }
                 output.push_str(" }");
@@ -554,7 +582,7 @@ impl Val {
             }
             Int(..) => format!("0"),
         };
-        Ok(val)
+        Ok(out)
     }
 
     /// Emit the WRITE calls and FINISHED_VAL for this value.
@@ -562,13 +590,14 @@ impl Val {
     /// `to` is the BUFFER to use, `from` is the variable name of the value.
     fn rust_write_val(
         &self,
+        val: &Val,
         to: &str,
         from: &str,
         is_var_root: bool,
     ) -> Result<String, GenerateError> {
         use std::fmt::Write;
         let mut output = String::new();
-        for path in self.rust_var_paths(from, is_var_root)? {
+        for path in self.rust_var_paths(val, from, is_var_root)? {
             write!(output, "        WRITE.unwrap()({to}, &{path} as *const _ as *const _, core::mem::size_of_val(&{path}) as u32);\n").unwrap();
         }
         write!(output, "        FINISHED_VAL.unwrap()({to});").unwrap();
@@ -578,8 +607,13 @@ impl Val {
 
     /// Compute the paths to every subfield of this value, with `from`
     /// as the base path to that value, for rust_write_val's use.
-    fn rust_var_paths(&self, from: &str, is_var_root: bool) -> Result<Vec<String>, GenerateError> {
-        let paths = match self {
+    fn rust_var_paths(
+        &self,
+        val: &Val,
+        from: &str,
+        is_var_root: bool,
+    ) -> Result<Vec<String>, GenerateError> {
+        let paths = match val {
             Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
                 vec![format!("{from}")]
             }
@@ -587,50 +621,28 @@ impl Val {
                 let mut paths = vec![];
                 for (idx, field) in fields.iter().enumerate() {
                     let base = format!("{from}.{}", FIELD_NAMES[idx]);
-                    paths.extend(field.rust_var_paths(&base, false)?);
+                    paths.extend(self.rust_var_paths(field, &base, false)?);
                 }
                 paths
             }
-            Val::Ref(val) => {
+            Val::Ref(pointee) => {
                 if is_var_root {
-                    val.rust_var_paths(from, false)?
+                    self.rust_var_paths(pointee, from, false)?
                 } else {
                     let base = format!("(*{from})");
-                    val.rust_var_paths(&base, false)?
+                    self.rust_var_paths(pointee, &base, false)?
                 }
             }
             Val::Array(vals) => {
                 let mut paths = vec![];
-                for (i, val) in vals.iter().enumerate() {
+                for (i, elem) in vals.iter().enumerate() {
                     let base = format!("{from}[{i}]");
-                    paths.extend(val.rust_var_paths(&base, false)?);
+                    paths.extend(self.rust_var_paths(elem, &base, false)?);
                 }
                 paths
             }
         };
 
         Ok(paths)
-    }
-}
-
-impl CallingConvention {
-    fn rust_convention_decl(&self) -> &'static str {
-        match self {
-            CallingConvention::All => {
-                unreachable!("CallingConvention::All is sugar that shouldn't reach here")
-            }
-            CallingConvention::Handwritten => {
-                unreachable!("CallingConvention::Handwritten shouldn't reach codegen backends!")
-            }
-            CallingConvention::C => "C",
-            CallingConvention::Cdecl => "cdecl",
-            CallingConvention::System => "system",
-            CallingConvention::Win64 => "win64",
-            CallingConvention::Sysv64 => "sysv64",
-            CallingConvention::Aapcs => "aapcs",
-            CallingConvention::Stdcall => "stdcall",
-            CallingConvention::Fastcall => "fastcall",
-            CallingConvention::Vectorcall => "vectorcall",
-        }
     }
 }

@@ -3,11 +3,10 @@ use super::*;
 
 pub static C_TEST_PREFIX: &str = include_str!("../../harness/c_test_prefix.h");
 
-static MIX_CLANG_AND_GCC: bool = false;
-
 pub struct CcAbiImpl {
-    flavor: CCFlavor,
+    cc_flavor: CCFlavor,
     platform: Platform,
+    mode: &'static str,
 }
 
 #[derive(PartialEq)]
@@ -25,6 +24,9 @@ enum Platform {
 
 impl AbiImpl for CcAbiImpl {
     fn name(&self) -> &'static str {
+        self.mode
+    }
+    fn lang(&self) -> &'static str {
         "c"
     }
     fn src_ext(&self) -> &'static str {
@@ -41,7 +43,7 @@ impl AbiImpl for CcAbiImpl {
         test: &Test,
         convention: CallingConvention,
     ) -> Result<(), BuildError> {
-        write_c_prefix(f, test)?;
+        self.write_c_prefix(f, test)?;
 
         // Generate the impls
         for function in &test.funcs {
@@ -56,7 +58,7 @@ impl AbiImpl for CcAbiImpl {
                 writeln!(
                     f,
                     "{}",
-                    input.c_write_val("CALLEE_INPUTS", ARG_NAMES[idx], false)?
+                    self.c_write_val(input, "CALLEE_INPUTS", ARG_NAMES[idx], false)?
                 )?;
             }
             writeln!(f)?;
@@ -64,19 +66,19 @@ impl AbiImpl for CcAbiImpl {
                 writeln!(
                     f,
                     "    {} = {};",
-                    output.c_var_decl(OUTPUT_NAME)?,
-                    output.c_val()?
+                    self.c_var_decl(output, OUTPUT_NAME)?,
+                    self.c_val(output)?
                 )?;
                 writeln!(
                     f,
                     "{}",
-                    output.c_write_val("CALLEE_OUTPUTS", OUTPUT_NAME, true)?
+                    self.c_write_val(output, "CALLEE_OUTPUTS", OUTPUT_NAME, true)?
                 )?;
                 writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
                 writeln!(
                     f,
                     "    {}",
-                    output.c_var_return(OUTPUT_NAME, OUT_PARAM_NAME)?
+                    self.c_var_return(output, OUTPUT_NAME, OUT_PARAM_NAME)?
                 )?;
             } else {
                 writeln!(f, "    FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);")?;
@@ -94,7 +96,7 @@ impl AbiImpl for CcAbiImpl {
         test: &Test,
         convention: CallingConvention,
     ) -> Result<(), BuildError> {
-        write_c_prefix(f, test)?;
+        self.write_c_prefix(f, test)?;
 
         // Generate the extern block
         for function in &test.funcs {
@@ -117,25 +119,25 @@ impl AbiImpl for CcAbiImpl {
                 writeln!(
                     f,
                     "    {} = {};",
-                    input.c_var_decl(ARG_NAMES[idx])?,
-                    input.c_val()?
+                    self.c_var_decl(input, ARG_NAMES[idx])?,
+                    self.c_val(input)?
                 )?;
                 writeln!(
                     f,
                     "{}",
-                    input.c_write_val("CALLER_INPUTS", ARG_NAMES[idx], true)?
+                    self.c_write_val(input, "CALLER_INPUTS", ARG_NAMES[idx], true)?
                 )?;
             }
             writeln!(f)?;
 
             // Output
             let pass_out = if let Some(output) = &function.output {
-                if let Some(out_param_var) = output.c_out_param_var(OUTPUT_NAME)? {
+                if let Some(out_param_var) = self.c_out_param_var(output, OUTPUT_NAME)? {
                     writeln!(f, "    {};", out_param_var)?;
                     write!(f, "    ")?;
                     true
                 } else {
-                    write!(f, "    {} = ", output.c_var_decl(OUTPUT_NAME)?)?;
+                    write!(f, "    {} = ", self.c_var_decl(output, OUTPUT_NAME)?)?;
                     false
                 }
             } else {
@@ -149,10 +151,10 @@ impl AbiImpl for CcAbiImpl {
                 if idx != 0 {
                     write!(f, ", ")?;
                 }
-                write!(f, "{}", input.c_arg_pass(ARG_NAMES[idx])?)?;
+                write!(f, "{}", self.c_arg_pass(input, ARG_NAMES[idx])?)?;
             }
             if pass_out {
-                let pass = function.output.as_ref().unwrap().c_arg_pass(OUTPUT_NAME)?;
+                let pass = self.c_arg_pass(function.output.as_ref().unwrap(), OUTPUT_NAME)?;
                 if function.inputs.is_empty() {
                     write!(f, "{}", pass)?;
                 } else {
@@ -165,7 +167,7 @@ impl AbiImpl for CcAbiImpl {
                 writeln!(
                     f,
                     "{}",
-                    output.c_write_val("CALLER_OUTPUTS", OUTPUT_NAME, true)?
+                    self.c_write_val(output, "CALLER_OUTPUTS", OUTPUT_NAME, true)?
                 )?;
             }
             writeln!(f, "    FINISHED_FUNC(CALLER_INPUTS, CALLER_OUTPUTS);")?;
@@ -177,72 +179,30 @@ impl AbiImpl for CcAbiImpl {
     }
 
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
-        if MIX_CLANG_AND_GCC {
-            let base_path = PathBuf::from("target/temp/");
-            let obj_path = base_path.join(format!("{lib_name}.o"));
-            let lib_path = base_path.join(format!("lib{lib_name}.a"));
-            Command::new("gcc")
-                .arg("-ffunction-sections")
-                .arg("-fdata-sections")
-                .arg("-fPIC")
-                .arg("-o")
-                .arg(&obj_path)
-                .arg("-c")
-                .arg(&src_path)
-                .output()
-                .unwrap();
-            Command::new("ar")
-                .arg("cq")
-                .arg(&lib_path)
-                .arg(&obj_path)
-                .output()
-                .unwrap();
-            Command::new("ar").arg("s").arg(&lib_path).output().unwrap();
-        } else {
-            cc::Build::new()
-                .file(src_path)
-                .opt_level(0)
-                .cargo_metadata(false)
-                // .warnings_into_errors(true)
-                .try_compile(lib_name)?;
+        match self.mode {
+            "cc" => self.compile_cc(src_path, lib_name),
+            "gcc" => self.compile_gcc(src_path, lib_name),
+            "clang" => self.compile_clang(src_path, lib_name),
+            "msvc" => self.compile_msvc(src_path, lib_name),
+            _ => unimplemented!("unknown c compiler"),
         }
-        Ok(String::from(lib_name))
     }
 
     fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
-        if MIX_CLANG_AND_GCC {
-            let base_path = PathBuf::from("target/temp/");
-            let obj_path = base_path.join(format!("{lib_name}.o"));
-            let lib_path = base_path.join(format!("lib{lib_name}.a"));
-            Command::new("clang")
-                .arg("-ffunction-sections")
-                .arg("-fdata-sections")
-                .arg("-fPIC")
-                .arg("-o")
-                .arg(&obj_path)
-                .arg("-c")
-                .arg(&src_path)
-                .output()
-                .unwrap();
-            Command::new("ar")
-                .arg("cq")
-                .arg(&lib_path)
-                .arg(&obj_path)
-                .output()
-                .unwrap();
-            Command::new("ar").arg("s").arg(&lib_path).output().unwrap();
-            Ok(String::from(lib_name))
-        } else {
-            // Currently no need to be different
-            self.compile_callee(src_path, lib_name)
+        match self.mode {
+            "cc" => self.compile_cc(src_path, lib_name),
+            "gcc" => self.compile_gcc(src_path, lib_name),
+            "clang" => self.compile_clang(src_path, lib_name),
+            "msvc" => self.compile_msvc(src_path, lib_name),
+            _ => unimplemented!("unknown c compiler"),
         }
     }
 }
 
 impl CcAbiImpl {
-    pub fn new(_system_info: &SystemInfo) -> Self {
+    pub fn new(_system_info: &Config, mode: &'static str) -> Self {
         let compiler = cc::Build::new().get_compiler();
-        let flavor = if compiler.is_like_msvc() {
+        let cc_flavor = if compiler.is_like_msvc() {
             CCFlavor::Msvc
         } else if compiler.is_like_gnu() {
             CCFlavor::Gcc
@@ -258,7 +218,73 @@ impl CcAbiImpl {
             Platform::Unixy
         };
 
-        Self { flavor, platform }
+        Self {
+            cc_flavor,
+            platform,
+            mode,
+        }
+    }
+
+    fn compile_cc(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
+        cc::Build::new()
+            .file(src_path)
+            .opt_level(0)
+            .cargo_metadata(false)
+            // .warnings_into_errors(true)
+            .try_compile(lib_name)?;
+        Ok(String::from(lib_name))
+    }
+
+    fn compile_clang(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
+        let base_path = PathBuf::from("target/temp/");
+        let obj_path = base_path.join(format!("{lib_name}.o"));
+        let lib_path = base_path.join(format!("lib{lib_name}.a"));
+        Command::new("clang")
+            .arg("-ffunction-sections")
+            .arg("-fdata-sections")
+            .arg("-fPIC")
+            .arg("-o")
+            .arg(&obj_path)
+            .arg("-c")
+            .arg(&src_path)
+            .status()
+            .unwrap();
+        Command::new("ar")
+            .arg("cq")
+            .arg(&lib_path)
+            .arg(&obj_path)
+            .status()
+            .unwrap();
+        Command::new("ar").arg("s").arg(&lib_path).status().unwrap();
+        Ok(String::from(lib_name))
+    }
+
+    fn compile_gcc(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
+        let base_path = PathBuf::from("target/temp/");
+        let obj_path = base_path.join(format!("{lib_name}.o"));
+        let lib_path = base_path.join(format!("lib{lib_name}.a"));
+        Command::new("clang")
+            .arg("-ffunction-sections")
+            .arg("-fdata-sections")
+            .arg("-fPIC")
+            .arg("-o")
+            .arg(&obj_path)
+            .arg("-c")
+            .arg(&src_path)
+            .status()
+            .unwrap();
+        Command::new("ar")
+            .arg("cq")
+            .arg(&lib_path)
+            .arg(&obj_path)
+            .status()
+            .unwrap();
+        Command::new("ar").arg("s").arg(&lib_path).status().unwrap();
+        Ok(String::from(lib_name))
+    }
+
+    fn compile_msvc(&self, _src_path: &Path, _lib_name: &str) -> Result<String, BuildError> {
+        unimplemented!()
     }
 
     fn c_convention_decl(
@@ -295,7 +321,7 @@ impl CcAbiImpl {
             C => "",
             Cdecl => {
                 if self.platform == Windows {
-                    match self.flavor {
+                    match self.cc_flavor {
                         Msvc => "__cdecl ",
                         Gcc | Clang => "__attribute__((cdecl)) ",
                     }
@@ -305,7 +331,7 @@ impl CcAbiImpl {
             }
             Stdcall => {
                 if self.platform == Windows {
-                    match self.flavor {
+                    match self.cc_flavor {
                         Msvc => "__stdcall ",
                         Gcc | Clang => "__attribute__((stdcall)) ",
                     }
@@ -315,7 +341,7 @@ impl CcAbiImpl {
             }
             Fastcall => {
                 if self.platform == Windows {
-                    match self.flavor {
+                    match self.cc_flavor {
                         Msvc => "__fastcall ",
                         Gcc | Clang => "__attribute__((fastcall)) ",
                     }
@@ -325,7 +351,7 @@ impl CcAbiImpl {
             }
             Vectorcall => {
                 if self.platform == Windows {
-                    match self.flavor {
+                    match self.cc_flavor {
                         Msvc => "__vectorcall ",
                         Gcc | Clang => "__attribute__((vectorcall)) ",
                     }
@@ -349,9 +375,9 @@ impl CcAbiImpl {
 
         // First figure out the return (by-ref requires an out-param)
         let out_param = if let Some(output) = &function.output {
-            let out_param = output.c_out_param(OUT_PARAM_NAME)?;
+            let out_param = self.c_out_param(output, OUT_PARAM_NAME)?;
             if out_param.is_none() {
-                write!(f, "{} ", output.c_arg_type()?)?;
+                write!(f, "{} ", self.c_arg_type(output)?)?;
             } else {
                 write!(f, "void ")?;
             }
@@ -369,7 +395,7 @@ impl CcAbiImpl {
             if idx != 0 {
                 write!(f, ", ")?;
             }
-            write!(f, "{}", input.c_arg_decl(ARG_NAMES[idx])?)?;
+            write!(f, "{}", self.c_arg_decl(input, ARG_NAMES[idx])?)?;
         }
 
         // Add extra implicit args
@@ -385,152 +411,148 @@ impl CcAbiImpl {
 
         Ok(())
     }
-}
 
-/// Every test should start by loading in the harness' "header"
-/// and forward-declaring any structs that will be used.
-fn write_c_prefix(f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
-    // Load test harness "headers"
-    write!(f, "{}", C_TEST_PREFIX)?;
+    /// Every test should start by loading in the harness' "header"
+    /// and forward-declaring any structs that will be used.
+    fn write_c_prefix(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+        // Load test harness "headers"
+        write!(f, "{}", C_TEST_PREFIX)?;
 
-    // Forward-decl struct types
-    let mut forward_decls = std::collections::HashMap::<String, String>::new();
-    for function in &test.funcs {
-        for val in function.inputs.iter().chain(function.output.as_ref()) {
-            for (name, decl) in val.c_forward_decl()? {
-                match forward_decls.entry(name) {
-                    std::collections::hash_map::Entry::Occupied(entry) => {
-                        if entry.get() != &decl {
-                            return Err(BuildError::InconsistentStructDefinition {
-                                name: entry.key().clone(),
-                                old_decl: entry.remove(),
-                                new_decl: decl,
-                            });
+        // Forward-decl struct types
+        let mut forward_decls = std::collections::HashMap::<String, String>::new();
+        for function in &test.funcs {
+            for val in function.inputs.iter().chain(function.output.as_ref()) {
+                for (name, decl) in self.c_forward_decl(val)? {
+                    match forward_decls.entry(name) {
+                        std::collections::hash_map::Entry::Occupied(entry) => {
+                            if entry.get() != &decl {
+                                return Err(BuildError::InconsistentStructDefinition {
+                                    name: entry.key().clone(),
+                                    old_decl: entry.remove(),
+                                    new_decl: decl,
+                                });
+                            }
                         }
-                    }
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        writeln!(f, "{decl}")?;
-                        entry.insert(decl);
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            writeln!(f, "{decl}")?;
+                            entry.insert(decl);
+                        }
                     }
                 }
             }
         }
+
+        Ok(())
     }
 
-    Ok(())
-}
-
-// FIXME: it would be nice if more of this stuff used `write!` instead of `fmt!`
-// but it's a bit of a pain in the ass to architect some of these operations that way.
-impl Val {
-    /// If this value defines a nominal type, this will spit out:
-    ///
-    /// * The type name
-    /// * The forward-declaration of that type
-    ///
-    /// To catch buggy test definitions, you should validate that all
-    /// structs that claim a particular name have the same declaration.
-    /// This is done in write_rust_prefix.
-    fn c_forward_decl(&self) -> Result<Vec<(String, String)>, GenerateError> {
+    fn c_forward_decl(&self, val: &Val) -> Result<Vec<(String, String)>, GenerateError> {
         use Val::*;
-        match self {
+        match val {
             Struct(name, fields) => {
                 let mut results = vec![];
                 for field in fields.iter() {
-                    results.extend(field.c_forward_decl()?);
+                    results.extend(self.c_forward_decl(field)?);
                 }
                 let mut output = String::new();
                 let ref_name = format!("struct {name}");
                 output.push_str(&format!("struct {name} {{\n"));
                 for (idx, field) in fields.iter().enumerate() {
-                    let line = format!("    {};\n", field.c_field_decl(FIELD_NAMES[idx])?);
+                    let line = format!("    {};\n", self.c_field_decl(field, FIELD_NAMES[idx])?);
                     output.push_str(&line);
                 }
                 output.push_str("};\n");
                 results.push((ref_name, output));
                 Ok(results)
             }
-            Array(vals) => vals[0].c_forward_decl(),
-            Ref(x) => x.c_forward_decl(),
+            Array(vals) => self.c_forward_decl(&vals[0]),
+            Ref(pointee) => self.c_forward_decl(pointee),
             _ => Ok(vec![]),
         }
     }
 
     /// The decl to use for a local var (reference-ness stripped)
-    fn c_var_decl(&self, var_name: &str) -> Result<String, GenerateError> {
+    fn c_var_decl(&self, val: &Val, var_name: &str) -> Result<String, GenerateError> {
         use Val::*;
-        let val = match self {
-            Ref(x) => x.c_var_decl(var_name)?,
+        let val = match val {
+            Ref(pointee) => self.c_var_decl(pointee, var_name)?,
             Array(_) => {
-                let mut cur_val = self;
+                let mut cur_val = val;
                 let mut array_levels = String::new();
                 while let Val::Array(vals) = cur_val {
                     array_levels.push_str(&format!("[{}]", vals.len()));
                     cur_val = &vals[0];
                 }
-                format!("{} {var_name}{array_levels}", cur_val.c_arg_type()?)
+                format!("{} {var_name}{array_levels}", self.c_arg_type(cur_val)?)
             }
-            normal_val => format!("{} {var_name}", normal_val.c_arg_type()?),
+            normal_val => format!("{} {var_name}", self.c_arg_type(normal_val)?),
         };
         Ok(val)
     }
 
     /// The decl to use for a function arg (apply referenceness)
-    fn c_arg_decl(&self, arg_name: &str) -> Result<String, GenerateError> {
-        let val = if let Val::Ref(x) = self {
-            let mut cur_val = &**x;
+    fn c_arg_decl(&self, val: &Val, arg_name: &str) -> Result<String, GenerateError> {
+        let out = if let Val::Ref(pointee) = val {
+            let mut cur_val = &**pointee;
             let mut array_levels = String::new();
             while let Val::Array(vals) = cur_val {
                 array_levels.push_str(&format!("[{}]", vals.len()));
                 cur_val = &vals[0];
             }
             if array_levels.is_empty() {
-                format!("{}* {arg_name}", cur_val.c_arg_type()?)
+                format!("{}* {arg_name}", self.c_arg_type(cur_val)?)
             } else {
-                format!("{} {arg_name}{array_levels}", cur_val.c_arg_type()?)
+                format!("{} {arg_name}{array_levels}", self.c_arg_type(cur_val)?)
             }
         } else {
-            format!("{} {arg_name}", self.c_arg_type()?)
+            format!("{} {arg_name}", self.c_arg_type(val)?)
         };
-        Ok(val)
+        Ok(out)
     }
 
     /// If the return type needs to be an out_param, this returns it
-    fn c_out_param(&self, out_param_name: &str) -> Result<Option<String>, GenerateError> {
-        let val = if let Val::Ref(x) = self {
-            let mut cur_val = &**x;
+    fn c_out_param(
+        &self,
+        val: &Val,
+        out_param_name: &str,
+    ) -> Result<Option<String>, GenerateError> {
+        let out = if let Val::Ref(pointee) = val {
+            let mut cur_val = &**pointee;
             let mut array_levels = String::new();
             while let Val::Array(vals) = cur_val {
                 array_levels.push_str(&format!("[{}]", vals.len()));
                 cur_val = &vals[0];
             }
             if array_levels.is_empty() {
-                Some(format!("{}* {out_param_name}", cur_val.c_arg_type()?))
+                Some(format!("{}* {out_param_name}", self.c_arg_type(cur_val)?))
             } else {
                 Some(format!(
                     "{} {out_param_name}{array_levels}",
-                    cur_val.c_arg_type()?
+                    self.c_arg_type(cur_val)?
                 ))
             }
         } else {
             None
         };
-        Ok(val)
+        Ok(out)
     }
 
     /// If the return type needs to be an out_param, this returns it
-    fn c_out_param_var(&self, output_name: &str) -> Result<Option<String>, GenerateError> {
-        if let Val::Ref(x) = self {
-            Ok(Some(x.c_var_decl(output_name)?))
+    fn c_out_param_var(
+        &self,
+        val: &Val,
+        output_name: &str,
+    ) -> Result<Option<String>, GenerateError> {
+        if let Val::Ref(pointee) = val {
+            Ok(Some(self.c_var_decl(pointee, output_name)?))
         } else {
             Ok(None)
         }
     }
 
     /// How to pass an argument
-    fn c_arg_pass(&self, arg_name: &str) -> Result<String, GenerateError> {
-        if let Val::Ref(x) = self {
-            if let Val::Array(_) = &**x {
+    fn c_arg_pass(&self, val: &Val, arg_name: &str) -> Result<String, GenerateError> {
+        if let Val::Ref(pointee) = val {
+            if let Val::Array(_) = &**pointee {
                 Ok(format!("{arg_name}"))
             } else {
                 Ok(format!("&{arg_name}"))
@@ -541,8 +563,13 @@ impl Val {
     }
 
     /// How to return a value
-    fn c_var_return(&self, var_name: &str, out_param_name: &str) -> Result<String, GenerateError> {
-        if let Val::Ref(_) = self {
+    fn c_var_return(
+        &self,
+        val: &Val,
+        var_name: &str,
+        out_param_name: &str,
+    ) -> Result<String, GenerateError> {
+        if let Val::Ref(_) = val {
             Ok(format!(
                 "memcpy({out_param_name}, &{var_name}, sizeof({var_name}));"
             ))
@@ -552,16 +579,16 @@ impl Val {
     }
 
     /// The type name to use for this value when it is stored in args/vars.
-    fn c_arg_type(&self) -> Result<String, GenerateError> {
+    fn c_arg_type(&self, val: &Val) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
-        let val = match self {
-            Ref(x) => {
-                let mut cur_val = &**x;
+        let val = match val {
+            Ref(pointee) => {
+                let mut cur_val = &**pointee;
                 while let Val::Array(vals) = cur_val {
                     cur_val = &vals[0];
                 }
-                format!("{}*", cur_val.c_arg_type()?)
+                format!("{}*", self.c_arg_type(cur_val)?)
             }
             Ptr(_) => format!("void*"),
             Bool(_) => format!("bool"),
@@ -603,8 +630,8 @@ impl Val {
     /// This is separated out in case there's a type that needs different
     /// handling in this context to conform to a layout (i.e. how C arrays
     /// decay into pointers when used in function args).
-    fn c_field_decl(&self, field_name: &str) -> Result<String, GenerateError> {
-        let mut cur_val = self;
+    fn c_field_decl(&self, val: &Val, field_name: &str) -> Result<String, GenerateError> {
+        let mut cur_val = val;
         let mut array_levels = String::new();
         while let Val::Array(vals) = cur_val {
             array_levels.push_str(&format!("[{}]", vals.len()));
@@ -612,26 +639,26 @@ impl Val {
         }
         Ok(format!(
             "{} {field_name}{array_levels}",
-            cur_val.c_arg_type()?
+            self.c_arg_type(cur_val)?
         ))
     }
 
     /// An expression that generates this value.
-    pub fn c_val(&self) -> Result<String, GenerateError> {
+    pub fn c_val(&self, val: &Val) -> Result<String, GenerateError> {
         use IntVal::*;
         use Val::*;
-        let val = match self {
-            Ref(x) => x.c_val()?,
+        let val = match val {
+            Ref(pointee) => self.c_val(pointee)?,
             Ptr(addr) => format!("(void*){addr}"),
             Bool(val) => format!("{val}"),
             Array(vals) => {
                 let mut output = String::new();
                 output.push_str("{ ");
-                for (idx, val) in vals.iter().enumerate() {
+                for (idx, elem) in vals.iter().enumerate() {
                     if idx != 0 {
                         output.push_str(", ");
                     }
-                    let part = format!("{}", val.c_val()?);
+                    let part = format!("{}", self.c_val(elem)?);
                     output.push_str(&part);
                 }
                 output.push_str(" }");
@@ -644,7 +671,7 @@ impl Val {
                     if idx != 0 {
                         output.push_str(", ");
                     }
-                    let part = format!(".{} = {}", FIELD_NAMES[idx], field.c_val()?);
+                    let part = format!(".{} = {}", FIELD_NAMES[idx], self.c_val(field)?);
                     output.push_str(&part);
                 }
                 output.push_str(" }");
@@ -664,22 +691,22 @@ impl Val {
                     format!("{val}f")
                 }
             }
-            Int(int_val) => match int_val {
+            Int(int_val) => match *int_val {
                 c__int128(val) => {
-                    let lower = val & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
-                    let higher = (val & 0xFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
-                    format!("((__int128_t){lower}) | (((__int128_t){higher}) << 64)")
+                    let lower = (val as u128) & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
+                    let higher = ((val as u128) & 0xFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
+                    format!("((__int128_t){lower}ull) | (((__int128_t){higher}ull) << 64)")
                 }
                 c__uint128(val) => {
                     let lower = val & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
                     let higher = (val & 0xFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
-                    format!("((__uint128_t){lower}) | (((__uint128_t){higher}) << 64)")
+                    format!("((__uint128_t){lower}ull) | (((__uint128_t){higher}ull) << 64)")
                 }
                 c_int64_t(val) => format!("{val}"),
                 c_int32_t(val) => format!("{val}"),
                 c_int16_t(val) => format!("{val}"),
                 c_int8_t(val) => format!("{val}"),
-                c_uint64_t(val) => format!("{val}"),
+                c_uint64_t(val) => format!("{val}ull"),
                 c_uint32_t(val) => format!("{val}"),
                 c_uint16_t(val) => format!("{val}"),
                 c_uint8_t(val) => format!("{val}"),
@@ -693,13 +720,14 @@ impl Val {
     /// `to` is the BUFFER to use, `from` is the variable name of the value.
     fn c_write_val(
         &self,
+        val: &Val,
         to: &str,
         from: &str,
         is_var_root: bool,
     ) -> Result<String, GenerateError> {
         use std::fmt::Write;
         let mut output = String::new();
-        for path in self.c_var_paths(from, is_var_root)? {
+        for path in self.c_var_paths(val, from, is_var_root)? {
             write!(
                 output,
                 "    WRITE({to}, (char*)&{path}, (uint32_t)sizeof({path}));\n"
@@ -713,8 +741,13 @@ impl Val {
 
     /// Compute the paths to every subfield of this value, with `from`
     /// as the base path to that value, for c_write_val's use.
-    fn c_var_paths(&self, from: &str, is_var_root: bool) -> Result<Vec<String>, GenerateError> {
-        let paths = match self {
+    fn c_var_paths(
+        &self,
+        val: &Val,
+        from: &str,
+        is_var_root: bool,
+    ) -> Result<Vec<String>, GenerateError> {
+        let paths = match val {
             Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
                 vec![format!("{from}")]
             }
@@ -722,25 +755,25 @@ impl Val {
                 let mut paths = vec![];
                 for (idx, field) in fields.iter().enumerate() {
                     let base = format!("{from}.{}", FIELD_NAMES[idx]);
-                    paths.extend(field.c_var_paths(&base, false)?);
+                    paths.extend(self.c_var_paths(field, &base, false)?);
                 }
                 paths
             }
-            Val::Ref(val) => {
+            Val::Ref(pointee) => {
                 if is_var_root {
-                    val.c_var_paths(from, false)?
-                } else if let Val::Array(_) = &**val {
-                    val.c_var_paths(from, false)?
+                    self.c_var_paths(pointee, from, false)?
+                } else if let Val::Array(_) = &**pointee {
+                    self.c_var_paths(pointee, from, false)?
                 } else {
                     let base = format!("(*{from})");
-                    val.c_var_paths(&base, false)?
+                    self.c_var_paths(pointee, &base, false)?
                 }
             }
             Val::Array(vals) => {
                 let mut paths = vec![];
-                for (i, val) in vals.iter().enumerate() {
+                for (i, elem) in vals.iter().enumerate() {
                     let base = format!("{from}[{i}]");
-                    paths.extend(val.c_var_paths(&base, false)?);
+                    paths.extend(self.c_var_paths(elem, &base, false)?);
                 }
                 paths
             }
@@ -752,11 +785,11 @@ impl Val {
     /*
     /// Format specifiers for C types, for print debugging.
     /// This is no longer used but it's a shame to throw out.
-    pub fn cfmt(&self) -> &'static str {
+    pub fn cfmt(&self, val: &Val) -> &'static str {
         use Val::*;
         use IntVal::*;
-        match self {
-            Ref(x) => x.cfmt(),
+        match val {
+            Ref(x) => self.cfmt(x),
             Ptr(_) => "\"p\"",
             Bool(_) => "\"d\"",
             Array(_) => {

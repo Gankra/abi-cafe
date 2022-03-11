@@ -1,3 +1,6 @@
+mod abis;
+
+use abis::*;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
@@ -6,10 +9,6 @@ use std::io::BufReader;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-
-mod abis;
-
-use abis::*;
 
 /// The tests to run (We don't just auto-spider the tests dir, but maybe we should?
 /// But it's often nice to be able to temporarily turn them on and off and I'm not
@@ -32,6 +31,13 @@ pub static TESTS: &[&str] = &[
     "bool",
     "ui128",
     "sysv_i128_emulation",
+];
+
+/// The pairings of impls to run. LHS calls RHS.
+pub static TEST_PAIRS: &[(&str, &str)] = &[
+    (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
+    (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
+    (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
 ];
 
 #[derive(Debug, thiserror::Error)]
@@ -110,18 +116,30 @@ fn main() -> Result<(), Box<dyn Error>> {
     env::set_var("OUT_DIR", &out_dir);
     env::set_var("HOST", built_info::HOST);
     env::set_var("TARGET", built_info::TARGET);
-    env::set_var("OPT_LEVEL", "3");
+    env::set_var("OPT_LEVEL", "0");
 
-    let system_info = SystemInfo {
+    let cfg = Config {
         // whatever
     };
 
     let mut abi_impls: HashMap<&str, Box<dyn AbiImpl>> = HashMap::new();
+    abi_impls.insert(ABI_IMPL_RUSTC, Box::new(abis::RustcAbiImpl::new(&cfg)));
     abi_impls.insert(
-        ABI_IMPL_RUSTC,
-        Box::new(abis::rust::RustcAbiImpl::new(&system_info)),
+        ABI_IMPL_CC,
+        Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_CC)),
     );
-    abi_impls.insert(ABI_IMPL_CC, Box::new(abis::c::CcAbiImpl::new(&system_info)));
+    abi_impls.insert(
+        ABI_IMPL_GCC,
+        Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_GCC)),
+    );
+    abi_impls.insert(
+        ABI_IMPL_CLANG,
+        Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_CLANG)),
+    );
+    abi_impls.insert(
+        ABI_IMPL_MSVC,
+        Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_MSVC)),
+    );
 
     let mut reports = Vec::new();
     let mut skips = 0;

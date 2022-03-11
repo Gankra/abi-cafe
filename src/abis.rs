@@ -1,22 +1,21 @@
 #![allow(non_camel_case_types)]
 
-use super::BuildError;
-use std::io::Write;
-use std::path::Path;
-
 // Backends that can generate + compile an implementation's code into a staticlib.
 pub mod c;
 pub mod rust;
 
+use super::BuildError;
+use std::io::Write;
+use std::path::Path;
+
+pub use c::CcAbiImpl;
+pub use rust::RustcAbiImpl;
+
 pub static ABI_IMPL_RUSTC: &str = "rustc";
 pub static ABI_IMPL_CC: &str = "cc";
-
-/// The pairings of impls to run. LHS calls RHS.
-pub static TEST_PAIRS: &[(&str, &str)] = &[
-    (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
-    (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
-    (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
-];
+pub static ABI_IMPL_GCC: &str = "gcc";
+pub static ABI_IMPL_CLANG: &str = "clang";
+pub static ABI_IMPL_MSVC: &str = "msvc";
 
 // pub static ALL_ABIS: &[AbiRef] = &[RUST_ABI, C_ABI];
 pub static ALL_CONVENTIONS: &[CallingConvention] = &[
@@ -53,6 +52,7 @@ pub static OUT_PARAM_NAME: &str = "out";
 /// ABI is probably a bad name for this... it's like, a language/compiler impl. idk.
 pub trait AbiImpl {
     fn name(&self) -> &'static str;
+    fn lang(&self) -> &'static str;
     fn src_ext(&self) -> &'static str;
     fn supports_convention(&self, _convention: CallingConvention) -> bool;
 
@@ -84,7 +84,7 @@ pub enum GenerateError {
 }
 
 #[derive(Debug, Clone)]
-pub struct SystemInfo {}
+pub struct Config {}
 
 /// A test, containing several subtests, each its own function
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]

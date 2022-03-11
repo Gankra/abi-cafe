@@ -3,6 +3,8 @@ use super::*;
 
 pub static C_TEST_PREFIX: &str = include_str!("../../harness/c_test_prefix.h");
 
+static MIX_CLANG_AND_GCC: bool = false;
+
 pub struct CcAbiImpl {
     flavor: CCFlavor,
     platform: Platform,
@@ -175,17 +177,65 @@ impl AbiImpl for CcAbiImpl {
     }
 
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
-        cc::Build::new()
-            .file(src_path)
-            .cargo_metadata(false)
-            // .warnings_into_errors(true)
-            .try_compile(lib_name)?;
+        if MIX_CLANG_AND_GCC {
+            let base_path = PathBuf::from("target/temp/");
+            let obj_path = base_path.join(format!("{lib_name}.o"));
+            let lib_path = base_path.join(format!("lib{lib_name}.a"));
+            Command::new("gcc")
+                .arg("-ffunction-sections")
+                .arg("-fdata-sections")
+                .arg("-fPIC")
+                .arg("-o")
+                .arg(&obj_path)
+                .arg("-c")
+                .arg(&src_path)
+                .output()
+                .unwrap();
+            Command::new("ar")
+                .arg("cq")
+                .arg(&lib_path)
+                .arg(&obj_path)
+                .output()
+                .unwrap();
+            Command::new("ar").arg("s").arg(&lib_path).output().unwrap();
+        } else {
+            cc::Build::new()
+                .file(src_path)
+                .opt_level(0)
+                .cargo_metadata(false)
+                // .warnings_into_errors(true)
+                .try_compile(lib_name)?;
+        }
         Ok(String::from(lib_name))
     }
 
     fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
-        // Currently no need to be different
-        self.compile_callee(src_path, lib_name)
+        if MIX_CLANG_AND_GCC {
+            let base_path = PathBuf::from("target/temp/");
+            let obj_path = base_path.join(format!("{lib_name}.o"));
+            let lib_path = base_path.join(format!("lib{lib_name}.a"));
+            Command::new("clang")
+                .arg("-ffunction-sections")
+                .arg("-fdata-sections")
+                .arg("-fPIC")
+                .arg("-o")
+                .arg(&obj_path)
+                .arg("-c")
+                .arg(&src_path)
+                .output()
+                .unwrap();
+            Command::new("ar")
+                .arg("cq")
+                .arg(&lib_path)
+                .arg(&obj_path)
+                .output()
+                .unwrap();
+            Command::new("ar").arg("s").arg(&lib_path).output().unwrap();
+            Ok(String::from(lib_name))
+        } else {
+            // Currently no need to be different
+            self.compile_callee(src_path, lib_name)
+        }
     }
 }
 

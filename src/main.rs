@@ -104,6 +104,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     generate_procedural_tests();
 
     let out_dir = PathBuf::from("target/temp/");
+    std::fs::create_dir_all(&out_dir).expect("couldn't write to target/temp??");
 
     // Set up env vars for CC
     env::set_var("OUT_DIR", &out_dir);

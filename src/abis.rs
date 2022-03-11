@@ -15,6 +15,7 @@ pub static ABI_IMPL_CC: &str = "cc";
 pub static TEST_PAIRS: &[(&str, &str)] = &[
     (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
     (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
+    (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
 ];
 
 // pub static ALL_ABIS: &[AbiRef] = &[RUST_ABI, C_ABI];

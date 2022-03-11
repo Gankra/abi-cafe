@@ -1,5 +1,7 @@
 # ABI-Checker
 
+Run --help to get options for configuring execution.
+
 This tool helps automate testing that two languages/compilers agree on ABIs for the purposes of FFI. This is still in early development so lots of stuff is stubbed out.
 
 The principle of the tool is as follows:
@@ -11,8 +13,15 @@ The principle of the tool is as follows:
 * Load that dynamic lib in, pass in the callbacks, and run it
 * Check that both sides reported the same values
 
-By running this natively on whatever platform you care about, this will tell you what FFI interfaces do and don't currently work. Ideally all you need to do is `cargo run`, but we're dealing with native toolchains...
+By running this natively on whatever platform you care about, this will tell you what FFI interfaces do and don't currently work. Ideally all you need to do is `cargo run`, but we're dealing with native toolchains so, expect toolchain bugs!
 
+By default we will:
+
+* run all tests
+* under every possible calling convention
+* for a selection of reasonable "impl calls impl" pairings (e.g. rustc_calls_cc)
+
+But you can the CLI interface lets you override these defaults. This is especially useful for --pair because it lets you access *more* specific pairings, like if you really want to specifically test gcc_calls_clang.
 
 
 
@@ -26,21 +35,29 @@ Here are the current things that work.
 "ABI Implementations" refer to a specific compiler or language which claims to implement some ABIs.
 The currently supported AbiImpls are:
 
-* System rustc (via your PATH)
-* System cc (via the CC crate, which can also grab a local msvc)
+* rustc - uses the rustc on your PATH
+* cc - gets the "system" C compiler via the CC crate (supports msvc on windows)
+* gcc - explicitly run the gcc on your PATH (probably less reliable than cc)
+* clang  - explicitly run the clang on your PATH (probably less reliable than cc)
+* ~~msvc~~ (unimplemented)
 
-We automatically test both "Rust calls C" and "C calls Rust".
+By default, we test the following pairings:
+
+* rustc_calls_cc
+* cc_calls_rustc
+* cc_calls_cc
 
 In theory other implementations aren't *too bad* to add. You just need to:
 
 * Add an implementation of abis::AbiImpl
-    * Specify the name and source-file extension
+    * Specify the name, language, and source-file extension
     * Specify supported calling conventions
     * Specify how to generate a caller from a signature
     * Specify how to generate a callee from a signature
     * Specify how to compile a source file to a static lib
-* Register what you want it paired with in abis::TEST_PAIRS
-    * i.e. (YOUR_ABI, C_ABI) will have the harness test you calling into C
+* Register it in the `abi_impls` map in `fn main`
+* (Optional) Register what you want it paired with by default in `DEFAULT_TEST_PAIRS` 
+    * i.e. (ABI_IMPL_YOU, ABI_IMPL_CC) will have the harness test you calling into C
 
 See the Test Harness section below for details on how to use it.
 
@@ -53,8 +70,8 @@ We try to generate and test all supported conventions.
 
 Universal Conventions:
 
-* Handwritten Conventions (opaque to the framework, lets you do whatever)
-* Platform Default C Convention (extern "C")
+* handwritten: run handwritten code (opaque to the framework, lets you do whatever)
+* c: the platform's default C convention (extern "C")
 
 Windows Conventions:
 
@@ -83,9 +100,9 @@ The test format support for the following types/concepts:
 
 # Adding Tests
 
-Tests are specified as [ron](https://github.com/ron-rs/ron) files in the test directory, because it's more compact than JSON, has comments, and is more reliable with large integers. Because C is in some sense the "lingua franca" of FFI that everyone has to deal with, we prefer using C types in these definitions.
+Tests are specified as [ron](https://github.com/ron-rs/ron) files in the test/ directory, because it's more compact than JSON, has comments, and is more reliable with large integers. Because C is in some sense the "lingua franca" of FFI that everyone has to deal with, we prefer using C types in these definitions.
 
-**Tests must also be registered in the TESTS global in main.rs**
+You don't need to register the test anywhere, we will just try to parse every file in that directory.
 
 The "default" workflow is to handwrite a ron file, and the testing framework will handle generating the actual code implementating that interface (example: structs.ron). Generated impls will be output to the generated_impls dir for debugging. Build artifacts will get dumped in target/temp/ if you want to debug those too.
 
@@ -155,6 +172,7 @@ Ideally you shouldn't have to worry about *how* the callbacks work, so I'll just
 // Caller Side
 uint64_t basic_val(struct MyStruct arg0, int32_t arg1);
 
+// The test harness will invoke your test through this symbol!
 void do_test(void) {
     // Initialize and report the inputs
     struct MyStruct arg0 = { 241, 1234.23 };

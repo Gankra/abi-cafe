@@ -1,18 +1,18 @@
 [package]
+edition = "2021"
 name = "abi-checker"
 version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cc = "*"
-built = "*"
-serde_json = "*"
-ron = "*"
-serde = "*"
-libloading = "*"
-thiserror = "*"
+built = "0.5.1"
+cc = "1.0.73"
+clap = { version = "3.1.6", features = ["cargo", "wrap_help"] }
+libloading = "0.7.3"
+log = "0.4.14"
+ron = "0.7.0"
+serde = "1.0.136"
+simplelog = "0.11.2"
+thiserror = "1.0.30"
 
 
 [build-dependencies]

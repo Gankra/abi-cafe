@@ -83,9 +83,6 @@ pub enum GenerateError {
     UnsupportedConvention,
 }
 
-#[derive(Debug, Clone)]
-pub struct Config {}
-
 /// A test, containing several subtests, each its own function
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Test {
@@ -228,6 +225,22 @@ impl CallingConvention {
             CallingConvention::Fastcall => "fastcall",
             CallingConvention::Vectorcall => "vectorcall",
         }
+    }
+    pub fn from_str(input: &str) -> Option<Self> {
+        Some(match input {
+            "all" => CallingConvention::All,
+            "handwritten" => CallingConvention::Handwritten,
+            "c" => CallingConvention::C,
+            "cdecl" => CallingConvention::Cdecl,
+            "system" => CallingConvention::System,
+            "win64" => CallingConvention::Win64,
+            "sysv64" => CallingConvention::Sysv64,
+            "aapcs" => CallingConvention::Aapcs,
+            "stdcall" => CallingConvention::Stdcall,
+            "fastcall" => CallingConvention::Fastcall,
+            "vectorcall" => CallingConvention::Vectorcall,
+            _ => return None,
+        })
     }
 }
 

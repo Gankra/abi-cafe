@@ -1,6 +1,7 @@
 mod abis;
 
 use abis::*;
+use clap::{AppSettings, Arg};
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
@@ -9,36 +10,19 @@ use std::io::BufReader;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+/*
+use log::error;
+use simplelog::{
+    ColorChoice, ConfigBuilder, Level, LevelFilter, TermLogger, TerminalMode, WriteLogger,
+};
+ */
 
-/// The tests to run (We don't just auto-spider the tests dir, but maybe we should?
-/// But it's often nice to be able to temporarily turn them on and off and I'm not
-/// in the mood to implement CLI test filtering right now.
-pub static TESTS: &[&str] = &[
-    "opaque_example",
-    "structs",
-    "by_ref",
-    "i8",
-    "i16",
-    "i32",
-    "i64",
-    "u8",
-    "u16",
-    "u32",
-    "u64",
-    "f32",
-    "f64",
-    "ptr",
-    "bool",
-    "ui128",
-    "sysv_i128_emulation",
-];
-
-/// The pairings of impls to run. LHS calls RHS.
-pub static TEST_PAIRS: &[(&str, &str)] = &[
-    (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
-    (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
-    (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
-];
+/// Slurps up details of how this crate was compiled, which we can use
+/// to better compile the actual tests since we're currently compiling them on
+/// the same platform with the same toolchains!
+pub mod built_info {
+    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
@@ -96,18 +80,144 @@ pub struct TestReport {
     results: Vec<Result<(), TestFailure>>,
 }
 
-/// Slurps up details of how this crate was compiled, which we can use
-/// to better compile the actual tests since we're currently compiling them on
-/// the same platform with the same toolchains!
-pub mod built_info {
-    include!(concat!(env!("OUT_DIR"), "/built.rs"));
+#[derive(Debug, Clone)]
+pub struct Config {
+    procgen_tests: bool,
+    run_conventions: Vec<CallingConvention>,
+    run_impls: Vec<String>,
+    run_pairs: Vec<(String, String)>,
+    run_tests: Vec<String>,
+}
+
+fn make_app() -> Config {
+    static ABI_IMPLS: &[&str] = &[
+        ABI_IMPL_RUSTC,
+        ABI_IMPL_CC,
+        ABI_IMPL_GCC,
+        ABI_IMPL_CLANG,
+        ABI_IMPL_MSVC,
+    ];
+    /// The pairings of impls to run. LHS calls RHS.
+    static DEFAULT_TEST_PAIRS: &[(&str, &str)] = &[
+        (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
+        (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
+        (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
+    ];
+
+    let app = clap::Command::new("abi-checker")
+        .version(clap::crate_version!())
+        .about("Compares the FFI ABIs of different langs/compilers by generating and running them.")
+        .next_line_help(true)
+        .setting(AppSettings::DeriveDisplayOrder)
+        .arg(
+            Arg::new("procgen-tests")
+                .long("procgen-tests")
+                .long_help("Regenerate the procgen test manifests"),
+        )
+        .arg(
+            Arg::new("convention")
+                .long("convention")
+                .long_help("Only run the given calling conventions")
+                .possible_values(&[
+                    "c",
+                    "cdecl",
+                    "fastcall",
+                    "stdcall",
+                    "vectorcall",
+                    "handwritten",
+                ])
+                .multiple_values(true)
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::new("impl")
+                .long("impl")
+                .long_help("Only run the given impls (compilers/languages)")
+                .possible_values(ABI_IMPLS)
+                .multiple_values(true)
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::new("test")
+                .long("test")
+                .long_help("Only run the given tests")
+                .multiple_values(true)
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::new("pair")
+                .long("pair")
+                .long_help("Only run the given impl pairs, in the form of impl_calls_impl")
+                .multiple_values(true)
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .after_help("");
+
+    let matches = app.get_matches();
+    let procgen_tests = matches.is_present("procgen-tests");
+
+    let mut run_conventions: Vec<_> = matches
+        .values_of("convention")
+        .into_iter()
+        .flatten()
+        .map(|conv| CallingConvention::from_str(conv).unwrap())
+        .collect();
+
+    if run_conventions.is_empty() {
+        run_conventions = ALL_CONVENTIONS.into_iter().copied().collect();
+    }
+
+    let run_impls = matches
+        .values_of("impl")
+        .into_iter()
+        .flatten()
+        .map(String::from)
+        .collect();
+
+    let mut run_pairs: Vec<_> = matches
+        .values_of("pair")
+        .into_iter()
+        .flatten()
+        .map(|pair| {
+            pair.split_once("_calls_")
+                .expect("invalid 'pair' syntax, must be 'impl_calls_impl'")
+        })
+        .map(|(a, b)| (String::from(a), String::from(b)))
+        .collect();
+
+    if run_pairs.is_empty() {
+        run_pairs = DEFAULT_TEST_PAIRS
+            .into_iter()
+            .map(|&(a, b)| (String::from(a), String::from(b)))
+            .collect()
+    }
+
+    let run_tests = matches
+        .values_of("test")
+        .into_iter()
+        .flatten()
+        .map(String::from)
+        .collect();
+
+    Config {
+        procgen_tests,
+        run_conventions,
+        run_impls,
+        run_tests,
+        run_pairs,
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let cfg = make_app();
     // Before doing anything, procedurally generate tests
     // (this is internally disabled by default, but left here
     // to ensure it keeps compiling for whenever it's needed.)
-    generate_procedural_tests();
+    generate_procedural_tests(cfg.procgen_tests);
 
     let out_dir = PathBuf::from("target/temp/");
     std::fs::create_dir_all(&out_dir).expect("couldn't write to target/temp??");
@@ -117,10 +227,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     env::set_var("HOST", built_info::HOST);
     env::set_var("TARGET", built_info::TARGET);
     env::set_var("OPT_LEVEL", "0");
-
-    let cfg = Config {
-        // whatever
-    };
 
     let mut abi_impls: HashMap<&str, Box<dyn AbiImpl>> = HashMap::new();
     abi_impls.insert(ABI_IMPL_RUSTC, Box::new(abis::RustcAbiImpl::new(&cfg)));
@@ -143,27 +249,42 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut reports = Vec::new();
     let mut skips = 0;
+
     // Grab all the tests
-    for test_name in TESTS {
+    let mut tests = vec![];
+    for entry in std::fs::read_dir("tests")? {
+        let entry = entry?;
         // Get the test description
-        let test = match read_test_manifest(test_name) {
+        let test = match read_test_manifest(&entry.path()) {
             Ok(test) => test,
             Err(e) => {
-                eprintln!("test {test_name}'s .ron file couldn't be parsed {}", e);
+                eprintln!("test {:?}'s .ron file couldn't be parsed {}", entry, e);
                 continue;
             }
         };
+        tests.push(test);
+    }
+    tests.sort_by(|t1, t2| t1.name.cmp(&t2.name));
 
-        let mut had_some_convention = false;
-        for &convention in ALL_CONVENTIONS {
+    for test in tests {
+        if !cfg.run_tests.is_empty() && !cfg.run_tests.contains(&test.name) {
+            continue;
+        }
+        for &convention in &cfg.run_conventions {
             if !test.has_convention(convention) {
                 // Don't bother with a convention if the test doesn't use it.
                 continue;
             }
             // Create versions of the test for each "X calls Y" pair we care about.
-            for (caller_id, callee_id) in TEST_PAIRS {
-                let caller = &**abi_impls.get(caller_id).expect("invalid id for caller!");
-                let callee = &**abi_impls.get(callee_id).expect("invalid id for callee!");
+            for (caller_id, callee_id) in &cfg.run_pairs {
+                if !cfg.run_impls.is_empty()
+                    && !cfg.run_impls.iter().any(|x| x == caller_id)
+                    && !cfg.run_impls.iter().any(|x| &**x == callee_id)
+                {
+                    continue;
+                }
+                let caller = &**abi_impls.get(&**caller_id).expect("invalid id for caller!");
+                let callee = &**abi_impls.get(&**callee_id).expect("invalid id for callee!");
 
                 let caller_name = caller.name();
                 let callee_name = callee.name();
@@ -180,7 +301,6 @@ fn main() -> Result<(), Box<dyn Error>> {
                     skips += 1;
                     continue;
                 }
-                had_some_convention = true;
 
                 let result = do_test(&test, convention, caller, callee, &out_dir);
 
@@ -193,11 +313,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } else if let Err(e) = &result {
                     eprintln!("test failed: {}", e);
                 }
-                reports.push((test_name, convention, caller.name(), callee.name(), result));
+                reports.push((
+                    test.name.clone(),
+                    convention,
+                    caller.name(),
+                    callee.name(),
+                    result,
+                ));
             }
-        }
-        if !had_some_convention {
-            panic!("test {test_name}'s .ron file had no calling conventions!");
         }
     }
 
@@ -209,7 +332,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut total_fails = 0;
     for (test_name, convention, caller_name, callee_name, report) in reports {
         let convention_name = convention.name();
-        let pretty_test_name = full_test_name(test_name, convention_name, caller_name, callee_name);
+        let pretty_test_name =
+            full_test_name(&test_name, convention_name, caller_name, callee_name);
         print!("{pretty_test_name:<32} ");
         match report {
             Err(_) => {
@@ -239,7 +363,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .iter()
                     .map(|test_func| {
                         full_subtest_name(
-                            test_name,
+                            &test_name,
                             convention_name,
                             caller_name,
                             callee_name,
@@ -329,14 +453,13 @@ fn do_test(
 }
 
 /// Read a test .ron file
-fn read_test_manifest(test_name: &str) -> Result<Test, BuildError> {
-    let test_file = format!("tests/{test_name}.ron");
+fn read_test_manifest(test_file: &Path) -> Result<Test, BuildError> {
     let file = File::open(&test_file)?;
     let mut reader = BufReader::new(file);
     let mut input = String::new();
     reader.read_to_string(&mut input)?;
-    let test: Test =
-        ron::from_str(&input).map_err(|e| BuildError::ParseError(test_file, input, e))?;
+    let test: Test = ron::from_str(&input)
+        .map_err(|e| BuildError::ParseError(test_file.to_string_lossy().into_owned(), input, e))?;
     Ok(test)
 }
 
@@ -710,9 +833,9 @@ fn full_subtest_name(
 ///
 /// **NOTE: this is disabled by default, the results are checked in.
 /// If you want to regenerate these tests, just remove the early return.**
-fn generate_procedural_tests() {
+fn generate_procedural_tests(regenerate: bool) {
     // Regeneration disabled by default.
-    if true {
+    if !regenerate {
         return;
     }
 

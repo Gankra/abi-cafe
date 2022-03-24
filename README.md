@@ -189,7 +189,7 @@ void do_test(void) {
 
     // Report the output
     WRITE(CALLER_OUTPUTS, (char*)&output, (uint32_t)sizeof(output));
-    FINISHED_VAL(CALLER_INPUTS);
+    FINISHED_VAL(CALLER_OUTPUTS);
 
     // Declare that the test is complete on our side
     FINISHED_FUNC(CALLER_INPUTS, CALLER_OUTPUTS);
@@ -210,7 +210,7 @@ uint64_t basic_val(struct MyStruct arg0, int32_t arg1) {
     // Initialize and report the output
     uint64_t output = 17;
     WRITE(CALLEE_OUTPUTS, (char*)&output, (uint32_t)sizeof(output));
-    FINISHED_VAL(CALLEE_INPUTS);
+    FINISHED_VAL(CALLEE_OUTPUTS);
 
     // Declare that the test is complete on our side
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);

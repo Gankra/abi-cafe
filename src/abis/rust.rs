@@ -8,6 +8,7 @@ static STRUCT_128: bool = false; // cfg!(target_arch="x86_64");
 #[allow(dead_code)]
 pub struct RustcAbiImpl {
     is_nightly: bool,
+    codegen_backend: Option<String>,
 }
 
 impl AbiImpl for RustcAbiImpl {
@@ -199,13 +200,12 @@ impl AbiImpl for RustcAbiImpl {
     }
 
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
-        let out = Command::new("rustc")
-            .arg("--crate-type")
-            .arg("staticlib")
-            .arg("--out-dir")
-            .arg("target/temp/")
-            .arg(src_path)
-            .output()?;
+        let mut cmd = Command::new("rustc");
+        cmd.arg("--crate-type").arg("staticlib").arg("--out-dir").arg("target/temp/").arg(src_path);
+        if let Some(codegen_backend) = &self.codegen_backend {
+            cmd.arg(format!("-Zcodegen-backend={codegen_backend}"));
+        }
+        let out = cmd.output()?;
 
         if !out.status.success() {
             Err(BuildError::RustCompile(out))
@@ -220,9 +220,10 @@ impl AbiImpl for RustcAbiImpl {
 }
 
 impl RustcAbiImpl {
-    pub fn new(_system_info: &Config) -> Self {
+    pub fn new(_system_info: &Config, codegen_backend: Option<String>) -> Self {
         Self {
             is_nightly: built_info::RUSTC_VERSION.contains("nightly"),
+            codegen_backend,
         }
     }
 

@@ -34,7 +34,7 @@ pub enum BuildError {
         width=.2.position.col.saturating_sub(1),
 )]
     ParseError(String, String, ron::error::Error),
-    #[error("rust compile error \n{} \n{}", 
+    #[error("rust compile error \n{} \n{}",
         std::str::from_utf8(&.0.stdout).unwrap(),
         std::str::from_utf8(&.0.stderr).unwrap())]
     RustCompile(std::process::Output),
@@ -93,6 +93,7 @@ pub struct Config {
     run_impls: Vec<String>,
     run_pairs: Vec<(String, String)>,
     run_tests: Vec<String>,
+    rustc_codegen_backends: Vec<(String, String)>,
 }
 
 fn make_app() -> Config {
@@ -157,6 +158,13 @@ fn make_app() -> Config {
                 .multiple_values(true)
                 .takes_value(true),
         )
+        .arg(
+            Arg::new("add-rustc-codegen-backend")
+                .long("add-rustc-codegen-backend")
+                .long_help("Add a rustc codegen backend, in the form of impl_name:path/to/backend")
+                .multiple_values(true)
+                .takes_value(true),
+        )
         .after_help("");
 
     let matches = app.get_matches();
@@ -205,12 +213,30 @@ fn make_app() -> Config {
         .map(String::from)
         .collect();
 
+    let rustc_codegen_backends = matches.values_of("add-rustc-codegen-backend").into_iter()
+        .flatten()
+        .map(|pair| {
+            pair.split_once(':')
+                .expect("invalid syntax, must be 'impl_name:path/to/backend'")
+        })
+        .map(|(a, b)| (String::from(a), String::from(b)))
+        .collect();
+
+    for &(ref name, ref _path) in &rustc_codegen_backends {
+        if !run_pairs.iter().any(|(a, b)| a == name || b == name) {
+            eprintln!("Warning: Rustc codegen backend `{name}` is not tested.");
+            eprintln!("Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.");
+            eprintln!();
+        }
+    }
+
     Config {
         procgen_tests,
         run_conventions,
         run_impls,
         run_tests,
         run_pairs,
+        rustc_codegen_backends,
     }
 }
 
@@ -231,7 +257,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     env::set_var("OPT_LEVEL", "0");
 
     let mut abi_impls: HashMap<&str, Box<dyn AbiImpl>> = HashMap::new();
-    abi_impls.insert(ABI_IMPL_RUSTC, Box::new(abis::RustcAbiImpl::new(&cfg)));
+    abi_impls.insert(ABI_IMPL_RUSTC, Box::new(abis::RustcAbiImpl::new(&cfg, None)));
     abi_impls.insert(
         ABI_IMPL_CC,
         Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_CC)),
@@ -248,6 +274,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         ABI_IMPL_MSVC,
         Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_MSVC)),
     );
+
+    for &(ref name, ref path) in &cfg.rustc_codegen_backends {
+        abi_impls.insert(
+            name,
+            Box::new(abis::RustcAbiImpl::new(&cfg, Some(path.to_owned()))),
+        );
+    }
 
     let mut reports = Vec::new();
     let mut skips = 0;

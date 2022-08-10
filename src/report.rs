@@ -27,6 +27,15 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
         result.check = Busted(Check);
     }
 
+    // i128 types are fake on windows so this is all random garbage that might
+    // not even compile, but that datapoint is a little interesting/useful
+    // so let's keep running them and just ignore the result for now.
+    //
+    // Anyone who cares about this situation more can make the expectations more precise.
+    if cfg!(windows) && test.test_name == "ui128" {
+        result.check = Random;
+    }
+
     // This test is just for investigation right now, nothing normative
     if test.test_name == "sysv_i128_emulation" {
         result.check = Random;
@@ -35,15 +44,11 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
     //
     //
     // THIS AREA RESERVED FOR VENDORS TO APPLY PATCHES
-    //
-    //
 
-    //
-    //
     // END OF VENDOR RESERVED AREA
     //
     //
-    
+
     result
 }
 

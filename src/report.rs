@@ -31,12 +31,19 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
     if test.test_name == "sysv_i128_emulation" {
         result.check = Random;
     }
-    
 
+    //
+    //
     // THIS AREA RESERVED FOR VENDORS TO APPLY PATCHES
+    //
+    //
 
+    //
+    //
     // END OF VENDOR RESERVED AREA
-
+    //
+    //
+    
     result
 }
 

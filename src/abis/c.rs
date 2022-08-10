@@ -1,3 +1,5 @@
+use crate::Config;
+
 use super::super::*;
 use super::*;
 
@@ -42,7 +44,7 @@ impl AbiImpl for CcAbiImpl {
         f: &mut dyn Write,
         test: &Test,
         convention: CallingConvention,
-    ) -> Result<(), BuildError> {
+    ) -> Result<(), GenerateError> {
         self.write_c_prefix(f, test)?;
 
         // Generate the impls
@@ -95,7 +97,7 @@ impl AbiImpl for CcAbiImpl {
         f: &mut dyn Write,
         test: &Test,
         convention: CallingConvention,
-    ) -> Result<(), BuildError> {
+    ) -> Result<(), GenerateError> {
         self.write_c_prefix(f, test)?;
 
         // Generate the extern block
@@ -370,7 +372,7 @@ impl CcAbiImpl {
         f: &mut dyn Write,
         function: &Func,
         convention: CallingConvention,
-    ) -> Result<(), BuildError> {
+    ) -> Result<(), GenerateError> {
         let convention_decl = self.c_convention_decl(convention)?;
 
         // First figure out the return (by-ref requires an out-param)
@@ -414,7 +416,7 @@ impl CcAbiImpl {
 
     /// Every test should start by loading in the harness' "header"
     /// and forward-declaring any structs that will be used.
-    fn write_c_prefix(&self, f: &mut dyn Write, test: &Test) -> Result<(), BuildError> {
+    fn write_c_prefix(&self, f: &mut dyn Write, test: &Test) -> Result<(), GenerateError> {
         // Load test harness "headers"
         write!(f, "{}", C_TEST_PREFIX)?;
 
@@ -426,7 +428,7 @@ impl CcAbiImpl {
                     match forward_decls.entry(name) {
                         std::collections::hash_map::Entry::Occupied(entry) => {
                             if entry.get() != &decl {
-                                return Err(BuildError::InconsistentStructDefinition {
+                                return Err(GenerateError::InconsistentStructDefinition {
                                     name: entry.key().clone(),
                                     old_decl: entry.remove(),
                                     new_decl: decl,

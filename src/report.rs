@@ -27,6 +27,12 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
         result.check = Busted(Check);
     }
 
+    // This test is just for investigation right now, nothing normative
+    if test.test_name == "sysv_i128_emulation" {
+        result.check = Random;
+    }
+    
+
     // THIS AREA RESERVED FOR VENDORS TO APPLY PATCHES
 
     // END OF VENDOR RESERVED AREA

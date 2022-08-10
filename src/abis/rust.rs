@@ -50,7 +50,7 @@ impl AbiImpl for RustcAbiImpl {
         f: &mut dyn Write,
         test: &Test,
         convention: CallingConvention,
-    ) -> Result<(), BuildError> {
+    ) -> Result<(), GenerateError> {
         self.write_rust_prefix(f, test, convention)?;
         let convention_decl = self.rust_convention_decl(convention);
 
@@ -143,7 +143,7 @@ impl AbiImpl for RustcAbiImpl {
         f: &mut dyn Write,
         test: &Test,
         convention: CallingConvention,
-    ) -> Result<(), BuildError> {
+    ) -> Result<(), GenerateError> {
         self.write_rust_prefix(f, test, convention)?;
         let convention_decl = self.rust_convention_decl(convention);
         for function in &test.funcs {
@@ -201,7 +201,11 @@ impl AbiImpl for RustcAbiImpl {
 
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
         let mut cmd = Command::new("rustc");
-        cmd.arg("--crate-type").arg("staticlib").arg("--out-dir").arg("target/temp/").arg(src_path);
+        cmd.arg("--crate-type")
+            .arg("staticlib")
+            .arg("--out-dir")
+            .arg("target/temp/")
+            .arg(src_path);
         if let Some(codegen_backend) = &self.codegen_backend {
             cmd.arg(format!("-Zcodegen-backend={codegen_backend}"));
         }
@@ -254,7 +258,7 @@ impl RustcAbiImpl {
         f: &mut dyn Write,
         test: &Test,
         convention: CallingConvention,
-    ) -> Result<(), BuildError> {
+    ) -> Result<(), GenerateError> {
         if convention == CallingConvention::Vectorcall {
             writeln!(f, "#![feature(abi_vectorcall)]")?;
         }
@@ -269,7 +273,7 @@ impl RustcAbiImpl {
                     match forward_decls.entry(name) {
                         std::collections::hash_map::Entry::Occupied(entry) => {
                             if entry.get() != &decl {
-                                return Err(BuildError::InconsistentStructDefinition {
+                                return Err(GenerateError::InconsistentStructDefinition {
                                     name: entry.key().clone(),
                                     old_decl: entry.remove(),
                                     new_decl: decl,
@@ -288,7 +292,11 @@ impl RustcAbiImpl {
         Ok(())
     }
 
-    fn write_rust_signature(&self, f: &mut dyn Write, function: &Func) -> Result<(), BuildError> {
+    fn write_rust_signature(
+        &self,
+        f: &mut dyn Write,
+        function: &Func,
+    ) -> Result<(), GenerateError> {
         write!(f, "fn {}(", function.name)?;
         for (idx, input) in function.inputs.iter().enumerate() {
             write!(f, "{}, ", self.rust_arg_decl(input, ARG_NAMES[idx])?)?;

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
 
 use crate::{abis::*, full_test_name, WriteBuffer};
@@ -261,8 +262,8 @@ pub struct GenerateOutput {
 
 #[derive(Debug, Serialize)]
 pub struct BuildOutput {
-    pub caller_lib: PathBuf,
-    pub callee_lib: PathBuf,
+    pub caller_lib: String,
+    pub callee_lib: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -272,11 +273,19 @@ pub struct LinkOutput {
 
 #[derive(Debug, Serialize)]
 pub struct RunOutput {
+    pub caller: Functions,
+    pub callee: Functions,
+    #[serde(skip)]
     pub caller_inputs: WriteBuffer,
+    #[serde(skip)]
     pub caller_outputs: WriteBuffer,
+    #[serde(skip)]
     pub callee_inputs: WriteBuffer,
+    #[serde(skip)]
     pub callee_outputs: WriteBuffer,
 }
+
+pub type Functions = LinkedHashMap<String, LinkedHashMap<String, LinkedHashMap<String, String>>>;
 
 #[derive(Debug, Serialize)]
 pub struct CheckOutput {

@@ -37,31 +37,31 @@ typedef void (*functy1)(__int128, __int128, float, __int128, uint8_t, __int128);
 typedef void (*functy2)(my_int128, my_int128, float, my_int128, uint8_t, my_int128);
 
 void callee_native_layout(__int128* arg0, __int128* arg1, __int128* arg2) {
-    WRITE(CALLEE_INPUTS, (char*)arg0, (uint32_t)sizeof(*arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg0, (uint32_t)sizeof(*arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)arg1, (uint32_t)sizeof(*arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg1, (uint32_t)sizeof(*arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)arg2, (uint32_t)sizeof(*arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg2, (uint32_t)sizeof(*arg2));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
 }
 void callee_emulated_layout(my_int128* arg0, my_int128* arg1, my_int128* arg2) {
-    WRITE(CALLEE_INPUTS, (char*)arg0, (uint32_t)sizeof(*arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg0, (uint32_t)sizeof(*arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)arg1, (uint32_t)sizeof(*arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg1, (uint32_t)sizeof(*arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)arg2, (uint32_t)sizeof(*arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg2, (uint32_t)sizeof(*arg2));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
 }
 void callee_unaligned_emulated_layout(my_unaligned_int128* arg0, my_unaligned_int128* arg1, my_unaligned_int128* arg2) {
-    WRITE(CALLEE_INPUTS, (char*)arg0, (uint32_t)sizeof(*arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg0, (uint32_t)sizeof(*arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)arg1, (uint32_t)sizeof(*arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg1, (uint32_t)sizeof(*arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)arg2, (uint32_t)sizeof(*arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)arg2, (uint32_t)sizeof(*arg2));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -69,17 +69,17 @@ void callee_unaligned_emulated_layout(my_unaligned_int128* arg0, my_unaligned_in
 
 // Native Version
 void native_to_native(__int128 arg0, __int128 arg1, float arg2, __int128 arg3, uint8_t arg4, __int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -87,17 +87,17 @@ void native_to_native(__int128 arg0, __int128 arg1, float arg2, __int128 arg3, u
 
 // Emulated Version
 void native_to_emulated(my_int128 arg0, my_int128 arg1, float arg2, my_int128 arg3, uint8_t arg4, my_int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -105,17 +105,17 @@ void native_to_emulated(my_int128 arg0, my_int128 arg1, float arg2, my_int128 ar
 
 // Unaligned Emulated Version
 void native_to_unaligned_emulated(my_unaligned_int128 arg0, my_unaligned_int128 arg1, float arg2, my_unaligned_int128 arg3, uint8_t arg4, my_unaligned_int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -124,17 +124,17 @@ void native_to_unaligned_emulated(my_unaligned_int128 arg0, my_unaligned_int128 
 
 // Native Version
 void emulated_to_native(__int128 arg0, __int128 arg1, float arg2, __int128 arg3, uint8_t arg4, __int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -142,17 +142,17 @@ void emulated_to_native(__int128 arg0, __int128 arg1, float arg2, __int128 arg3,
 
 // Emulated Version
 void emulated_to_emulated(my_int128 arg0, my_int128 arg1, float arg2, my_int128 arg3, uint8_t arg4, my_int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -160,17 +160,17 @@ void emulated_to_emulated(my_int128 arg0, my_int128 arg1, float arg2, my_int128 
 
 // Unaligned Emulated Version
 void emulated_to_unaligned_emulated(my_unaligned_int128 arg0, my_unaligned_int128 arg1, float arg2, my_unaligned_int128 arg3, uint8_t arg4, my_unaligned_int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -178,17 +178,17 @@ void emulated_to_unaligned_emulated(my_unaligned_int128 arg0, my_unaligned_int12
 
 // Native Version
 void unaligned_emulated_to_native(__int128 arg0, __int128 arg1, float arg2, __int128 arg3, uint8_t arg4, __int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -196,17 +196,17 @@ void unaligned_emulated_to_native(__int128 arg0, __int128 arg1, float arg2, __in
 
 // Emulated Version
 void unaligned_emulated_to_emulated(my_int128 arg0, my_int128 arg1, float arg2, my_int128 arg3, uint8_t arg4, my_int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);
@@ -214,17 +214,17 @@ void unaligned_emulated_to_emulated(my_int128 arg0, my_int128 arg1, float arg2, 
 
 // Unaligned Emulated Version
 void unaligned_emulated_to_unaligned_emulated(my_unaligned_int128 arg0, my_unaligned_int128 arg1, float arg2, my_unaligned_int128 arg3, uint8_t arg4, my_unaligned_int128 arg5) {
-    WRITE(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg0, (uint32_t)sizeof(arg0));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg2, (uint32_t)sizeof(arg2));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg3, (uint32_t)sizeof(arg3));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg4, (uint32_t)sizeof(arg4));
     FINISHED_VAL(CALLEE_INPUTS);
-    WRITE(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
+    WRITE_FIELD(CALLEE_INPUTS, (char*)&arg5, (uint32_t)sizeof(arg5));
     FINISHED_VAL(CALLEE_INPUTS);
 
     FINISHED_FUNC(CALLEE_INPUTS, CALLEE_OUTPUTS);

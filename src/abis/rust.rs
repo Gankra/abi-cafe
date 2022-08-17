@@ -205,10 +205,14 @@ impl AbiImpl for RustcAbiImpl {
             .arg("staticlib")
             .arg("--out-dir")
             .arg("target/temp/")
+            .arg("--target")
+            .arg(built_info::TARGET)
+            .arg(format!("-Cmetadata={lib_name}"))
             .arg(src_path);
         if let Some(codegen_backend) = &self.codegen_backend {
             cmd.arg(format!("-Zcodegen-backend={codegen_backend}"));
         }
+        eprintln!("running: {:?}", cmd);
         let out = cmd.output()?;
 
         if !out.status.success() {
@@ -607,7 +611,7 @@ impl RustcAbiImpl {
         use std::fmt::Write;
         let mut output = String::new();
         for path in self.rust_var_paths(val, from, is_var_root)? {
-            write!(output, "        WRITE.unwrap()({to}, &{path} as *const _ as *const _, core::mem::size_of_val(&{path}) as u32);\n").unwrap();
+            write!(output, "        WRITE_FIELD.unwrap()({to}, &{path} as *const _ as *const _, core::mem::size_of_val(&{path}) as u32);\n").unwrap();
         }
         write!(output, "        FINISHED_VAL.unwrap()({to});").unwrap();
 

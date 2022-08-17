@@ -17,7 +17,7 @@ pub static mut CALLEE_INPUTS: WriteBuffer = WriteBuffer(core::ptr::null_mut());
 #[no_mangle]
 pub static mut CALLEE_OUTPUTS: WriteBuffer = WriteBuffer(core::ptr::null_mut());
 #[no_mangle]
-pub static mut WRITE: Option<WriteCallback> = None;
+pub static mut WRITE_FIELD: Option<WriteCallback> = None;
 #[no_mangle]
 pub static mut FINISHED_VAL: Option<FinishedValCallback> = None;
 #[no_mangle]
@@ -42,7 +42,7 @@ pub extern fn test_start(
         CALLER_OUTPUTS = caller_outputs;
         CALLEE_INPUTS = callee_inputs;
         CALLEE_OUTPUTS = callee_outputs;
-        WRITE = Some(write_callback);
+        WRITE_FIELD = Some(write_callback);
         FINISHED_VAL = Some(finished_val_callback);
         FINISHED_FUNC = Some(finished_func_callback);
 

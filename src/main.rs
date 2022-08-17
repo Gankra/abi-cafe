@@ -4,6 +4,7 @@ mod procgen;
 mod report;
 
 use abis::*;
+use linked_hash_map::LinkedHashMap;
 use report::*;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -44,9 +45,12 @@ pub struct Config {
 pub struct TestsFailed {}
 
 fn main() -> Result<(), Box<dyn Error>> {
+    eprintln!("starting!");
     let cfg = cli::make_app();
+    eprintln!("parsed cli!");
     // Before doing anything, regenerate the procgen tests, if needed.
     procgen::procgen_tests(cfg.procgen_tests);
+    eprintln!("generated tests!");
 
     let out_dir = PathBuf::from("target/temp/");
     std::fs::create_dir_all(&out_dir).unwrap();
@@ -59,7 +63,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     env::set_var("TARGET", built_info::TARGET);
     env::set_var("OPT_LEVEL", "0");
 
-    let mut abi_impls: HashMap<&str, Box<dyn AbiImpl>> = HashMap::new();
+    let mut abi_impls: HashMap<&str, Box<dyn AbiImpl + Send + Sync>> = HashMap::new();
     abi_impls.insert(
         ABI_IMPL_RUSTC,
         Box::new(abis::RustcAbiImpl::new(&cfg, None)),
@@ -87,8 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Box::new(abis::RustcAbiImpl::new(&cfg, Some(path.to_owned()))),
         );
     }
-
-    let mut reports = Vec::new();
+    eprintln!("configured ABIs!");
 
     // Grab all the tests
     let mut tests = vec![];
@@ -115,49 +118,71 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     tests.sort_by(|t1, t2| t1.name.cmp(&t2.name));
+    eprintln!("got tests!");
     // FIXME: assert test names don't collide!
 
     // Run the tests
     use TestConclusion::*;
-    for test in tests {
-        // If the cli has test filters, apply those
-        if !cfg.run_tests.is_empty() && !cfg.run_tests.contains(&test.name) {
-            continue;
-        }
-        for &convention in &cfg.run_conventions {
-            if !test.has_convention(convention) {
-                // Don't bother with a convention if the test doesn't use it.
-                continue;
-            }
-            // Create versions of the test for each "X calls Y" pair we care about.
-            for (caller_id, callee_id) in &cfg.run_pairs {
-                if !cfg.run_impls.is_empty()
-                    && !cfg.run_impls.iter().any(|x| x == caller_id)
-                    && !cfg.run_impls.iter().any(|x| &**x == callee_id)
-                {
-                    continue;
-                }
-                let caller = &**abi_impls.get(&**caller_id).expect("invalid id for caller!");
-                let callee = &**abi_impls.get(&**callee_id).expect("invalid id for callee!");
 
-                let convention_name = convention.name();
-
-                // Run the test!
-                let test_key = TestKey {
-                    test_name: test.name.to_owned(),
-                    convention: convention_name.to_owned(),
-                    caller_id: caller_id.to_owned(),
-                    callee_id: callee_id.to_owned(),
-                };
-                let rules = get_test_rules(&test_key, caller, callee);
-                let results = do_test(
-                    &test, &test_key, &rules, convention, caller, callee, &out_dir,
-                );
-                let report = report_test(test_key, rules, results);
-                reports.push(report);
+    // This is written as nested iterator adaptors so that it can maybe be changed to use
+    // rayon's par_iter, but currently the code isn't properly threadsafe due to races on
+    // the filesystem when setting up the various output dirs :(
+    let reports = tests
+        .iter()
+        .flat_map(|test| {
+            // If the cli has test filters, apply those
+            if !cfg.run_tests.is_empty() && !cfg.run_tests.contains(&test.name) {
+                return Vec::new();
             }
-        }
-    }
+            cfg.run_conventions
+                .iter()
+                .flat_map(|convention| {
+                    if !test.has_convention(*convention) {
+                        // Don't bother with a convention if the test doesn't use it.
+                        return Vec::new();
+                    }
+                    // Create versions of the test for each "X calls Y" pair we care about.
+                    cfg.run_pairs
+                        .iter()
+                        .filter_map(|(caller_id, callee_id)| {
+                            if !cfg.run_impls.is_empty()
+                                && !cfg.run_impls.iter().any(|x| x == caller_id)
+                                && !cfg.run_impls.iter().any(|x| &**x == callee_id)
+                            {
+                                return None;
+                            }
+                            let caller =
+                                &**abi_impls.get(&**caller_id).expect("invalid id for caller!");
+                            let callee =
+                                &**abi_impls.get(&**callee_id).expect("invalid id for callee!");
+
+                            let convention_name = convention.name();
+
+                            // Run the test!
+                            let test_key = TestKey {
+                                test_name: test.name.to_owned(),
+                                convention: convention_name.to_owned(),
+                                caller_id: caller_id.to_owned(),
+                                callee_id: callee_id.to_owned(),
+                            };
+                            let rules = get_test_rules(&test_key, caller, callee);
+                            let results = do_test(
+                                &test,
+                                &test_key,
+                                &rules,
+                                *convention,
+                                caller,
+                                callee,
+                                &out_dir,
+                            );
+                            let report = report_test(test_key, rules, results);
+                            Some(report)
+                        })
+                        .collect()
+                })
+                .collect()
+        })
+        .collect::<Vec<_>>();
 
     // Compute the final report
     let mut num_tests = 0;
@@ -221,47 +246,55 @@ fn do_test(
     run_results.source = Some(generate_test_src(
         test, test_key, convention, caller, callee,
     ));
+    let source = match run_results.source.as_ref().unwrap() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to generate source: {}", e);
+            return run_results;
+        }
+    };
     if test_rules.run <= Generate {
         return run_results;
     }
-    let source = if let Some(Ok(source)) = &run_results.source {
-        source
-    } else {
-        return run_results;
-    };
 
     run_results.ran_to = Build;
     run_results.build = Some(build_test(test, test_key, caller, callee, source));
+    let build = match run_results.build.as_ref().unwrap() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to build test: {}", e);
+            return run_results;
+        }
+    };
     if test_rules.run <= Build {
         return run_results;
     }
-    let build = if let Some(Ok(build)) = &run_results.build {
-        build
-    } else {
-        return run_results;
-    };
 
     run_results.ran_to = Link;
     run_results.link = Some(link_test(test, test_key, build));
+    let link = match run_results.link.as_ref().unwrap() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to link test: {}", e);
+            return run_results;
+        }
+    };
     if test_rules.run <= Link {
         return run_results;
     }
-    let link = if let Some(Ok(link)) = &run_results.link {
-        link
-    } else {
-        return run_results;
-    };
 
     run_results.ran_to = Run;
     run_results.run = Some(run_dynamic_test(test, test_key, link));
+    let run = match run_results.run.as_ref().unwrap() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to run test: {}", e);
+            return run_results;
+        }
+    };
     if test_rules.run <= Run {
         return run_results;
     }
-    let run = if let Some(Ok(run)) = &run_results.run {
-        run
-    } else {
-        return run_results;
-    };
 
     run_results.ran_to = Check;
     run_results.check = Some(check_test(test, test_key, run));
@@ -369,8 +402,8 @@ fn build_test(
     let callee_lib = callee.compile_callee(&src.callee_src, &callee_lib)?;
 
     Ok(BuildOutput {
-        caller_lib: PathBuf::from(caller_lib),
-        callee_lib: PathBuf::from(callee_lib),
+        caller_lib,
+        callee_lib,
     })
 }
 
@@ -383,11 +416,13 @@ fn link_test(
     let test_name = &test_key.test_name;
     let caller_id = &test_key.caller_id;
     let callee_id = &test_key.callee_id;
+    let full_test_name = full_test_name(test_key);
     let src = PathBuf::from("harness/harness.rs");
     let output = format!("target/temp/{test_name}_{caller_id}_calls_{callee_id}_harness.dll");
+    eprintln!("linking  {full_test_name}");
 
-    let out = Command::new("rustc")
-        .arg("-v")
+    let mut cmd = Command::new("rustc");
+    cmd.arg("-v")
         .arg("-L")
         .arg("target/temp/")
         .arg("-l")
@@ -396,12 +431,17 @@ fn link_test(
         .arg(&build.callee_lib)
         .arg("--crate-type")
         .arg("cdylib")
+        .arg("--target")
+        .arg(built_info::TARGET)
+        // .arg("-Csave-temps=y")
         // .arg("--out-dir")
         // .arg("target/temp/")
         .arg("-o")
         .arg(&output)
-        .arg(&src)
-        .output()?;
+        .arg(&src);
+
+    eprintln!("running: {:?}", cmd);
+    let out = cmd.output()?;
 
     if !out.status.success() {
         Err(LinkError::RustLink(out))
@@ -520,6 +560,7 @@ fn run_dynamic_test(
         let mut callee_outputs = WriteBuffer::new();
 
         // Load the dylib of the test, and get its test_start symbol
+        eprintln!("loading: {}", &test_dylib.test_bin.display());
         let lib = libloading::Library::new(&test_dylib.test_bin)?;
         let do_test: libloading::Symbol<TestInit> = lib.get(b"test_start")?;
         eprintln!("running    {full_test_name}");
@@ -559,7 +600,107 @@ fn run_dynamic_test(
             ));
         }
 
+        fn format_bytes(input: &[Vec<u8>], cur_idx: &mut usize) -> String {
+            use std::fmt::Write;
+
+            let bytes = input.get(*cur_idx).map(|v| &v[..]).unwrap_or(&[]);
+            let mut output = String::new();
+            let mut looped = false;
+            for byte in bytes {
+                if looped {
+                    write!(&mut output, " ").unwrap();
+                }
+                write!(&mut output, "{:02x}", byte).unwrap();
+                looped = true;
+            }
+            *cur_idx += 1;
+            output
+        }
+
+        fn add_field(
+            input: &[Vec<u8>],
+            output: &mut LinkedHashMap<String, String>,
+            cur_idx: &mut usize,
+            cur_path: String,
+            val: &Val,
+        ) {
+            match val {
+                Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
+                    output.insert(cur_path, format_bytes(input, cur_idx));
+                }
+                Val::Ref(sub_val) => add_field(input, output, cur_idx, cur_path, sub_val),
+                Val::Array(arr) => {
+                    for (arr_idx, sub_val) in arr.iter().enumerate() {
+                        let sub_path = format!("{}[{}]", cur_path, arr_idx);
+                        add_field(input, output, cur_idx, sub_path, sub_val);
+                    }
+                }
+                Val::Struct(_struct_name, fields) => {
+                    for (field_idx, field) in fields.iter().enumerate() {
+                        let sub_path = format!("{}.{}", cur_path, abis::FIELD_NAMES[field_idx]);
+                        add_field(input, output, cur_idx, sub_path, field);
+                    }
+                }
+            }
+        }
+
+        let mut callee = report::Functions::new();
+        let mut caller = report::Functions::new();
+        let empty_func = Vec::new();
+        let empty_arg = Vec::new();
+        for (func_idx, func) in test.funcs.iter().enumerate() {
+            let caller_func = caller.entry(func.name.clone()).or_default();
+            let callee_func = callee.entry(func.name.clone()).or_default();
+            for (arg_idx, arg) in func.inputs.iter().enumerate() {
+                let caller_arg = caller_func
+                    .entry(ARG_NAMES[arg_idx].to_owned())
+                    .or_default();
+                let callee_arg = callee_func
+                    .entry(ARG_NAMES[arg_idx].to_owned())
+                    .or_default();
+
+                let caller_arg_bytes = caller_inputs
+                    .funcs
+                    .get(func_idx)
+                    .unwrap_or(&empty_func)
+                    .get(arg_idx)
+                    .unwrap_or(&empty_arg);
+                let callee_arg_bytes = callee_inputs
+                    .funcs
+                    .get(func_idx)
+                    .unwrap_or(&empty_func)
+                    .get(arg_idx)
+                    .unwrap_or(&empty_arg);
+
+                add_field(caller_arg_bytes, caller_arg, &mut 0, String::new(), arg);
+                add_field(callee_arg_bytes, callee_arg, &mut 0, String::new(), arg);
+            }
+
+            for (arg_idx, arg) in func.output.iter().enumerate() {
+                let caller_arg = caller_func.entry(format!("return{}", arg_idx)).or_default();
+                let callee_arg = callee_func.entry(format!("return{}", arg_idx)).or_default();
+
+                let caller_output_bytes = caller_outputs
+                    .funcs
+                    .get(func_idx)
+                    .unwrap_or(&empty_func)
+                    .get(arg_idx)
+                    .unwrap_or(&empty_arg);
+                let callee_output_bytes = callee_outputs
+                    .funcs
+                    .get(func_idx)
+                    .unwrap_or(&empty_func)
+                    .get(arg_idx)
+                    .unwrap_or(&empty_arg);
+
+                add_field(caller_output_bytes, caller_arg, &mut 0, String::new(), arg);
+                add_field(callee_output_bytes, callee_arg, &mut 0, String::new(), arg);
+            }
+        }
+
         Ok(RunOutput {
+            callee,
+            caller,
             caller_inputs,
             caller_outputs,
             callee_inputs,
@@ -576,6 +717,7 @@ fn check_test(
         caller_outputs,
         callee_inputs,
         callee_outputs,
+        ..
     }: &RunOutput,
 ) -> CheckOutput {
     // Now check the results

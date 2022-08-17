@@ -53,11 +53,11 @@ extern {
         let arg1 = my_i128::new(34784419711585546284254720952638769794);
         let arg2 = my_unaligned_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         callee_native_layout(&arg0, &arg1, &arg2);
@@ -69,11 +69,11 @@ extern {
         let arg1 = my_i128::new(34784419711585546284254720952638769794);
         let arg2 = my_unaligned_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         callee_emulated_layout(&arg0, &arg1, &arg2);
@@ -85,11 +85,11 @@ extern {
         let arg1 = my_i128::new(34784419711585546284254720952638769794);
         let arg2 = my_unaligned_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         callee_unaligned_emulated_layout(&arg0, &arg1, &arg2);
@@ -105,17 +105,17 @@ extern {
         let arg4: u8 = 235;
         let arg5: i128 = 34784419711585546284254720952638769794;
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         native_to_native(arg0, arg1, arg2, arg3, arg4, arg5, );
@@ -131,17 +131,17 @@ extern {
         let arg4: u8 = 235;
         let arg5: i128 = 34784419711585546284254720952638769794;
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         native_to_emulated(arg0, arg1, arg2, arg3, arg4, arg5, );
@@ -157,17 +157,17 @@ extern {
         let arg4: u8 = 235;
         let arg5: i128 = 34784419711585546284254720952638769794;
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         native_to_unaligned_emulated(arg0, arg1, arg2, arg3, arg4, arg5, );
@@ -183,17 +183,17 @@ extern {
         let arg4: u8 = 235;
         let arg5 = my_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         emulated_to_native(arg0, arg1, arg2, arg3, arg4, arg5, );
@@ -209,17 +209,17 @@ extern {
         let arg4: u8 = 235;
         let arg5 = my_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         emulated_to_emulated(arg0, arg1, arg2, arg3, arg4, arg5, );
@@ -235,17 +235,17 @@ extern {
         let arg4: u8 = 235;
         let arg5 = my_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         emulated_to_unaligned_emulated(arg0, arg1, arg2, arg3, arg4, arg5, );
@@ -261,17 +261,17 @@ extern {
         let arg4: u8 = 235;
         let arg5 = my_unaligned_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         unaligned_emulated_to_native(arg0, arg1, arg2, arg3, arg4, arg5, );
@@ -287,17 +287,17 @@ extern {
         let arg4: u8 = 235;
         let arg5 = my_unaligned_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         unaligned_emulated_to_emulated(arg0, arg1, arg2, arg3, arg4, arg5, );
@@ -313,17 +313,17 @@ extern {
         let arg4: u8 = 235;
         let arg5 = my_unaligned_i128::new(34784419711585546284254720952638769794);
 
-        WRITE.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg0 as *const _ as *const _, core::mem::size_of_val(&arg0) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg1 as *const _ as *const _, core::mem::size_of_val(&arg1) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg2 as *const _ as *const _, core::mem::size_of_val(&arg2) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg3 as *const _ as *const _, core::mem::size_of_val(&arg3) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg4 as *const _ as *const _, core::mem::size_of_val(&arg4) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
-        WRITE.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
+        WRITE_FIELD.unwrap()(CALLER_INPUTS, &arg5 as *const _ as *const _, core::mem::size_of_val(&arg5) as u32);
         FINISHED_VAL.unwrap()(CALLER_INPUTS);
 
         unaligned_emulated_to_unaligned_emulated(arg0, arg1, arg2, arg3, arg4, arg5, );

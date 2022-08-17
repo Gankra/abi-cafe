@@ -232,6 +232,7 @@ impl CcAbiImpl {
             .file(src_path)
             .opt_level(0)
             .cargo_metadata(false)
+            .target(built_info::TARGET)
             // .warnings_into_errors(true)
             .try_compile(lib_name)?;
         Ok(String::from(lib_name))
@@ -732,7 +733,7 @@ impl CcAbiImpl {
         for path in self.c_var_paths(val, from, is_var_root)? {
             write!(
                 output,
-                "    WRITE({to}, (char*)&{path}, (uint32_t)sizeof({path}));\n"
+                "    WRITE_FIELD({to}, (char*)&{path}, (uint32_t)sizeof({path}));\n"
             )
             .unwrap();
         }

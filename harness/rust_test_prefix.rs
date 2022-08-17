@@ -13,7 +13,7 @@ extern {
     pub static mut CALLER_OUTPUTS: WriteBuffer;
     pub static mut CALLEE_INPUTS: WriteBuffer;
     pub static mut CALLEE_OUTPUTS: WriteBuffer;
-    pub static mut WRITE: Option<WriteCallback>;
+    pub static mut WRITE_FIELD: Option<WriteCallback>;
     pub static mut FINISHED_VAL: Option<FinishedValCallback>;
     pub static mut FINISHED_FUNC: Option<FinishedFuncCallback>;
 }

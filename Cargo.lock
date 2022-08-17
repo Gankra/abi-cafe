@@ -73,6 +73,7 @@ dependencies = [
 [[package]]
 name = "cc"
 version = "1.0.73"
+source = "git+https://github.com/Gankra/cc-rs#0f6c1fdae918171fe1174272ad637d8929527863"
 
 [[package]]
 name = "cfg-if"

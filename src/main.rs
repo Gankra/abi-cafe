@@ -23,10 +23,11 @@ pub mod built_info {
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum OutputFormat {
     Human,
     Json,
+    RustcJson,
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +218,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     match cfg.output_format {
         OutputFormat::Human => full_report.print_human(&mut output).unwrap(),
         OutputFormat::Json => full_report.print_json(&mut output).unwrap(),
+        OutputFormat::RustcJson => full_report.print_rustc_json(&mut output).unwrap(),
     }
 
     if full_report.failed() {

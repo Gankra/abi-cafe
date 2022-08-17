@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
+use serde_json::json;
 
 use crate::{abis::*, full_test_name, WriteBuffer};
 
@@ -378,6 +379,69 @@ impl FullReport {
         serde_json::to_writer_pretty(f, self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
     }
+    pub fn print_rustc_json(&self, mut f: impl std::io::Write) -> Result<(), std::io::Error> {
+        serde_json::to_writer(
+            &mut f,
+            &json!({
+                "type": "suite",
+                "event": "started",
+                "test_count": self.summary.num_tests - self.summary.num_skipped,
+            }),
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        writeln!(&mut f)?;
+
+        for test in &self.tests {
+            let (status, status_message) = match test.conclusion {
+                TestConclusion::Skipped => continue,
+                TestConclusion::Passed => ("ok", None),
+                TestConclusion::Failed => ("failed", Some("todo fill this message in")),
+                TestConclusion::Busted => ("ok", None),
+            };
+            let test_name = full_test_name(&test.key);
+            serde_json::to_writer(
+                &mut f,
+                &json!({
+                    "type": "test",
+                    "event": "started",
+                    "name": &test_name,
+                }),
+            )
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            writeln!(&mut f)?;
+            serde_json::to_writer(
+                &mut f,
+                &json!({
+                    "type": "test",
+                    "name": &test_name,
+                    "event": status,
+                    "stdout": status_message,
+                }),
+            )
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            writeln!(&mut f)?;
+        }
+
+        let status = if self.failed() { "failed" } else { "ok" };
+        serde_json::to_writer(
+            &mut f,
+            &json!({
+                "type": "suite",
+                "event": status,
+                "passed": self.summary.num_passed + self.summary.num_busted,
+                "failed": self.summary.num_failed,
+                "ignored": 0,
+                "measured": 0,
+                "filtered_out": self.summary.num_skipped,
+                "exec_time": 0.0,
+            }),
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        writeln!(&mut f)?;
+
+        Ok(())
+    }
+
     pub fn failed(&self) -> bool {
         self.summary.num_failed > 0
     }

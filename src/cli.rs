@@ -74,7 +74,7 @@ pub fn make_app() -> Config {
             Arg::new("output-format")
                 .long("output-format")
                 .long_help("Set the output format")
-                .possible_values(&["human", "json"])
+                .possible_values(&["human", "json", "rustc-json"])
                 .default_value("human")
                 .takes_value(true),
         )
@@ -150,6 +150,7 @@ pub fn make_app() -> Config {
     let output_format = match matches.value_of("output-format").unwrap() {
         "human" => OutputFormat::Human,
         "json" => OutputFormat::Json,
+        "rustc-json" => OutputFormat::RustcJson,
         _ => unreachable!(),
     };
 

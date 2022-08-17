@@ -556,12 +556,12 @@ impl CcAbiImpl {
     fn c_arg_pass(&self, val: &Val, arg_name: &str) -> Result<String, GenerateError> {
         if let Val::Ref(pointee) = val {
             if let Val::Array(_) = &**pointee {
-                Ok(format!("{arg_name}"))
+                Ok(arg_name.to_string())
             } else {
                 Ok(format!("&{arg_name}"))
             }
         } else {
-            Ok(format!("{arg_name}"))
+            Ok(arg_name.to_string())
         }
     }
 
@@ -593,8 +593,8 @@ impl CcAbiImpl {
                 }
                 format!("{}*", self.c_arg_type(cur_val)?)
             }
-            Ptr(_) => format!("void*"),
-            Bool(_) => format!("bool"),
+            Ptr(_) => "void*".to_string(),
+            Bool(_) => "bool".to_string(),
             Array(_vals) => {
                 // C arrays are kinda fake due to how they decay in function arg
                 // position, so a ton of code needs to very delicately detect arrays
@@ -605,24 +605,24 @@ impl CcAbiImpl {
                 // But also it just isn't legal to pass an array by-value in C
                 // (it decays to a pointer, so you need to wrap it in Ref for
                 // other ABIs to understand that's what we're doing.
-                return Err(GenerateError::CUnsupported(format!(
-                    "C Arrays can't be passed directly, wrap this in Ref"
-                )));
+                return Err(GenerateError::CUnsupported(
+                    "C Arrays can't be passed directly, wrap this in Ref".to_string(),
+                ));
             }
             Struct(name, _) => format!("struct {name}"),
-            Float(FloatVal::c_double(_)) => format!("double"),
-            Float(FloatVal::c_float(_)) => format!("float"),
+            Float(FloatVal::c_double(_)) => "double".to_string(),
+            Float(FloatVal::c_float(_)) => "float".to_string(),
             Int(int_val) => match int_val {
-                c__int128(_) => format!("__int128_t"),
-                c_int64_t(_) => format!("int64_t"),
-                c_int32_t(_) => format!("int32_t"),
-                c_int16_t(_) => format!("int16_t"),
-                c_int8_t(_) => format!("int8_t"),
-                c__uint128(_) => format!("__uint128_t"),
-                c_uint64_t(_) => format!("uint64_t"),
-                c_uint32_t(_) => format!("uint32_t"),
-                c_uint16_t(_) => format!("uint16_t"),
-                c_uint8_t(_) => format!("uint8_t"),
+                c__int128(_) => "__int128_t".to_string(),
+                c_int64_t(_) => "int64_t".to_string(),
+                c_int32_t(_) => "int32_t".to_string(),
+                c_int16_t(_) => "int16_t".to_string(),
+                c_int8_t(_) => "int8_t".to_string(),
+                c__uint128(_) => "__uint128_t".to_string(),
+                c_uint64_t(_) => "uint64_t".to_string(),
+                c_uint32_t(_) => "uint32_t".to_string(),
+                c_uint16_t(_) => "uint16_t".to_string(),
+                c_uint8_t(_) => "uint8_t".to_string(),
             },
         };
         Ok(val)
@@ -661,7 +661,7 @@ impl CcAbiImpl {
                     if idx != 0 {
                         output.push_str(", ");
                     }
-                    let part = format!("{}", self.c_val(elem)?);
+                    let part = (self.c_val(elem)?).to_string();
                     output.push_str(&part);
                 }
                 output.push_str(" }");
@@ -696,13 +696,13 @@ impl CcAbiImpl {
             }
             Int(int_val) => match *int_val {
                 c__int128(val) => {
-                    let lower = (val as u128) & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
-                    let higher = ((val as u128) & 0xFFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
+                    let lower = (val as u128) & 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
+                    let higher = ((val as u128) & 0xFFFF_FFFF_FFFF_FFFF_0000_0000_0000_0000) >> 64;
                     format!("((__int128_t){lower:#X}ull) | (((__int128_t){higher:#X}ull) << 64)")
                 }
                 c__uint128(val) => {
-                    let lower = val & 0x00000000_00000000_FFFFFFFF_FFFFFFFF;
-                    let higher = (val & 0xFFFFFFFF_FFFFFFFF_00000000_00000000) >> 64;
+                    let lower = val & 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
+                    let higher = (val & 0xFFFF_FFFF_FFFF_FFFF_0000_0000_0000_0000) >> 64;
                     format!("((__uint128_t){lower:#X}ull) | (((__uint128_t){higher:#X}ull) << 64)")
                 }
                 c_int64_t(val) => format!("{val}"),
@@ -731,9 +731,9 @@ impl CcAbiImpl {
         use std::fmt::Write;
         let mut output = String::new();
         for path in self.c_var_paths(val, from, is_var_root)? {
-            write!(
+            writeln!(
                 output,
-                "    WRITE_FIELD({to}, (char*)&{path}, (uint32_t)sizeof({path}));\n"
+                "    WRITE_FIELD({to}, (char*)&{path}, (uint32_t)sizeof({path}));"
             )
             .unwrap();
         }

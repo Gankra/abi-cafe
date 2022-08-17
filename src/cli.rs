@@ -91,7 +91,7 @@ pub fn make_app() -> Config {
         .collect();
 
     if run_conventions.is_empty() {
-        run_conventions = ALL_CONVENTIONS.into_iter().copied().collect();
+        run_conventions = ALL_CONVENTIONS.to_vec();
     }
 
     let run_impls = matches
@@ -114,7 +114,7 @@ pub fn make_app() -> Config {
 
     if run_pairs.is_empty() {
         run_pairs = DEFAULT_TEST_PAIRS
-            .into_iter()
+            .iter()
             .map(|&(a, b)| (String::from(a), String::from(b)))
             .collect()
     }

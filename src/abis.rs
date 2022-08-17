@@ -122,7 +122,7 @@ pub struct Func {
     pub output: Option<Val>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum CallingConvention {
     // These conventions are special ones that "desugar" to others
     /// Sugar for "every possible convention"

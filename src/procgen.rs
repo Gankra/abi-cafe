@@ -25,15 +25,18 @@ pub fn procgen_tests(regenerate: bool) {
         // This is chunked out a bit to avoid stressing the compilers/linkers too much,
         // in case some work scales non-linearly. It also keeps the test suite
         // a bit more "responsive" instead of just stalling one enormous supertest.
-        ("i64", &[Val::Int(IntVal::c_int64_t(0x1a2b3c4d_23eaf142))]),
+        ("i64", &[Val::Int(IntVal::c_int64_t(0x1a2b_3c4d_23ea_f142))]),
         ("i32", &[Val::Int(IntVal::c_int32_t(0x1a2b3c4d))]),
         ("i16", &[Val::Int(IntVal::c_int16_t(0x1a2b))]),
         ("i8", &[Val::Int(IntVal::c_int8_t(0x1a))]),
-        ("u64", &[Val::Int(IntVal::c_uint64_t(0x1a2b3c4d_23eaf142))]),
+        (
+            "u64",
+            &[Val::Int(IntVal::c_uint64_t(0x1a2b_3c4d_23ea_f142))],
+        ),
         ("u32", &[Val::Int(IntVal::c_uint32_t(0x1a2b3c4d))]),
         ("u16", &[Val::Int(IntVal::c_uint16_t(0x1a2b))]),
         ("u8", &[Val::Int(IntVal::c_uint8_t(0x1a))]),
-        ("ptr", &[Val::Ptr(0x1a2b3c4d_23eaf142)]),
+        ("ptr", &[Val::Ptr(0x1a2b_3c4d_23ea_f142)]),
         ("bool", &[Val::Bool(true)]),
         ("f64", &[Val::Float(FloatVal::c_double(809239021.392))]),
         ("f32", &[Val::Float(FloatVal::c_float(-4921.3527))]),
@@ -50,8 +53,10 @@ pub fn procgen_tests(regenerate: bool) {
         (
             "ui128",
             &[
-                Val::Int(IntVal::c__int128(0x1a2b3c4d_23eaf142_7a320c01_e0120a82)),
-                Val::Int(IntVal::c__uint128(0x1a2b3c4d_23eaf142_7a320c01_e0120a82)),
+                Val::Int(IntVal::c__int128(0x1a2b_3c4d_23ea_f142_7a32_0c01_e012_0a82)),
+                Val::Int(IntVal::c__uint128(
+                    0x1a2b_3c4d_23ea_f142_7a32_0c01_e012_0a82,
+                )),
             ],
         ),
     ];
@@ -155,7 +160,7 @@ pub fn procgen_tests(regenerate: bool) {
                 test.funcs.push(Func {
                     name: format!("{val_name}_val_in_{len}"),
                     conventions: vec![CallingConvention::All],
-                    inputs: (0..len).map(|i| new_val(i)).collect(),
+                    inputs: (0..len).map(new_val).collect(),
                     output: None,
                 });
             }
@@ -169,7 +174,7 @@ pub fn procgen_tests(regenerate: bool) {
                     conventions: vec![CallingConvention::All],
                     inputs: vec![Val::Struct(
                         format!("{val_name}_{len}"),
-                        (0..len).map(|i| new_val(i)).collect(),
+                        (0..len).map(new_val).collect(),
                     )],
                     output: None,
                 });
@@ -181,7 +186,7 @@ pub fn procgen_tests(regenerate: bool) {
                     conventions: vec![CallingConvention::All],
                     inputs: vec![Val::Ref(Box::new(Val::Struct(
                         format!("{val_name}_{len}"),
-                        (0..len).map(|i| new_val(i)).collect(),
+                        (0..len).map(new_val).collect(),
                     )))],
                     output: None,
                 });
@@ -199,7 +204,7 @@ pub fn procgen_tests(regenerate: bool) {
             let big_count = 16;
 
             for idx in 0..small_count {
-                let mut inputs = (0..small_count).map(|i| new_val(i)).collect::<Vec<_>>();
+                let mut inputs = (0..small_count).map(new_val).collect::<Vec<_>>();
 
                 let byte_idx = idx;
                 let float_idx = small_count - 1 - idx;
@@ -211,12 +216,12 @@ pub fn procgen_tests(regenerate: bool) {
                 test.funcs.push(Func {
                     name: format!("{val_name}_val_in_{idx}_perturbed_small"),
                     conventions: vec![CallingConvention::All],
-                    inputs: inputs,
+                    inputs,
                     output: None,
                 });
             }
             for idx in 0..big_count {
-                let mut inputs = (0..big_count).map(|i| new_val(i)).collect::<Vec<_>>();
+                let mut inputs = (0..big_count).map(new_val).collect::<Vec<_>>();
 
                 let byte_idx = idx;
                 let float_idx = big_count - 1 - idx;
@@ -228,13 +233,13 @@ pub fn procgen_tests(regenerate: bool) {
                 test.funcs.push(Func {
                     name: format!("{val_name}_val_in_{idx}_perturbed_big"),
                     conventions: vec![CallingConvention::All],
-                    inputs: inputs,
+                    inputs,
                     output: None,
                 });
             }
 
             for idx in 0..small_count {
-                let mut inputs = (0..small_count).map(|i| new_val(i)).collect::<Vec<_>>();
+                let mut inputs = (0..small_count).map(new_val).collect::<Vec<_>>();
 
                 let byte_idx = idx;
                 let float_idx = small_count - 1 - idx;
@@ -254,7 +259,7 @@ pub fn procgen_tests(regenerate: bool) {
                 });
             }
             for idx in 0..big_count {
-                let mut inputs = (0..big_count).map(|i| new_val(i)).collect::<Vec<_>>();
+                let mut inputs = (0..big_count).map(new_val).collect::<Vec<_>>();
 
                 let byte_idx = idx;
                 let float_idx = big_count - 1 - idx;
@@ -276,7 +281,7 @@ pub fn procgen_tests(regenerate: bool) {
 
             // Should be an exact copy-paste of the above but with Ref's added
             for idx in 0..small_count {
-                let mut inputs = (0..small_count).map(|i| new_val(i)).collect::<Vec<_>>();
+                let mut inputs = (0..small_count).map(new_val).collect::<Vec<_>>();
 
                 let byte_idx = idx;
                 let float_idx = small_count - 1 - idx;
@@ -296,7 +301,7 @@ pub fn procgen_tests(regenerate: bool) {
                 });
             }
             for idx in 0..big_count {
-                let mut inputs = (0..big_count).map(|i| new_val(i)).collect::<Vec<_>>();
+                let mut inputs = (0..big_count).map(new_val).collect::<Vec<_>>();
 
                 let byte_idx = idx;
                 let float_idx = big_count - 1 - idx;
@@ -329,27 +334,27 @@ pub fn arg_ty(val: &Val) -> String {
     use Val::*;
     match val {
         Ref(x) => format!("ref_{}", arg_ty(x)),
-        Ptr(_) => format!("ptr"),
-        Bool(_) => format!("bool"),
+        Ptr(_) => "ptr".to_string(),
+        Bool(_) => "bool".to_string(),
         Array(vals) => format!(
             "arr_{}_{}",
             vals.len(),
             arg_ty(vals.get(0).expect("arrays must have length > 0")),
         ),
         Struct(name, _) => format!("struct_{name}"),
-        Float(FloatVal::c_double(_)) => format!("f64"),
-        Float(FloatVal::c_float(_)) => format!("f32"),
+        Float(FloatVal::c_double(_)) => "f64".to_string(),
+        Float(FloatVal::c_float(_)) => "f32".to_string(),
         Int(int_val) => match int_val {
-            c__int128(_) => format!("i128"),
-            c_int64_t(_) => format!("i64"),
-            c_int32_t(_) => format!("i32"),
-            c_int16_t(_) => format!("i16"),
-            c_int8_t(_) => format!("i8"),
-            c__uint128(_) => format!("u128"),
-            c_uint64_t(_) => format!("u64"),
-            c_uint32_t(_) => format!("u32"),
-            c_uint16_t(_) => format!("u16"),
-            c_uint8_t(_) => format!("u8"),
+            c__int128(_) => "i128".to_string(),
+            c_int64_t(_) => "i64".to_string(),
+            c_int32_t(_) => "i32".to_string(),
+            c_int16_t(_) => "i16".to_string(),
+            c_int8_t(_) => "i8".to_string(),
+            c__uint128(_) => "u128".to_string(),
+            c_uint64_t(_) => "u64".to_string(),
+            c_uint32_t(_) => "u32".to_string(),
+            c_uint16_t(_) => "u16".to_string(),
+            c_uint8_t(_) => "u8".to_string(),
         },
     }
 }

@@ -167,7 +167,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                             };
                             let rules = get_test_rules(&test_key, caller, callee);
                             let results = do_test(
-                                &test,
+                                test,
                                 &test_key,
                                 &rules,
                                 *convention,
@@ -368,10 +368,10 @@ fn generate_test_src(
         std::fs::create_dir_all(caller_src.parent().unwrap())?;
         std::fs::create_dir_all(callee_src.parent().unwrap())?;
         let mut caller_output = File::create(&caller_src)?;
-        caller.generate_caller(&mut caller_output, &test, convention)?;
+        caller.generate_caller(&mut caller_output, test, convention)?;
 
         let mut callee_output = File::create(&callee_src)?;
-        callee.generate_callee(&mut callee_output, &test, convention)?;
+        callee.generate_callee(&mut callee_output, test, convention)?;
     }
 
     Ok(GenerateOutput {
@@ -765,7 +765,7 @@ fn check_test(
 
         // Process Inputs
         for (input_idx, (caller_val, callee_val)) in
-            caller_inputs.into_iter().zip(callee_inputs).enumerate()
+            caller_inputs.iter().zip(callee_inputs).enumerate()
         {
             // Now we must enforce that the caller and callee agree on how
             // many fields each value had.
@@ -782,7 +782,7 @@ fn check_test(
             // Layer 3 is the leaf subfields of the values.
             // At this point we just need to assert that they agree on the bytes.
             for (field_idx, (caller_field, callee_field)) in
-                caller_val.into_iter().zip(callee_val).enumerate()
+                caller_val.iter().zip(callee_val).enumerate()
             {
                 if caller_field != callee_field {
                     results.push(Err(CheckFailure::InputFieldMismatch(
@@ -799,7 +799,7 @@ fn check_test(
 
         // Process Outputs
         for (output_idx, (caller_val, callee_val)) in
-            caller_outputs.into_iter().zip(callee_outputs).enumerate()
+            caller_outputs.iter().zip(callee_outputs).enumerate()
         {
             // Now we must enforce that the caller and callee agree on how
             // many fields each value had.
@@ -816,7 +816,7 @@ fn check_test(
             // Layer 3 is the leaf subfields of the values.
             // At this point we just need to assert that they agree on the bytes.
             for (field_idx, (caller_field, callee_field)) in
-                caller_val.into_iter().zip(callee_val).enumerate()
+                caller_val.iter().zip(callee_val).enumerate()
             {
                 if caller_field != callee_field {
                     results.push(Err(CheckFailure::OutputFieldMismatch(

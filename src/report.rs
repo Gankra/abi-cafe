@@ -65,6 +65,7 @@ pub enum BuildError {
     CCompile(#[from] cc::Error),
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, thiserror::Error)]
 pub enum CheckFailure {
     #[error("test {0} {} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}", ARG_NAMES[*.1])]

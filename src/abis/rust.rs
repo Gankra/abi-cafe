@@ -337,7 +337,7 @@ impl RustcAbiImpl {
                     results.extend(self.rust_forward_decl(field)?);
                 }
                 let mut output = String::new();
-                let ref_name = format!("{name}");
+                let ref_name = name.to_string();
                 output.push_str("\n#[repr(C)]\n");
                 output.push_str(&format!("pub struct {name} {{\n"));
                 for (idx, field) in fields.iter().enumerate() {
@@ -348,7 +348,7 @@ impl RustcAbiImpl {
                     );
                     output.push_str(&line);
                 }
-                output.push_str("}");
+                output.push('}');
                 results.push((ref_name, output));
                 Ok(results)
             }
@@ -414,7 +414,7 @@ impl RustcAbiImpl {
         if let Val::Ref(_) = val {
             Ok(format!("&{arg_name}"))
         } else {
-            Ok(format!("{arg_name}"))
+            Ok(arg_name.to_string())
         }
     }
 
@@ -438,35 +438,35 @@ impl RustcAbiImpl {
         use Val::*;
         let out = match val {
             Ref(pointee) => format!("*mut {}", self.rust_arg_type(pointee)?),
-            Ptr(_) => format!("*mut ()"),
-            Bool(_) => format!("bool"),
+            Ptr(_) => "*mut ()".to_string(),
+            Bool(_) => "bool".to_string(),
             Array(vals) => format!("[{}; {}]", self.rust_arg_type(&vals[0])?, vals.len()),
-            Struct(name, _) => format!("{name}"),
-            Float(FloatVal::c_double(_)) => format!("f64"),
-            Float(FloatVal::c_float(_)) => format!("f32"),
+            Struct(name, _) => name.to_string(),
+            Float(FloatVal::c_double(_)) => "f64".to_string(),
+            Float(FloatVal::c_float(_)) => "f32".to_string(),
             Int(int_val) => match int_val {
                 c__int128(_) => {
                     if STRUCT_128 {
-                        format!("FfiI128")
+                        "FfiI128".to_string()
                     } else {
-                        format!("i128")
+                        "i128".to_string()
                     }
                 }
-                c_int64_t(_) => format!("i64"),
-                c_int32_t(_) => format!("i32"),
-                c_int16_t(_) => format!("i16"),
-                c_int8_t(_) => format!("i8"),
+                c_int64_t(_) => "i64".to_string(),
+                c_int32_t(_) => "i32".to_string(),
+                c_int16_t(_) => "i16".to_string(),
+                c_int8_t(_) => "i8".to_string(),
                 c__uint128(_) => {
                     if STRUCT_128 {
-                        format!("FfiU128")
+                        "FfiU128".to_string()
                     } else {
-                        format!("u128")
+                        "u128".to_string()
                     }
                 }
-                c_uint64_t(_) => format!("u64"),
-                c_uint32_t(_) => format!("u32"),
-                c_uint16_t(_) => format!("u16"),
-                c_uint8_t(_) => format!("u8"),
+                c_uint64_t(_) => "u64".to_string(),
+                c_uint32_t(_) => "u32".to_string(),
+                c_uint16_t(_) => "u16".to_string(),
+                c_uint8_t(_) => "u8".to_string(),
             },
         };
         Ok(out)
@@ -491,12 +491,12 @@ impl RustcAbiImpl {
             Bool(val) => format!("{val}"),
             Array(vals) => {
                 let mut output = String::new();
-                output.push_str(&format!("[",));
+                output.push('[');
                 for elem in vals {
                     let part = format!("{}, ", self.rust_val(elem)?);
                     output.push_str(&part);
                 }
-                output.push_str("]");
+                output.push(']');
                 output
             }
             Struct(name, fields) => {
@@ -556,16 +556,16 @@ impl RustcAbiImpl {
         use Val::*;
         let out = match val {
             Ref(pointee) => self.rust_default_val(pointee)?,
-            Ptr(_) => format!("0 as *mut ()"),
-            Bool(_) => format!("false"),
+            Ptr(_) => "0 as *mut ()".to_string(),
+            Bool(_) => "false".to_string(),
             Array(vals) => {
                 let mut output = String::new();
-                output.push_str(&format!("[",));
+                output.push('[');
                 for elem in vals {
                     let part = format!("{}, ", self.rust_default_val(elem)?);
                     output.push_str(&part);
                 }
-                output.push_str("]");
+                output.push(']');
                 output
             }
             Struct(name, fields) => {
@@ -578,22 +578,22 @@ impl RustcAbiImpl {
                 output.push_str(" }");
                 output
             }
-            Float(..) => format!("0.0"),
+            Float(..) => "0.0".to_string(),
             Int(IntVal::c__int128(..)) => {
                 if STRUCT_128 {
-                    format!("FfiI128::new(0)")
+                    "FfiI128::new(0)".to_string()
                 } else {
-                    format!("0")
+                    "0".to_string()
                 }
             }
             Int(IntVal::c__uint128(..)) => {
                 if STRUCT_128 {
-                    format!("FfiU128::new(0)")
+                    "FfiU128::new(0)".to_string()
                 } else {
-                    format!("0")
+                    "0".to_string()
                 }
             }
-            Int(..) => format!("0"),
+            Int(..) => "0".to_string(),
         };
         Ok(out)
     }
@@ -611,7 +611,7 @@ impl RustcAbiImpl {
         use std::fmt::Write;
         let mut output = String::new();
         for path in self.rust_var_paths(val, from, is_var_root)? {
-            write!(output, "        WRITE_FIELD.unwrap()({to}, &{path} as *const _ as *const _, core::mem::size_of_val(&{path}) as u32);\n").unwrap();
+            writeln!(output, "        WRITE_FIELD.unwrap()({to}, &{path} as *const _ as *const _, core::mem::size_of_val(&{path}) as u32);").unwrap();
         }
         write!(output, "        FINISHED_VAL.unwrap()({to});").unwrap();
 

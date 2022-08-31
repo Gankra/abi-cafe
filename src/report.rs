@@ -22,10 +22,11 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
     let is_rust = caller.lang() == "rust" || callee.lang() == "rust";
     let is_rust_and_c = is_c && is_rust;
 
-    // llvm and gcc disagree on the u128 ABI everywhere but aarch64 (arm64).
+    // llvm and gcc disagree on the u128 ABI everywhere but aarch64 (arm64) and s390x.
     // This is Bad! Ideally we should check for all clang<->gcc pairs but to start
     // let's mark rust <-> C as disagreeing (because rust also disagrees with clang).
-    if !cfg!(target_arch = "aarch64") && test.test_name == "ui128" && is_rust_and_c {
+    if !cfg!(any(target_arch = "aarch64", target_arch = "s390x"))
+        && test.test_name == "ui128" && is_rust_and_c {
         result.check = Busted(Check);
     }
 

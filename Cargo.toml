@@ -1,8 +1,11 @@
 [package]
-edition = "2021"
 name = "abi-cafe"
+description = "Pair your compilers up at The ABI café!"
+repository = "https://github.com/Gankra/abi-cafe"
+edition = "2021"
+license = "MIT OR Apache-2.0"
 version = "0.0.0"
-
+exclude = ["generated_impls/", "handwritten_impls/", "tests/"]
 
 [features]
 default = []
@@ -11,7 +14,6 @@ parallel = ["rayon"]
 
 
 [dependencies]
-built = "0.5.1"
 cc = { version = "1.0.73" }
 clap = { version = "3.1.6", features = ["cargo", "wrap_help"] }
 libloading = "0.7.3"
@@ -27,4 +29,4 @@ thiserror = "1.0.30"
 
 
 [build-dependencies]
-built = "*"
+built = "0.5.1"

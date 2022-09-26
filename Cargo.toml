@@ -4,7 +4,7 @@ description = "Pair your compilers up at The ABI café!"
 repository = "https://github.com/Gankra/abi-cafe"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-version = "0.0.0"
+version = "0.1.0"
 exclude = ["generated_impls/", "handwritten_impls/", "tests/"]
 
 [features]
@@ -14,7 +14,7 @@ parallel = ["rayon"]
 
 
 [dependencies]
-cc = { version = "1.0.73" }
+cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
 clap = { version = "3.1.6", features = ["cargo", "wrap_help"] }
 libloading = "0.7.3"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }

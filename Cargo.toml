@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
-name = "abi-checker"
-version = "0.1.0"
+name = "abi-cafe"
+version = "0.0.0"
 
 
 [features]
@@ -12,7 +12,7 @@ parallel = ["rayon"]
 
 [dependencies]
 built = "0.5.1"
-cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
+cc = { version = "1.0.73" }
 clap = { version = "3.1.6", features = ["cargo", "wrap_help"] }
 libloading = "0.7.3"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }

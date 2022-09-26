@@ -16,7 +16,7 @@ pub fn make_app() -> Config {
         (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
     ];
 
-    let app = clap::Command::new("abi-checker")
+    let app = clap::Command::new("abi-cafe")
         .version(clap::crate_version!())
         .about("Compares the FFI ABIs of different langs/compilers by generating and running them.")
         .next_line_help(true)

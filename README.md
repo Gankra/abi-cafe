@@ -1,4 +1,8 @@
-# ABI-Checker
+# abi-cafe 🧩☕️❤️
+
+Not sure if your compilers have matching ABIs? Then put them through the ultimate compatibility crucible and pair them up on a shift at The ABI Café! Find out if your one true pairing fastcalls for each other or are just another slowburn disaster. (Maid outfits optional but recommended.)
+
+# About
 
 Run --help to get options for configuring execution.
 
@@ -92,7 +96,7 @@ The test format support for the following types/concepts:
 * float/double
 * bool
 * structs
-* opaque pointers (void*)
+* opaque pointers (void\*)
 * pass-by-ref (still checks the pointee's layout, and not the address)
 * arrays (including multi-dimensional arrays, although C often requires arrays to be wrapped in pass-by-ref)
 

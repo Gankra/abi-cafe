@@ -84,6 +84,8 @@ pub enum GenerateError {
         width=.2.position.col.saturating_sub(1),
     )]
     ParseError(String, String, ron::error::Error),
+    #[error("kdl parse error {}", .2)]
+    KdlParseError(String, String, kdl::KdlError),
     #[error("Two structs had the name {name}, but different layout! \nExpected {old_decl} \nGot {new_decl}")]
     InconsistentStructDefinition {
         name: String,

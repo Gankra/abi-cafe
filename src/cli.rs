@@ -1,5 +1,7 @@
 use crate::{abis::*, Config, OutputFormat};
 use clap::{AppSettings, Arg};
+use log::LevelFilter;
+use simplelog::{TermLogger, TerminalMode, ColorChoice};
 
 pub fn make_app() -> Config {
     static ABI_IMPLS: &[&str] = &[
@@ -153,6 +155,13 @@ pub fn make_app() -> Config {
         "rustc-json" => OutputFormat::RustcJson,
         _ => unreachable!(),
     };
+
+    let _ = TermLogger::init(
+        LevelFilter::Info,
+        simplelog::Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto
+    ).unwrap();
 
     Config {
         output_format,

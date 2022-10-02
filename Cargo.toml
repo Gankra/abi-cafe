@@ -16,9 +16,11 @@ parallel = ["rayon"]
 [dependencies]
 cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
 clap = { version = "3.1.6", features = ["cargo", "wrap_help"] }
+kdl = { git = "https://github.com/Gankra/kdl-rs", branch = "spanned" }
 libloading = "0.7.3"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }
 log = "0.4.14"
+miette = { version = "5.3.0", features = ["fancy"] }
 rayon = { version = "1.5.3", optional = true }
 ron = "0.7.0"
 serde = { version = "1.0.136", features = ["derive"] }

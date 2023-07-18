@@ -38,6 +38,7 @@ pub fn procgen_tests(regenerate: bool) {
         ("u8", &[Val::Int(IntVal::c_uint8_t(0x1a))]),
         ("ptr", &[Val::Ptr(0x1a2b_3c4d_23ea_f142)]),
         ("bool", &[Val::Bool(true)]),
+        ("f128", &[Val::Float(FloatVal::c_float128(809239021.392))]),
         ("f64", &[Val::Float(FloatVal::c_double(809239021.392))]),
         ("f32", &[Val::Float(FloatVal::c_float(-4921.3527))]),
         // These are split out because they are the buggy mess that inspired this whole enterprise!
@@ -99,6 +100,7 @@ pub fn procgen_tests(regenerate: bool) {
                         Val::Float(float_val) => match float_val {
                             FloatVal::c_double(out) => graffiti_primitive(out, i),
                             FloatVal::c_float(out) => graffiti_primitive(out, i),
+                            FloatVal::c_float128(out) => graffiti_primitive(out, i),
                         },
                         Val::Bool(out) => *out = true,
                     }
@@ -342,6 +344,7 @@ pub fn arg_ty(val: &Val) -> String {
             arg_ty(vals.get(0).expect("arrays must have length > 0")),
         ),
         Struct(name, _) => format!("struct_{name}"),
+        Float(FloatVal::c_float128(_)) => "f128".to_string(),
         Float(FloatVal::c_double(_)) => "f64".to_string(),
         Float(FloatVal::c_float(_)) => "f32".to_string(),
         Int(int_val) => match int_val {

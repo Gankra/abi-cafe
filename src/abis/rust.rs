@@ -442,6 +442,9 @@ impl RustcAbiImpl {
             Bool(_) => "bool".to_string(),
             Array(vals) => format!("[{}; {}]", self.rust_arg_type(&vals[0])?, vals.len()),
             Struct(name, _) => name.to_string(),
+            Float(FloatVal::c_float128(_)) => {
+                return Err(GenerateError::RustUnsupported("f128".to_owned()))
+            }
             Float(FloatVal::c_double(_)) => "f64".to_string(),
             Float(FloatVal::c_float(_)) => "f32".to_string(),
             Int(int_val) => match int_val {
@@ -508,6 +511,13 @@ impl RustcAbiImpl {
                 }
                 output.push_str(" }");
                 output
+            }
+            Float(FloatVal::c_float128(val)) => {
+                if val.fract() == 0.0 {
+                    format!("{val}.0")
+                } else {
+                    format!("{val}")
+                }
             }
             Float(FloatVal::c_double(val)) => {
                 if val.fract() == 0.0 {

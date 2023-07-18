@@ -26,7 +26,9 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
     // This is Bad! Ideally we should check for all clang<->gcc pairs but to start
     // let's mark rust <-> C as disagreeing (because rust also disagrees with clang).
     if !cfg!(any(target_arch = "aarch64", target_arch = "s390x"))
-        && test.test_name == "ui128" && is_rust_and_c {
+        && test.test_name == "ui128"
+        && is_rust_and_c
+    {
         result.check = Busted(Check);
     }
 

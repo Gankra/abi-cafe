@@ -610,6 +610,7 @@ impl CcAbiImpl {
                 ));
             }
             Struct(name, _) => format!("struct {name}"),
+            Float(FloatVal::c_float128(_)) => "__float128".to_string(),
             Float(FloatVal::c_double(_)) => "double".to_string(),
             Float(FloatVal::c_float(_)) => "float".to_string(),
             Int(int_val) => match int_val {
@@ -679,6 +680,13 @@ impl CcAbiImpl {
                 }
                 output.push_str(" }");
                 output
+            }
+            Float(FloatVal::c_float128(val)) => {
+                if val.fract() == 0.0 {
+                    format!("{val}.0")
+                } else {
+                    format!("{val}")
+                }
             }
             Float(FloatVal::c_double(val)) => {
                 if val.fract() == 0.0 {

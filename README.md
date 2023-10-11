@@ -101,7 +101,6 @@ The test format support for the following types/concepts:
 * arrays (including multi-dimensional arrays, although C often requires arrays to be wrapped in pass-by-ref)
 
 
-
 # Adding Tests
 
 Tests are specified as [ron](https://github.com/ron-rs/ron) files in the test/ directory, because it's more compact than JSON, has comments, and is more reliable with large integers. Because C is in some sense the "lingua franca" of FFI that everyone has to deal with, we prefer using C types in these definitions.

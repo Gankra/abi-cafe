@@ -309,6 +309,7 @@ impl FullReport {
     pub fn print_human(&self, mut f: impl std::io::Write) -> Result<(), std::io::Error> {
         use TestCheckMode::*;
         use TestConclusion::*;
+        eprintln!();
         writeln!(f, "Final Results:")?;
 
         for test in &self.tests {
@@ -366,7 +367,7 @@ impl FullReport {
         writeln!(f)?;
         writeln!(
             f,
-            "{} tests run - {} passed, {} busted, {} failed, {} skipped",
+            "{} test sets run - {} passed, {} busted, {} failed, {} skipped",
             self.summary.num_tests,
             self.summary.num_passed,
             self.summary.num_busted,

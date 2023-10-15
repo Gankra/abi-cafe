@@ -728,6 +728,7 @@ fn check_test(
     // funcs (subtests) -> vals (args/returns) -> fields -> bytes
 
     let mut results: Vec<Result<(), CheckFailure>> = Vec::new();
+    let full_test_name = full_test_name(test_key);
 
     // Layer 1 is the funcs/subtests. Because we have already checked
     // that they agree on their lengths, we can zip them together
@@ -864,9 +865,9 @@ fn check_test(
     }
 
     if all_passed {
-        eprintln!("all tests passed");
-    } else {
-        eprintln!("only {}/{} tests passed!", num_passed, results.len());
+        eprintln!("all tests from set {full_test_name} passed");
+    } else { 
+        eprintln!("only {}/{} tests from set {full_test_name} passed!", num_passed, results.len());
     }
     eprintln!();
 

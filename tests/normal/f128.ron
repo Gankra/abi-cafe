@@ -1,0 +1,11 @@
+Test(
+    name: "f128",  
+    funcs: [
+        (
+            name: "f128",
+            conventions: [c],
+            inputs: [Float(c_float128(5))],
+            output: None,
+        ),
+    ]
+)

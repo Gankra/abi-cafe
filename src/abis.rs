@@ -227,6 +227,7 @@ pub enum IntVal {
 pub enum FloatVal {
     c_double(f64),
     c_float(f32),
+    c_float128(f64),
     // Is there a reason to mess with `long double`? Surely not.
 }
 

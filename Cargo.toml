@@ -15,18 +15,18 @@ parallel = ["rayon"]
 
 [dependencies]
 cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
-clap = { version = "3.1.6", features = ["cargo", "wrap_help"] }
-libloading = "0.7.3"
+clap = { version = "4.4.7", features = ["cargo", "wrap_help"] }
+libloading = "0.8.1"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }
-log = "0.4.14"
-rayon = { version = "1.5.3", optional = true }
+log = "0.4.20"
+rayon = { version = "1.8.0", optional = true }
 ron = "0.7.0"
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = "1.0.83"
-simplelog = "0.11.2"
-thiserror = "1.0.30"
+serde = { version = "1.0.189", features = ["derive"] }
+serde_json = "1.0.107"
+simplelog = "0.12.1"
+thiserror = "1.0.50"
 
 
 
 [build-dependencies]
-built = "0.5.1"
+built = "0.7.1"

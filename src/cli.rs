@@ -1,5 +1,5 @@
 use crate::{abis::*, Config, OutputFormat};
-use clap::{AppSettings, Arg};
+use clap::Arg;
 
 pub fn make_app() -> Config {
     static ABI_IMPLS: &[&str] = &[
@@ -20,7 +20,6 @@ pub fn make_app() -> Config {
         .version(clap::crate_version!())
         .about("Compares the FFI ABIs of different langs/compilers by generating and running them.")
         .next_line_help(true)
-        .setting(AppSettings::DeriveDisplayOrder)
         .arg(
             Arg::new("procgen-tests")
                 .long("procgen-tests")
@@ -30,7 +29,7 @@ pub fn make_app() -> Config {
             Arg::new("conventions")
                 .long("conventions")
                 .long_help("Only run the given calling conventions")
-                .possible_values(&[
+                .value_parser([
                     "c",
                     "cdecl",
                     "fastcall",
@@ -38,55 +37,49 @@ pub fn make_app() -> Config {
                     "vectorcall",
                     "handwritten",
                 ])
-                .multiple_values(true)
-                .takes_value(true),
+                .num_args(0..),
         )
         .arg(
             Arg::new("impls")
                 .long("impls")
                 .long_help("Only run the given impls (compilers/languages)")
-                .possible_values(ABI_IMPLS)
-                .multiple_values(true)
-                .takes_value(true),
+                .value_parser(ABI_IMPLS.to_owned())
+                .num_args(0..),
         )
         .arg(
             Arg::new("tests")
                 .long("tests")
                 .long_help("Only run the given tests")
-                .multiple_values(true)
-                .takes_value(true),
+                .num_args(0..),
         )
         .arg(
             Arg::new("pairs")
                 .long("pairs")
                 .long_help("Only run the given impl pairs, in the form of impl_calls_impl")
-                .multiple_values(true)
-                .takes_value(true),
+                .num_args(0..),
         )
         .arg(
             Arg::new("add-rustc-codegen-backend")
                 .long("add-rustc-codegen-backend")
                 .long_help("Add a rustc codegen backend, in the form of impl_name:path/to/backend")
-                .multiple_values(true)
-                .takes_value(true),
+                .num_args(0..),
         )
         .arg(
             Arg::new("output-format")
                 .long("output-format")
                 .long_help("Set the output format")
-                .possible_values(&["human", "json", "rustc-json"])
-                .default_value("human")
-                .takes_value(true),
+                .value_parser(["human", "json", "rustc-json"])
+                .default_value("human"),
+                // .num_args(1),
         )
         .after_help("");
 
     let matches = app.get_matches();
-    let procgen_tests = matches.is_present("procgen-tests");
+    let procgen_tests = matches.contains_id("procgen-tests");
 
     let mut run_conventions: Vec<_> = matches
-        .values_of("conventions")
-        .into_iter()
-        .flatten()
+        .get_many::<String>("conventions")
+        .unwrap_or_default()
         .map(|conv| CallingConvention::from_str(conv).unwrap())
         .collect();
 
@@ -95,16 +88,14 @@ pub fn make_app() -> Config {
     }
 
     let run_impls = matches
-        .values_of("impls")
-        .into_iter()
-        .flatten()
+        .get_many::<String>("impls")
+        .unwrap_or_default()
         .map(String::from)
         .collect();
 
     let mut run_pairs: Vec<_> = matches
-        .values_of("pairs")
-        .into_iter()
-        .flatten()
+        .get_many::<String>("pairs")
+        .unwrap_or_default()
         .map(|pair| {
             pair.split_once("_calls_")
                 .expect("invalid 'pair' syntax, must be 'impl_calls_impl'")
@@ -120,16 +111,14 @@ pub fn make_app() -> Config {
     }
 
     let run_tests = matches
-        .values_of("tests")
-        .into_iter()
-        .flatten()
+        .get_many::<String>("tests")
+        .unwrap_or_default()
         .map(String::from)
         .collect();
 
     let rustc_codegen_backends = matches
-        .values_of("add-rustc-codegen-backend")
-        .into_iter()
-        .flatten()
+        .get_many::<String>("add-rustc-codegen-backend")
+        .unwrap_or_default()
         .map(|pair| {
             pair.split_once(':')
                 .expect("invalid syntax, must be 'impl_name:path/to/backend'")
@@ -147,7 +136,7 @@ pub fn make_app() -> Config {
         }
     }
 
-    let output_format = match matches.value_of("output-format").unwrap() {
+    let output_format = match matches.get_one::<String>("output-format").unwrap().as_str() {
         "human" => OutputFormat::Human,
         "json" => OutputFormat::Json,
         "rustc-json" => OutputFormat::RustcJson,

@@ -128,7 +128,7 @@ pub fn make_app() -> Config {
         .map(String::from)
         .collect();
 
-    let rustc_codegen_backends = matches
+    let rustc_codegen_backends: Vec<(String, String)> = matches
         .values_of("add-rustc-codegen-backend")
         .into_iter()
         .flatten()

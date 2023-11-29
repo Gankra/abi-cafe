@@ -2,6 +2,7 @@ mod abis;
 mod cli;
 mod procgen;
 mod report;
+mod test_format;
 
 use abis::*;
 use linked_hash_map::LinkedHashMap;
@@ -320,7 +321,7 @@ fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
         })?;
         Ok(test)
     } else if ext == "kdl" {
-        if let Err(e) = do_kdl(test_file, input) {
+        if let Err(e) = test_format::do_kdl(test_file, input) {
             println!("failed to read doc! {:?}", e);
             std::process::exit(-1);
         } else {
@@ -331,138 +332,6 @@ fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
     }
 }
 
-
-struct NominalTy {
-    name: TyName,
-    attrs: Vec<TyAttr>,
-    decls: Vec<TyDecl>,
-}
-
-struct TyAttr {
-    langs: Option<String>,
-    impls: Option<String>,
-}
-
-struct TyDecl {
-    langs: Option<String>,
-    impls: Option<String>,
-    decl: Decl,
-}
-
-enum Decl {
-    Alias(AliasDecl),
-    Union(UnionDecl),
-    Enum(EnumDecl),
-    TaggedUnion(TaggedUnionDecl),
-}
-
-struct AliasDecl {
-    ty: Ty,
-}
-struct StructDecl {
-    fields: Vec<(Option<Ident>, Ty)>,
-}
-struct UnionDecl {
-    fields: Vec<(Option<Ident>, Ty)>,
-}
-struct EnumDecl {
-    // engh ideally we would have EnumDecl "know" its tag size
-    // but that doesn't really play nice with anything so let's
-    // say i128 tag should be enough for anyone?
-    fields: Vec<(Option<Ident>, Option<i128>)>,
-}
-struct TaggedUnionDecl {
-    fields: Vec<(Option<Ident>, Option<Ty>)>,
-}
-
-enum Ty {
-    Nominal(TyName),
-    Array(Box<Ty>, usize),
-    ByRef(Box<Ty>),
-}
-
-type TyName = Ident;
-type Ident = String;
-
-#[derive(Debug, thiserror::Error, miette::Diagnostic)]
-enum KdlError {
-    #[error(transparent)]
-    #[diagnostic(transparent)]
-    UnknownTyNode(#[from] UnknownTyNodeError),
-}
-
-pub type SourceFile = std::sync::Arc<miette::NamedSource>;
-
-#[derive(Debug, thiserror::Error, miette::Diagnostic)]
-#[error("unknown node for a type: {}", node_name)]
-#[diagnostic(help("we expect 'decl' or 'attr' nodes"))]
-struct UnknownTyNodeError {
-    #[source_code]
-    source_code: SourceFile,
-    node_name: String,
-    #[label("here")]
-    span: miette::SourceSpan,
-}
-
-fn do_kdl(test_file: &Path, input: String) -> Result<Test, miette::Report> {
-    let doc = input.parse::<kdl::KdlDocument>()?;
-    let src = std::sync::Arc::new(miette::NamedSource::new(test_file.to_string_lossy().to_owned(), input));
-
-    const NODE_TYPES: &str = "types";
-    const NODE_FUNCS: &str = "funcs";
-
-    if let Some(types) = doc.get(NODE_TYPES) {
-        let tys = HashMap::<TyName, NominalTy>::new();
-        for ty in types.children().into_iter().flat_map(|d| d.nodes()) {
-            let ty_name = ty.name().value().to_owned();
-            for node in ty.children().into_iter().flat_map(|d| d.nodes()) {
-                match node.name().value() {
-                    "decl" => {
-                        // println!("    decl");
-                    }
-                    "attr" => {
-                        // println!("    attr");
-                    }
-                    unknown => {
-                        warn!("{:?}", miette::Report::from(UnknownTyNodeError {
-                            source_code: src.clone(),
-                            node_name: unknown.to_owned(),
-                            span: *node.span(),
-                        }));
-                    }
-                }
-            }
-        }
-        println!("got types!");
-    }
-
-    if let Some(funcs) = doc.get(NODE_FUNCS) {
-        // println!("got funcs!");
-        for func in funcs.children().into_iter().flat_map(|d| d.nodes()) {
-            // println!("  func {}", func.name());
-            for node in func.children().into_iter().flat_map(|d| d.nodes()) {
-                match node.name().value() {
-                    "args" => {
-                        // println!("    args");
-                    }
-                    "outs" => {
-                        // println!("    outs");
-                    }
-                    "conventions" => {
-                        // println!("    conventions");
-                    }
-                    unknown => {
-                        // println!("    unknown {}", unknown);
-                    }
-                }
-            }
-        }
-    }
-
-    println!("kdl done");
-    std::process::exit(0);
-
-}
 
 
 fn generate_test_src(

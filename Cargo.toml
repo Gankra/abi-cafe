@@ -17,6 +17,7 @@ parallel = ["rayon"]
 cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
 clap = { version = "3.1.6", features = ["cargo", "wrap_help"] }
 kdl = { git = "https://github.com/Gankra/kdl-rs", branch = "spanned" }
+kdl-script = { path = "../kdl-script" }
 libloading = "0.7.3"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }
 log = "0.4.14"

@@ -1,0 +1,61 @@
+struct "Simple" {
+    a "i32"
+}
+
+alias "Simple2" "Simple"
+
+struct "Complex" {
+    elems1 "[Simple;10]"
+    elems2 "[Simple;9]"
+    val "Simple"
+    reffed "&Simple"
+    array_ref "&[&Simple;2]"
+    opaque "ptr"
+    flag "bool"
+}
+
+enum "ErrorCode" {
+    Ok 0
+    FileNotFound 1
+    Bad -3
+}
+
+tagged "OptionI32" {
+    None
+    Some { _0 "i32"; }
+}
+
+tagged "MyResult" {
+    Ok { _0 "[&f128;3]"; }
+    Some { _0 "ErrorCode"; }
+}
+
+union "Life" {
+   simple "Simple2"
+   complex "Complex"
+}
+
+fn "func1" {
+    inputs { a "Complex"; b "Simple"; }
+    outputs { out "()"; }
+}
+
+fn "func2" {
+    inputs {
+        a "[Complex;2]"
+        b "[Simple;10]"
+        c "()"
+        d "f128"
+    }
+    outputs {
+        out "Complex"
+    }
+}
+
+fn "arraytime" {
+    inputs {
+        a "[i32;4]"
+        b "[[i32;4];5]"
+        c "[[[&Simple;1];2];3]"
+    }
+}

@@ -3,6 +3,7 @@
 // Backends that can generate + compile an implementation's code into a staticlib.
 pub mod c;
 pub mod rust;
+pub mod rust2;
 
 use super::report::BuildError;
 use std::io::Write;

@@ -1,0 +1,211 @@
+// Experimental sketches of specifying abi-checker tests with kdl.
+// See: https://github.com/Gankra/abi-checker
+//
+// Basically we generate source code for different languages (c, rust, ...)
+// from these abstract type/function definitions and then have them call eachother
+// and check that the values didn't get corrupted along the way.
+
+
+// Custom type definitions we want to pass across the ABI/convention of interest.
+//
+// By default type definitions/attributes are intended to be language agnostic.
+// AbiImpl Backends (rustc, cc, cxx, swiftc, ...) is responsible for lowering the
+// agnostic definition to its own concepts (or say "I don't support this").
+//
+// e.g. u32 => uint32_t for the cc/cxx backends, Uint32 in swiftc
+//
+// The agnostic form is often psuedo-rust because it has good type names/syntax.
+// Because we're interested in FFI, type definitions default to #[repr(C)].
+// Backends may support an opt-out for this like `attr lang="rust" #[repr(rust)]`
+types {
+    MyStruct {
+        // Backends should emit a packed attribute for this struct
+        @packed
+        /-garbage "wow"
+        struct {
+            x "u32"
+            y "u8"
+            z "i16"
+        }
+        /-more-garbage x="y" {
+            "garbage!!"
+            bad
+        }
+    }
+
+    MyGenericStruct "<T, U>" {
+        @packed
+        struct {
+            x "T"
+            y "U"
+            z "OtherGeneric<u8>"
+        }
+    }
+
+    // typedef my_u32 = u32
+    MyU32 {
+        alias "u32"
+    }
+
+    // Here we demonstrate ability to specify different lowerings for different
+    // languages. In this case a transparent newtype in rust, a simple typedef in C.
+    //
+    // Both "attr" and "decl" can be prefixed with either lang="$LANG" or "impl=$COMPILER"
+    // to specify that they only apply in certain cases. The exact merging/fallback behaviour
+    // is tbd.
+    //
+    // Example langs: "rust", "c", "c++"
+    // Example impls: "rustc", "cc", "gcc", "g++", ..
+    //
+    // 💭 Possible lang families?: "~c" (c, c++, obj-c, ...)
+    U64Meters {
+        @ lang="rust" "#[repr(transparent)]"
+        struct lang="rust" {
+            // Fields can be named `_`, implying they should be position or autonamed
+            // In the case of rust, this could lower to a tuple struct.
+            _ "u64"
+        }
+
+        alias lang="c" "u64"
+    }
+
+    // Typical union
+    MyUnion {
+        union {
+            x "u32"
+            y "u8"
+        }
+    }
+    
+    // C-style enum
+    MyEnum {
+        // You can specify that the tag should have a specific backing type
+        // which lowers to things like `#[repr(u8)]` or `enum class my_enum: uint8_t`
+        @tag "u8"
+        enum {
+            x
+            y
+            z
+        }
+    }
+
+    // Rust-style tagged union
+    //
+    // As previously stated, this will default to `#[repr(C)]` in rust, which is the
+    // "obvious" externally-tagged layout with a c-enum-sized tag as defined in
+    // https://github.com/rust-lang/rfcs/blob/master/text/2195-really-tagged-unions.md
+    //
+    // This is the worst layout, the better one is `#[repr(rust)]` + `#[repr(u8)]` 
+    // (also spec'd in RFC, internally tagged).
+    MyTaggedUnion {
+        tagged {
+            x
+            y "bool"
+        }
+    }
+
+    // A struct with a trailing empty array
+    MyTrailingStruct {
+        struct {
+            // decls can reference other decls (backend's problem to handle ordering)
+            header "Header"
+            // Rust array syntax, can nest, can reference types
+            buf "[u64; 0]"
+        }
+    }
+
+    Header {
+        struct {
+            len "usize"
+            cap "usize"
+            is_magic "bool"
+        }
+    }
+
+}
+
+
+
+
+// Function decls, which are the actual tests that will run.
+//
+// We will, for each AbiImpl x AbiImpl x CallingConvention:
+// 
+// * generate the callee and caller with the two AbiImpls and spec'd CallingConvention (fastcall::rustc_calls_cc)
+// * compile them to static libs
+// * link them into a harness dll/exe that calls each of the callers, which calls its paired callee
+// * have each side report the bytes of each arg/subfield
+// * compare the two reports for equality
+funcs {
+    // A function that passes a u32 and my_struct (defined in `types`) by-value.
+    //
+    // By default functions are assumed valid for all conventions/impls/langs.
+    //
+    // By default values will be "byte grafitti", containing the logical field and byte index.
+    // The high nibble contains the field index, the low nibble the byte index. For instance,
+    // In the following decl we will have:
+    //
+    // ```
+    // a =      0x00_01_02_03
+    // b = MyStruct {
+    //    x =   0x10_11_12_13
+    //    y =   0x20
+    //    z =   0x30_31
+    // }
+    // ```
+    //
+    // When ABI mismatches do happen, we will dump the offending bytes, and this tagging
+    // scheme makes it easier to identify where different bytes came from in the caller.
+    // (What this looks like for things with forbidden values is TBD but presumably we'll
+    // do some kind of modulo cycling through the vals.)
+    //
+    // outs are return values, passed back by the callee.
+    simple {
+        args {
+            a "u32"
+            b "MyStruct"
+        }
+        outs {
+            _ "bool"
+        }
+    }
+
+    // Varargs can be declared by having an arg with the name "..."
+    // Arguments that follow "..." are not part of the declared interface,
+    // but will be passed by the caller and expected by the callee.
+    varargs {
+        args {
+            _ "u8"
+            _ "bool"
+            "..."
+            _ "u32"
+        }
+    }
+
+    // Explicit values can be provided if desired
+    explicit_vals {
+        conventions "c" "fastcall"
+        args {
+            _ "u8" 0x69
+            b "MyUnion" {
+                x 12
+            }
+        }
+    }
+
+    // Args and outputs can be made "by reference", which means they will be
+    // passed as a pointer, but the pointee is the logical value that will be
+    // checked. This is in contrast to the builtin "ptr" value which is treated like spicy usize.
+    //
+    // Return values that are by-ref will be lowered to out-params.
+    by_ref {
+        args {
+            _ "&MyEnum"
+            _ "&MyEnum"
+        }
+        outs {
+            _ "&bool"
+            _ "u32"
+        }
+    }
+}

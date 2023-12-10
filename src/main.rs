@@ -2,9 +2,11 @@ mod abis;
 mod cli;
 mod procgen;
 mod report;
+mod test_format;
 
 use abis::*;
 use linked_hash_map::LinkedHashMap;
+use log::warn;
 use report::*;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -310,11 +312,27 @@ fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
     let mut reader = BufReader::new(file);
     let mut input = String::new();
     reader.read_to_string(&mut input)?;
-    let test: Test = ron::from_str(&input).map_err(|e| {
-        GenerateError::ParseError(test_file.to_string_lossy().into_owned(), input, e)
-    })?;
-    Ok(test)
+
+    let ext =  test_file.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+    if ext == "ron" {
+        let test: Test = ron::from_str(&input).map_err(|e| {
+            GenerateError::ParseError(test_file.to_string_lossy().into_owned(), input, e)
+        })?;
+        Ok(test)
+    } else if ext == "kdl" {
+        if let Err(e) = test_format::do_kdl(test_file, input) {
+            println!("failed to read doc! {:?}", e);
+            std::process::exit(-1);
+        } else {
+            Err(GenerateError::Skipped)
+        }
+    } else {
+        Err(GenerateError::Skipped)
+    }
 }
+
+
 
 fn generate_test_src(
     test: &Test,

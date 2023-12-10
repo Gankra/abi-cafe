@@ -3,6 +3,7 @@
 // Backends that can generate + compile an implementation's code into a staticlib.
 pub mod c;
 pub mod rust;
+pub mod rust2;
 
 use super::report::BuildError;
 use std::io::Write;
@@ -84,6 +85,8 @@ pub enum GenerateError {
         width=.2.position.col.saturating_sub(1),
     )]
     ParseError(String, String, ron::error::Error),
+    #[error("kdl parse error {}", .2)]
+    KdlParseError(String, String, kdl::KdlError),
     #[error("Two structs had the name {name}, but different layout! \nExpected {old_decl} \nGot {new_decl}")]
     InconsistentStructDefinition {
         name: String,

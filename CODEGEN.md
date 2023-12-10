@@ -4,9 +4,9 @@ abi-cafe exists to test that two languages/compilers/backends agree on ABIs for 
 
 1. Take something morally equivalent to a C header (a bunch of types and function signatures)
 2. Define codegen backends ("ABIs") that know how to take such a header and:
-  * generate code for the "caller" (the user of the function)
-  * generate code for the "callee" (the impl of the function)
-  * compile the result
+    * generate code for the "caller" (the user of the function)
+    * generate code for the "callee" (the impl of the function)
+    * compile the result
 3. For each ABI pairing we're interested in, link and run the two halves together
 
 At a lower level we:

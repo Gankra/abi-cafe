@@ -134,11 +134,11 @@ It might also be reasonable to introduce a concept to kdl-script that `Option::S
 * simd types
     * sketch: as primitives? or treated like structural types like arrays? (`[u32 x 5]`?)
     * this is apparently an ABI minefield that would benefit from more attention
+* `_BitInt(N)`
+    * I can't believe C is actually standardizing these what a time to be alive
 * tuples?
     * not exactly complex to do, just not clear what would use these
 * slices?
     * very rust-specific...
-* `_BitInt(N)`
-    * I can't believe C is actually standardizing these what a time to be alive
 * "the whole fucking Swift ABI"
     * lmfao sure thing buddy

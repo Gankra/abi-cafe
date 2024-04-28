@@ -8,8 +8,8 @@ struct "Complex" {
     elems1 "[Simple;10]"
     elems2 "[Simple;9]"
     val "Simple"
-    reffed "&Simple"
-    array_ref "&[&Simple;2]"
+    // reffed "&Simple"
+    // array_ref "&[&Simple;2]"
     opaque "ptr"
     flag "bool"
 }
@@ -26,8 +26,14 @@ tagged "OptionI32" {
 }
 
 tagged "MyResult" {
-    Ok { _0 "[&f128;3]"; }
-    Some { _0 "ErrorCode"; }
+    Ok { _0 "[u32;3]"; }
+    Err { _0 "ErrorCode"; }
+}
+
+tagged "MyDeepResult" {
+    Ok { _0 "MyResult"; }
+    Err { _0 "OptionI32"; }
+    FileNotFound { x "bool"; y "Simple"; }
 }
 
 union "Life" {
@@ -35,6 +41,19 @@ union "Life" {
    complex "Complex"
 }
 
+struct "ContainsRefs" {
+    valued "i32"
+    reffed "&i32"
+    deep_reffed "InnerContainsRefs"
+}
+
+tagged "InnerContainsRefs" {
+    A { x "&u64"; y "&u8"; }
+    B { z "&i16"; }
+    C { w "bool"; }
+}
+
+/*
 fn "func1" {
     inputs { a "Complex"; b "Simple"; }
     outputs { out "()"; }
@@ -45,7 +64,7 @@ fn "func2" {
         a "[Complex;2]"
         b "[Simple;10]"
         c "()"
-        d "f128"
+        d "f64"
     }
     outputs {
         out "Complex"
@@ -56,6 +75,26 @@ fn "arraytime" {
     inputs {
         a "[i32;4]"
         b "[[i32;4];5]"
-        c "[[[&Simple;1];2];3]"
+        // c "[[[&Simple;1];2];3]"
+    }
+}
+
+fn "enumtime" {
+    inputs {
+        a "OptionI32"
+        b "MyResult"
+        c "MyDeepResult"
+    }
+}
+
+
+*/
+
+fn "reftime" {
+    inputs {
+        a "i32"
+        b "&i32"
+        c "&Simple"
+        d "ContainsRefs"
     }
 }

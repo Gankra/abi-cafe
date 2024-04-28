@@ -14,7 +14,6 @@ pub fn do_kdl(test_file: &Path, input: String) -> Result<Test, miette::Report> {
     let graph = Arc::new(typed.definition_graph(&env)?);
 
     let abi = crate::abis::rust2::RustcAbiImpl::new(None);
-    let mut output = Vec::new();
     let test = crate::abis::rust2::Test {
         typed,
         env,
@@ -22,8 +21,15 @@ pub fn do_kdl(test_file: &Path, input: String) -> Result<Test, miette::Report> {
         convention: crate::abis::CallingConvention::C,
     };
 
+    let mut output = Vec::new();
     abi.generate_caller(&mut output, &test, test.typed.all_funcs()).unwrap();
     let output = String::from_utf8_lossy(&output);
     println!("{output}");
+
+    let mut output = Vec::new();
+    abi.generate_callee(&mut output, &test, test.typed.all_funcs()).unwrap();
+    let output = String::from_utf8_lossy(&output);
+    println!("{output}");
+
     todo!()
 }

@@ -78,6 +78,8 @@ pub trait AbiImpl {
 #[allow(dead_code)]
 pub enum GenerateError {
     #[error("io error\n{0}")]
+    Fmt(#[from] std::fmt::Error),
+    #[error("io error\n{0}")]
     Io(#[from] std::io::Error),
     #[error("parse error {0}\n{2}\n{}\n{:width$}^",
         .1.lines().nth(.2.position.line.saturating_sub(1)).unwrap(),

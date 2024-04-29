@@ -1,6 +1,6 @@
-use std::{path::Path, collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
-use kdl_script::types::{ArrayTy, RefTy, AliasTy};
+use kdl_script::types::{AliasTy, ArrayTy, RefTy};
 
 use crate::abis::Test;
 pub fn do_kdl(test_file: &Path, input: String) -> Result<Test, miette::Report> {
@@ -21,14 +21,14 @@ pub fn do_kdl(test_file: &Path, input: String) -> Result<Test, miette::Report> {
         convention: crate::abis::CallingConvention::C,
     };
 
-    let mut output = Vec::new();
-    abi.generate_caller(&mut output, &test, test.typed.all_funcs()).unwrap();
-    let output = String::from_utf8_lossy(&output);
+    let mut output = String::new();
+    abi.generate_caller(&mut output, &test, test.typed.all_funcs())
+        .unwrap();
     println!("{output}");
 
-    let mut output = Vec::new();
-    abi.generate_callee(&mut output, &test, test.typed.all_funcs()).unwrap();
-    let output = String::from_utf8_lossy(&output);
+    let mut output = String::new();
+    abi.generate_callee(&mut output, &test, test.typed.all_funcs())
+        .unwrap();
     println!("{output}");
 
     todo!()

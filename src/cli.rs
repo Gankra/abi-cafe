@@ -1,7 +1,7 @@
 use crate::{abis::*, Config, OutputFormat};
 use clap::{AppSettings, Arg};
 use log::LevelFilter;
-use simplelog::{TermLogger, TerminalMode, ColorChoice};
+use simplelog::{ColorChoice, TermLogger, TerminalMode};
 
 pub fn make_app() -> Config {
     static ABI_IMPLS: &[&str] = &[
@@ -160,8 +160,9 @@ pub fn make_app() -> Config {
         LevelFilter::Info,
         simplelog::Config::default(),
         TerminalMode::Mixed,
-        ColorChoice::Auto
-    ).unwrap();
+        ColorChoice::Auto,
+    )
+    .unwrap();
 
     Config {
         output_format,

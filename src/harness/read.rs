@@ -37,7 +37,7 @@ pub fn read_tests() -> Result<Vec<Test>, GenerateError> {
 }
 
 /// Read a test .kdl file
-pub fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
+fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
     let file = File::open(&test_file)?;
     let mut reader = BufReader::new(file);
     let mut input = String::new();

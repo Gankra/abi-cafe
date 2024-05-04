@@ -72,7 +72,6 @@ pub fn procgen_tests(regenerate: bool) {
 
         for val in vals.iter() {
             let new_val = |i| -> Val {
-                // TODO: actually perturb the values?
                 let mut new_val = val.clone();
                 let mut cur_val = Some(&mut new_val);
                 while let Some(temp) = cur_val.take() {

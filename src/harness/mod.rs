@@ -1,3 +1,11 @@
+//! The test harness, which provides:
+//!
+//! 1. reading test .kdl files (kdl-script)
+//! 2. generating impls of the tests
+//! 3. building + linking the test impls together
+//! 4. running the test impls
+//! 5. checking the test results
+
 use crate::TestKey;
 
 mod build;

@@ -200,14 +200,14 @@ pub enum Val {
     /// make sense either because we're slurping these values out of a static config file!
     /// I guess just truncating the pointer is "fine".
     Ptr(u64),
-    // TODO: unions. This is hard to do with the current design where
+    // FIXME: unions. This is hard to do with the current design where
     // types are implicit in their values. You could maybe hack it in
     // by having dummy vals for all the different cases and then a
     // "real" value for the variant that's actually used, but, kinda gross.
     //
-    // TODO: simd vectors (they have special passing rules!)
+    // FIXME: simd vectors (they have special passing rules!)
     //
-    // TODO: enums (enum classes?)
+    // FIXME: enums (enum classes?)
 }
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]

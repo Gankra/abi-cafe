@@ -189,7 +189,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             num_failed,
             num_skipped,
         },
-        // TODO: put in a bunch of metadata here?
+        // FIXME: put in a bunch of metadata here?
         config: TestConfig {},
         tests: reports,
     };

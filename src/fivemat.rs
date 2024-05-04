@@ -1,4 +1,11 @@
 //! Indent-aware indenting
+//!
+//! FIXME: it would be *great* if this had APIs for like
+//! "I am starting/ending a function" and "I am starting/ending a variable"
+//! so that it could implicitly constructs spans for them. In theory
+//! this would unlock the ability for the test harness' error-reporting
+//! facilities to say "hey these two impls disagreed on the values of var 1 field 3"
+//! **and actually show the Rust/C sourcecode that corresponds to**.
 
 use std::fmt::Write;
 

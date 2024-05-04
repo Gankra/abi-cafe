@@ -1,11 +1,15 @@
 mod abis;
 mod cli;
 mod fivemat;
-mod procgen;
+// mod procgen;
 mod report;
-mod test_format;
 
 use abis::*;
+use kdl_script::types::Arg;
+use kdl_script::types::Ty;
+use kdl_script::types::TyIdx;
+use kdl_script::PunEnv;
+use kdl_script::TypedProgram;
 use linked_hash_map::LinkedHashMap;
 use log::warn;
 use report::*;
@@ -16,6 +20,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Read;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -53,7 +58,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cfg = cli::make_app();
     eprintln!("parsed cli!");
     // Before doing anything, regenerate the procgen tests, if needed.
-    procgen::procgen_tests(cfg.procgen_tests);
+    // TODO: procgen::procgen_tests(cfg.procgen_tests);
     eprintln!("generated tests!");
 
     let out_dir = PathBuf::from("target/temp/");
@@ -72,6 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ABI_IMPL_RUSTC,
         Box::new(abis::RustcAbiImpl::new(&cfg, None)),
     );
+    /*
     abi_impls.insert(
         ABI_IMPL_CC,
         Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_CC)),
@@ -88,7 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         ABI_IMPL_MSVC,
         Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_MSVC)),
     );
-
+    */
     for &(ref name, ref path) in &cfg.rustc_codegen_backends {
         abi_impls.insert(
             name,
@@ -114,7 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             let test = match read_test_manifest(&entry.path()) {
                 Ok(test) => test,
                 Err(e) => {
-                    eprintln!("test {:?}'s .ron file couldn't be parsed {}", entry, e);
+                    eprintln!("test {:?}'s file couldn't be parsed {}", entry, e);
                     continue;
                 }
             };
@@ -168,6 +174,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 convention: convention_name.to_owned(),
                                 caller_id: caller_id.to_owned(),
                                 callee_id: callee_id.to_owned(),
+                                caller_variant: test.abi_variant(caller).unwrap(),
+                                callee_variant: test.abi_variant(callee).unwrap(),
                             };
                             let rules = get_test_rules(&test_key, caller, callee);
                             let results = do_test(
@@ -316,18 +324,18 @@ fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
 
     let ext = test_file.extension().and_then(|s| s.to_str()).unwrap_or("");
 
-    if ext == "ron" {
-        let test: Test = ron::from_str(&input).map_err(|e| {
-            GenerateError::ParseError(test_file.to_string_lossy().into_owned(), input, e)
-        })?;
-        Ok(test)
-    } else if ext == "kdl" {
-        if let Err(e) = test_format::do_kdl(test_file, input) {
-            println!("failed to read doc! {:?}", e);
-            std::process::exit(-1);
-        } else {
-            Err(GenerateError::Skipped)
-        }
+    if ext == "kdl" {
+        let mut compiler = kdl_script::Compiler::new();
+        let program = compiler.compile_string(&test_file.to_string_lossy(), input)?;
+        Ok(Test {
+            name: test_file
+                .file_stem()
+                .expect("test had no filename")
+                .to_str()
+                .expect("test filename wasn't utf8")
+                .to_owned(),
+            program,
+        })
     } else {
         Err(GenerateError::Skipped)
     }
@@ -387,10 +395,24 @@ fn generate_test_src(
         std::fs::create_dir_all(caller_src.parent().unwrap())?;
         std::fs::create_dir_all(callee_src.parent().unwrap())?;
         let mut caller_output = File::create(&caller_src)?;
-        caller.generate_caller(&mut caller_output, test, convention)?;
+        let mut caller_output_string = String::new();
+        caller.generate_caller(
+            &mut caller_output_string,
+            test,
+            &test_key.caller_variant,
+            convention,
+        )?;
+        caller_output.write_all(caller_output_string.as_bytes())?;
 
         let mut callee_output = File::create(&callee_src)?;
-        callee.generate_callee(&mut callee_output, test, convention)?;
+        let mut callee_output_string = String::new();
+        callee.generate_callee(
+            &mut callee_output_string,
+            test,
+            &test_key.callee_variant,
+            convention,
+        )?;
+        callee_output.write_all(callee_output_string.as_bytes())?;
     }
 
     Ok(GenerateOutput {
@@ -604,7 +626,8 @@ fn run_dynamic_test(
         // As a basic sanity-check, make sure everything agrees on how
         // many tests actually executed. If this fails, then something
         // is very fundamentally broken and needs to be fixed.
-        let expected_test_count = test.funcs.len();
+        let all_func_ids = test.program.all_funcs().collect::<Vec<_>>();
+        let expected_test_count = all_func_ids.len();
         if caller_inputs.funcs.len() != expected_test_count
             || caller_outputs.funcs.len() != expected_test_count
             || callee_inputs.funcs.len() != expected_test_count
@@ -636,28 +659,95 @@ fn run_dynamic_test(
             output
         }
 
+        /// Recursive subroutine of write_var, which builds up rvalue paths and generates
+        /// appropriate match statements. Actual WRITE calls are done by write_leaf_field.
         fn add_field(
+            program: &TypedProgram,
+            env: &PunEnv,
             input: &[Vec<u8>],
             output: &mut LinkedHashMap<String, String>,
             cur_idx: &mut usize,
             cur_path: String,
-            val: &Val,
+            var_ty: TyIdx,
         ) {
-            match val {
-                Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
+            match program.realize_ty(var_ty) {
+                Ty::Primitive(_) | Ty::Enum(_) => {
+                    // Hey an actual leaf, report it
                     output.insert(cur_path, format_bytes(input, cur_idx));
+                    *cur_idx += 1;
                 }
-                Val::Ref(sub_val) => add_field(input, output, cur_idx, cur_path, sub_val),
-                Val::Array(arr) => {
-                    for (arr_idx, sub_val) in arr.iter().enumerate() {
-                        let sub_path = format!("{}[{}]", cur_path, arr_idx);
-                        add_field(input, output, cur_idx, sub_path, sub_val);
+                Ty::Empty => {
+                    // nothing worth producing
+                }
+                Ty::Alias(alias_ty) => {
+                    // keep going but with the type changed
+                    add_field(
+                        program,
+                        env,
+                        input,
+                        output,
+                        cur_idx,
+                        cur_path,
+                        alias_ty.real,
+                    );
+                }
+                Ty::Pun(pun) => {
+                    // keep going but with the type changed
+                    let real_ty = program.resolve_pun(pun, env).unwrap();
+                    add_field(program, env, input, output, cur_idx, cur_path, real_ty);
+                }
+                Ty::Array(array_ty) => {
+                    // recurse into each array index
+                    for i in 0..array_ty.len {
+                        let base = format!("{cur_path}[{i}]");
+                        add_field(program, env, input, output, cur_idx, base, array_ty.elem_ty);
                     }
                 }
-                Val::Struct(_struct_name, fields) => {
-                    for (field_idx, field) in fields.iter().enumerate() {
-                        let sub_path = format!("{}.{}", cur_path, abis::FIELD_NAMES[field_idx]);
-                        add_field(input, output, cur_idx, sub_path, field);
+                Ty::Struct(struct_ty) => {
+                    // recurse into each field
+                    for field in &struct_ty.fields {
+                        let field_name = &field.ident;
+                        let base = format!("{cur_path}.{field_name}");
+                        add_field(program, env, input, output, cur_idx, base, field.ty);
+                    }
+                }
+                Ty::Tagged(tagged_ty) => {
+                    // FIXME(variant_select): hardcoded to access variant 0 for now
+                    if let Some(variant) = tagged_ty.variants.get(0) {
+                        if let Some(fields) = &variant.fields {
+                            for field in fields {
+                                add_field(
+                                    program,
+                                    env,
+                                    input,
+                                    output,
+                                    cur_idx,
+                                    field.ident.to_string(),
+                                    field.ty,
+                                );
+                            }
+                        }
+                    }
+                }
+                Ty::Ref(ref_ty) => {
+                    // Add a deref, and recurse into the pointee
+                    let base = format!("(*{cur_path})");
+                    add_field(
+                        program,
+                        env,
+                        input,
+                        output,
+                        cur_idx,
+                        base,
+                        ref_ty.pointee_ty,
+                    );
+                }
+                Ty::Union(union_ty) => {
+                    // FIXME(variant_select): hardcoded to access field 0 for now
+                    if let Some(field) = union_ty.fields.get(0) {
+                        let field_name = &field.ident;
+                        let base = format!("{cur_path}.{field_name}");
+                        add_field(program, env, input, output, cur_idx, base, field.ty);
                     }
                 }
             }
@@ -667,16 +757,13 @@ fn run_dynamic_test(
         let mut caller = report::Functions::new();
         let empty_func = Vec::new();
         let empty_arg = Vec::new();
-        for (func_idx, func) in test.funcs.iter().enumerate() {
+        for (func_idx, func_id) in all_func_ids.into_iter().enumerate() {
+            let func = test.program.realize_func(func_id);
             let caller_func = caller.entry(func.name.clone()).or_default();
             let callee_func = callee.entry(func.name.clone()).or_default();
             for (arg_idx, arg) in func.inputs.iter().enumerate() {
-                let caller_arg = caller_func
-                    .entry(ARG_NAMES[arg_idx].to_owned())
-                    .or_default();
-                let callee_arg = callee_func
-                    .entry(ARG_NAMES[arg_idx].to_owned())
-                    .or_default();
+                let caller_arg = caller_func.entry(arg.name.clone()).or_default();
+                let callee_arg = callee_func.entry(arg.name.clone()).or_default();
 
                 let caller_arg_bytes = caller_inputs
                     .funcs
@@ -691,13 +778,29 @@ fn run_dynamic_test(
                     .get(arg_idx)
                     .unwrap_or(&empty_arg);
 
-                add_field(caller_arg_bytes, caller_arg, &mut 0, String::new(), arg);
-                add_field(callee_arg_bytes, callee_arg, &mut 0, String::new(), arg);
+                add_field(
+                    &test.program,
+                    &test_key.caller_variant.env,
+                    caller_arg_bytes,
+                    caller_arg,
+                    &mut 0,
+                    String::new(),
+                    arg.ty,
+                );
+                add_field(
+                    &test.program,
+                    &test_key.callee_variant.env,
+                    callee_arg_bytes,
+                    callee_arg,
+                    &mut 0,
+                    String::new(),
+                    arg.ty,
+                );
             }
 
-            for (arg_idx, arg) in func.output.iter().enumerate() {
-                let caller_arg = caller_func.entry(format!("return{}", arg_idx)).or_default();
-                let callee_arg = callee_func.entry(format!("return{}", arg_idx)).or_default();
+            for (arg_idx, arg) in func.outputs.iter().enumerate() {
+                let caller_arg = caller_func.entry(arg.name.clone()).or_default();
+                let callee_arg = callee_func.entry(arg.name.clone()).or_default();
 
                 let caller_output_bytes = caller_outputs
                     .funcs
@@ -712,8 +815,24 @@ fn run_dynamic_test(
                     .get(arg_idx)
                     .unwrap_or(&empty_arg);
 
-                add_field(caller_output_bytes, caller_arg, &mut 0, String::new(), arg);
-                add_field(callee_output_bytes, callee_arg, &mut 0, String::new(), arg);
+                add_field(
+                    &test.program,
+                    &test_key.caller_variant.env,
+                    caller_output_bytes,
+                    caller_arg,
+                    &mut 0,
+                    String::new(),
+                    arg.ty,
+                );
+                add_field(
+                    &test.program,
+                    &test_key.callee_variant.env,
+                    callee_output_bytes,
+                    callee_arg,
+                    &mut 0,
+                    String::new(),
+                    arg.ty,
+                );
             }
         }
 
@@ -794,6 +913,7 @@ fn check_test(
                     input_idx,
                     caller_val.clone(),
                     callee_val.clone(),
+                    String::from("todo"),
                 )));
                 continue 'funcs;
             }
@@ -810,6 +930,7 @@ fn check_test(
                         field_idx,
                         caller_field.clone(),
                         callee_field.clone(),
+                        String::from("todo"),
                     )));
                     continue 'funcs;
                 }
@@ -860,9 +981,9 @@ fn check_test(
     // useful to keep a version of this near the actual compilation/execution
     // in case the compilers spit anything interesting to stdout/stderr.
     let names = test
-        .funcs
-        .iter()
-        .map(|test_func| full_subtest_name(test_key, &test_func.name))
+        .program
+        .all_funcs()
+        .map(|func_id| full_subtest_name(test_key, &test.program.realize_func(func_id).name))
         .collect::<Vec<_>>();
     let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
     let num_passed = results.iter().filter(|r| r.is_ok()).count();
@@ -959,6 +1080,7 @@ fn full_test_name(
         convention,
         caller_id,
         callee_id,
+        ..
     }: &TestKey,
 ) -> String {
     format!("{test_name}::{convention}::{caller_id}_calls_{callee_id}")
@@ -971,6 +1093,7 @@ fn full_subtest_name(
         convention,
         caller_id,
         callee_id,
+        ..
     }: &TestKey,
     func_name: &str,
 ) -> String {

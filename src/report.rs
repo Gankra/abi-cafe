@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use kdl_script::spanned::Spanned;
 use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
 use serde_json::json;
@@ -72,15 +73,15 @@ pub enum BuildError {
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug, thiserror::Error)]
 pub enum CheckFailure {
-    #[error("test {0} {} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}", ARG_NAMES[*.1])]
-    InputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>),
+    #[error("test {0} {5} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}")]
+    InputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>, String),
     #[error(
         "test {0} {} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}",
         OUTPUT_NAME
     )]
     OutputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>),
-    #[error("test {0} {} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}", ARG_NAMES[*.1])]
-    InputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>),
+    #[error("test {0} {4} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}")]
+    InputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>, String),
     #[error(
         "test {0} {} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}",
         OUTPUT_NAME
@@ -188,6 +189,10 @@ pub struct TestKey {
     pub convention: String,
     pub caller_id: String,
     pub callee_id: String,
+    #[serde(skip)]
+    pub caller_variant: TestVariant,
+    #[serde(skip)]
+    pub callee_variant: TestVariant,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -290,7 +295,8 @@ pub struct RunOutput {
     pub callee_outputs: WriteBuffer,
 }
 
-pub type Functions = LinkedHashMap<String, LinkedHashMap<String, LinkedHashMap<String, String>>>;
+pub type Functions =
+    LinkedHashMap<Spanned<String>, LinkedHashMap<Spanned<String>, LinkedHashMap<String, String>>>;
 
 #[derive(Debug, Serialize)]
 pub struct CheckOutput {

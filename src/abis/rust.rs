@@ -1,7 +1,23 @@
+//! Rust(c) codegen backend backend
+
+use std::sync::Arc;
+
+use kdl_script::parse::FuncDecl;
+use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
+use kdl_script::{DefinitionGraph, PunEnv, TypedProgram};
+
 use super::super::*;
 use super::*;
+use crate::fivemat::Fivemat;
+use std::fmt::Write;
 
 pub static RUST_TEST_PREFIX: &str = include_str!("../../harness/rust_test_prefix.rs");
+
+const VAR_CALLER_INPUTS: &str = "CALLER_INPUTS";
+const VAR_CALLER_OUTPUTS: &str = "CALLER_OUTPUTS";
+const VAR_CALLEE_INPUTS: &str = "CALLEE_INPUTS";
+const VAR_CALLEE_OUTPUTS: &str = "CALLEE_OUTPUTS";
+const INDENT: &str = "    ";
 
 static STRUCT_128: bool = false; // cfg!(target_arch="x86_64");
 
@@ -9,6 +25,27 @@ static STRUCT_128: bool = false; // cfg!(target_arch="x86_64");
 pub struct RustcAbiImpl {
     is_nightly: bool,
     codegen_backend: Option<String>,
+}
+
+pub struct TestImpl {
+    pub typed: Arc<TypedProgram>,
+    pub env: Arc<PunEnv>,
+    pub graph: Arc<DefinitionGraph>,
+    pub convention: CallingConvention,
+}
+
+pub struct GenState<'a> {
+    test: &'a TestImpl,
+    tynames: HashMap<TyIdx, String>,
+    borrowed_tynames: HashMap<TyIdx, String>,
+    funcs: Vec<FuncIdx>,
+    val_writer: WriteImpl,
+}
+
+enum WriteImpl {
+    HarnessCallback,
+    Print,
+    Noop,
 }
 
 impl AbiImpl for RustcAbiImpl {
@@ -20,6 +57,11 @@ impl AbiImpl for RustcAbiImpl {
     }
     fn src_ext(&self) -> &'static str {
         "rs"
+    }
+    fn pun_env(&self) -> Arc<PunEnv> {
+        Arc::new(kdl_script::PunEnv {
+            lang: "rust".to_string(),
+        })
     }
     fn supports_convention(&self, convention: CallingConvention) -> bool {
         // NOTE: Rustc spits out:
@@ -43,160 +85,6 @@ impl AbiImpl for RustcAbiImpl {
             CallingConvention::Fastcall => true,
             CallingConvention::Vectorcall => false, // too experimental even for nightly use?
         }
-    }
-
-    fn generate_caller(
-        &self,
-        f: &mut dyn Write,
-        test: &Test,
-        convention: CallingConvention,
-    ) -> Result<(), GenerateError> {
-        self.write_rust_prefix(f, test, convention)?;
-        let convention_decl = self.rust_convention_decl(convention);
-
-        // Generate the extern block
-        writeln!(f, "extern \"{convention_decl}\" {{",)?;
-        for function in &test.funcs {
-            write!(f, "  ")?;
-            self.write_rust_signature(f, function)?;
-            writeln!(f, ";")?;
-        }
-        writeln!(f, "}}")?;
-        writeln!(f)?;
-
-        // Now generate the body
-        writeln!(f, "#[no_mangle] pub extern \"C\" fn do_test() {{")?;
-
-        for function in &test.funcs {
-            if !function.has_convention(convention) {
-                continue;
-            }
-            writeln!(f, "   unsafe {{")?;
-
-            // Inputs
-            for (idx, input) in function.inputs.iter().enumerate() {
-                writeln!(
-                    f,
-                    "        {} = {};",
-                    self.rust_var_decl(input, ARG_NAMES[idx])?,
-                    self.rust_val(input)?
-                )?;
-            }
-            writeln!(f)?;
-            for (idx, input) in function.inputs.iter().enumerate() {
-                writeln!(
-                    f,
-                    "{}",
-                    self.rust_write_val(input, "CALLER_INPUTS", ARG_NAMES[idx], true)?
-                )?;
-            }
-            writeln!(f)?;
-
-            // Outputs
-            write!(f, "        ")?;
-            let pass_out = if let Some(output) = &function.output {
-                if let Some(decl) = self.rust_out_param_var(output, OUTPUT_NAME)? {
-                    writeln!(f, "        {}", decl)?;
-                    true
-                } else {
-                    write!(f, "        {} = ", self.rust_var_decl(output, OUTPUT_NAME)?)?;
-                    false
-                }
-            } else {
-                false
-            };
-
-            // Do the call
-            write!(f, "{}(", function.name)?;
-            for (idx, input) in function.inputs.iter().enumerate() {
-                write!(f, "{}, ", self.rust_arg_pass(input, ARG_NAMES[idx])?)?;
-            }
-            if pass_out {
-                writeln!(f, "&mut {OUTPUT_NAME}")?;
-            }
-            writeln!(f, ");")?;
-            writeln!(f)?;
-
-            // Report the output
-            if let Some(output) = &function.output {
-                writeln!(
-                    f,
-                    "{}",
-                    self.rust_write_val(output, "CALLER_OUTPUTS", OUTPUT_NAME, true)?
-                )?;
-            }
-
-            // Finished
-            writeln!(
-                f,
-                "        FINISHED_FUNC.unwrap()(CALLER_INPUTS, CALLER_OUTPUTS);"
-            )?;
-            writeln!(f, "   }}")?;
-        }
-
-        writeln!(f, "}}")?;
-
-        Ok(())
-    }
-    fn generate_callee(
-        &self,
-        f: &mut dyn Write,
-        test: &Test,
-        convention: CallingConvention,
-    ) -> Result<(), GenerateError> {
-        self.write_rust_prefix(f, test, convention)?;
-        let convention_decl = self.rust_convention_decl(convention);
-        for function in &test.funcs {
-            if !function.has_convention(convention) {
-                continue;
-            }
-            // Write the signature
-            writeln!(f, "#[no_mangle]")?;
-            write!(f, "pub unsafe extern \"{convention_decl}\" ")?;
-            self.write_rust_signature(f, function)?;
-            writeln!(f, " {{")?;
-
-            // Now the body
-
-            // Report Inputs
-            for (idx, input) in function.inputs.iter().enumerate() {
-                writeln!(
-                    f,
-                    "{}",
-                    self.rust_write_val(input, "CALLEE_INPUTS", ARG_NAMES[idx], false)?
-                )?;
-            }
-            writeln!(f)?;
-
-            // Report outputs and return
-            if let Some(output) = &function.output {
-                let decl = self.rust_var_decl(output, OUTPUT_NAME)?;
-                let val = self.rust_val(output)?;
-                writeln!(f, "        {decl} = {val};")?;
-                writeln!(
-                    f,
-                    "{}",
-                    self.rust_write_val(output, "CALLEE_OUTPUTS", OUTPUT_NAME, true)?
-                )?;
-                writeln!(
-                    f,
-                    "        FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
-                )?;
-                writeln!(
-                    f,
-                    "        {}",
-                    self.rust_var_return(output, OUTPUT_NAME, OUT_PARAM_NAME)?
-                )?;
-            } else {
-                writeln!(
-                    f,
-                    "        FINISHED_FUNC.unwrap()(CALLEE_INPUTS, CALLEE_OUTPUTS);"
-                )?;
-            }
-            writeln!(f, "}}")?;
-        }
-
-        Ok(())
     }
 
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
@@ -225,6 +113,226 @@ impl AbiImpl for RustcAbiImpl {
         // Currently no need to be different
         self.compile_callee(src_path, lib_name)
     }
+
+    fn generate_callee(
+        &self,
+        f: &mut dyn Write,
+        test: &abis::Test,
+        variant: &TestVariant,
+        convention: CallingConvention,
+    ) -> Result<(), GenerateError> {
+        let query = test.program.all_funcs();
+        let test = TestImpl {
+            typed: test.program.clone(),
+            env: variant.env.clone(),
+            graph: variant.graph.clone(),
+            convention,
+        };
+        self.generate_callee_impl(f, &test, query)
+    }
+
+    fn generate_caller(
+        &self,
+        f: &mut dyn Write,
+        test: &abis::Test,
+        variant: &TestVariant,
+        convention: CallingConvention,
+    ) -> Result<(), GenerateError> {
+        let query = test.program.all_funcs();
+        let test = TestImpl {
+            typed: test.program.clone(),
+            env: variant.env.clone(),
+            graph: variant.graph.clone(),
+            convention,
+        };
+        self.generate_caller_impl(f, &test, query)
+    }
+}
+
+impl RustcAbiImpl {
+    pub fn generate_caller_impl(
+        &self,
+        f: &mut dyn Write,
+        test: &TestImpl,
+        query: impl Iterator<Item = FuncIdx>,
+    ) -> Result<(), GenerateError> {
+        let mut state = gen_state(test);
+        let mut f = Fivemat::new(f, INDENT);
+
+        // Generate type decls and gather up functions
+        self.generate_definitions(&mut f, &mut state, query)?;
+        // Generate decls of the functions we want to call
+        self.generate_caller_externs(&mut f, &state)?;
+
+        // Generate the test function the harness will call
+        writeln!(f, "#[no_mangle]\npub extern \"C\" fn do_test() {{")?;
+        for &func in &state.funcs {
+            // Generate the individual function calls
+            self.generate_caller_body(&mut f, &state, func)?;
+        }
+        writeln!(&mut f, "}}")?;
+
+        Ok(())
+    }
+
+    fn generate_caller_externs(
+        &self,
+        f: &mut Fivemat,
+        state: &GenState,
+    ) -> Result<(), GenerateError> {
+        let convention_decl = self.convention_decl(state.test.convention)?;
+        writeln!(f, "extern \"{convention_decl}\" {{",)?;
+        f.add_indent(1);
+        for &func in &state.funcs {
+            self.generate_signature(f, &state, func)?;
+            writeln!(f, ";")?;
+        }
+        f.sub_indent(1);
+        writeln!(f, "}}")?;
+        writeln!(f)?;
+        Ok(())
+    }
+
+    fn generate_caller_body(
+        &self,
+        f: &mut Fivemat,
+        state: &GenState,
+        func: FuncIdx,
+    ) -> Result<(), GenerateError> {
+        writeln!(f, "unsafe {{")?;
+        f.add_indent(1);
+        let function = state.test.typed.realize_func(func);
+        let mut val_idx = 0;
+
+        // Create vars for all the inputs
+        for arg in function.inputs.iter() {
+            // Create and report the input
+            self.create_var(f, state, &arg.name, arg.ty, &mut val_idx)?;
+            self.write_var(f, state, &arg.name, arg.ty, VAR_CALLER_INPUTS)?;
+        }
+
+        // Call the function
+        self.call_function(f, state, function)?;
+
+        // Report all the outputs
+        for arg in function.outputs.iter() {
+            let arg_name = &arg.name;
+            self.write_var(f, state, arg_name, arg.ty, VAR_CALLER_OUTPUTS)?;
+        }
+
+        // Report the function is complete
+        self.end_function(f, state, VAR_CALLER_INPUTS, VAR_CALLER_OUTPUTS)?;
+        f.sub_indent(1);
+        writeln!(f, "}}")?;
+        Ok(())
+    }
+
+    fn call_function(
+        &self,
+        f: &mut Fivemat,
+        state: &GenState,
+        function: &Func,
+    ) -> Result<(), GenerateError> {
+        let func_name = &function.name;
+
+        // if there's an output, bind it
+        let mut proper_outputs = function
+            .outputs
+            .iter()
+            .filter(|arg| !state.borrowed_tynames.contains_key(&arg.ty));
+        let output = proper_outputs.next();
+        let too_many_outputs = proper_outputs.next();
+        if too_many_outputs.is_some() {
+            return Err(GenerateError::RustUnsupported(format!(
+                "multiple normal returns (should this be a tuple?)"
+            )));
+        }
+        if let Some(output) = output {
+            write!(f, "let {} = ", output.name)?;
+        }
+
+        // Call the function
+        write!(f, "{func_name}(")?;
+        let inputs = function.inputs.iter();
+        let out_params = function
+            .outputs
+            .iter()
+            .filter(|arg| state.borrowed_tynames.contains_key(&arg.ty));
+
+        for (arg_idx, arg) in inputs.chain(out_params).enumerate() {
+            if arg_idx > 0 {
+                write!(f, ", ")?;
+            }
+            self.pass_var(f, state, &arg.name, arg.ty)?;
+        }
+        writeln!(f, ");")?;
+        writeln!(f)?;
+        Ok(())
+    }
+}
+
+impl RustcAbiImpl {
+    pub fn generate_callee_impl(
+        &self,
+        f: &mut dyn std::fmt::Write,
+        test: &TestImpl,
+        query: impl Iterator<Item = FuncIdx>,
+    ) -> Result<(), GenerateError> {
+        let mut state = gen_state(test);
+        let mut f = Fivemat::new(f, INDENT);
+
+        // Generate type decls and gather up functions
+        self.generate_definitions(&mut f, &mut state, query)?;
+
+        for &func in &state.funcs {
+            // Generate the individual function definitions
+            self.generate_callee_body(&mut f, &state, func)?;
+        }
+        Ok(())
+    }
+
+    fn generate_callee_body(
+        &self,
+        f: &mut Fivemat,
+        state: &GenState,
+        func: FuncIdx,
+    ) -> Result<(), GenerateError> {
+        let function = state.test.typed.realize_func(func);
+        let convention_decl = self.convention_decl(state.test.convention)?;
+        writeln!(f, "#[no_mangle]")?;
+        write!(f, "pub unsafe extern \"{convention_decl}\" ")?;
+        self.generate_signature(f, &state, func)?;
+        writeln!(f, " {{")?;
+        f.add_indent(1);
+        writeln!(f, "unsafe {{")?;
+        f.add_indent(1);
+        // Report the inputs
+        for arg in function.inputs.iter() {
+            let arg_name = &arg.name;
+            self.write_var(f, state, arg_name, arg.ty, VAR_CALLEE_INPUTS)?;
+        }
+
+        // Create outputs and report them
+        let mut val_idx = 0;
+        for arg in function.outputs.iter() {
+            // Create and report the input
+            self.create_var(f, state, &arg.name, arg.ty, &mut val_idx)?;
+            self.write_var(f, state, &arg.name, arg.ty, VAR_CALLEE_OUTPUTS)?;
+        }
+
+        // Report the function is complete
+        self.end_function(f, state, VAR_CALLEE_INPUTS, VAR_CALLEE_OUTPUTS)?;
+
+        // Return the outputs
+        for arg in function.outputs.iter() {
+            self.return_var(f, state, &arg.name, arg.ty)?;
+        }
+        f.sub_indent(1);
+        writeln!(f, "}}")?;
+        f.sub_indent(1);
+        writeln!(f, "}}")?;
+        Ok(())
+    }
 }
 
 impl RustcAbiImpl {
@@ -235,8 +343,566 @@ impl RustcAbiImpl {
         }
     }
 
-    fn rust_convention_decl(&self, convention: CallingConvention) -> &'static str {
-        match convention {
+    pub fn generate_definitions(
+        &self,
+        f: &mut Fivemat,
+        state: &mut GenState,
+        query: impl Iterator<Item = FuncIdx>,
+    ) -> Result<(), GenerateError> {
+        self.write_harness_prefix(f, &state)?;
+
+        for def in state.test.graph.definitions(query) {
+            match def {
+                kdl_script::Definition::DeclareTy(ty) => {
+                    self.intern_tyname(f, state, ty)?;
+                }
+                kdl_script::Definition::DefineTy(ty) => {
+                    self.generate_tydef(f, state, ty)?;
+                }
+                kdl_script::Definition::DefineFunc(func) => {
+                    // Buffer up the funcs
+                    state.funcs.push(func);
+                }
+                kdl_script::Definition::DeclareFunc(_) => {
+                    // nothing to do, executable kdl-script isn't real and can't hurt us
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn intern_tyname(
+        &self,
+        f: &mut Fivemat,
+        state: &mut GenState,
+        ty: TyIdx,
+    ) -> Result<(), GenerateError> {
+        // Don't double-intern
+        if state.tynames.contains_key(&ty) {
+            return Ok(());
+        }
+
+        let (tyname, borrowed_tyname) = match state.test.typed.realize_ty(ty) {
+            // Structural types that don't need definitions but we should
+            // intern the name of
+            Ty::Primitive(prim) => {
+                let name = match prim {
+                    PrimitiveTy::I8 => "i8",
+                    PrimitiveTy::I16 => "i16",
+                    PrimitiveTy::I32 => "i32",
+                    PrimitiveTy::I64 => "i64",
+                    PrimitiveTy::I128 => "i128",
+                    PrimitiveTy::U8 => "u8",
+                    PrimitiveTy::U16 => "u16",
+                    PrimitiveTy::U32 => "u32",
+                    PrimitiveTy::U64 => "u64",
+                    PrimitiveTy::U128 => "u128",
+                    PrimitiveTy::F32 => "f32",
+                    PrimitiveTy::F64 => "f64",
+                    PrimitiveTy::Bool => "bool",
+                    PrimitiveTy::Ptr => "*mut ()",
+                    PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(format!(
+                        "rust doesn't have i256"
+                    )))?,
+                    PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(format!(
+                        "rust doesn't have u256"
+                    )))?,
+                    PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(format!(
+                        "rust doesn't have f16"
+                    )))?,
+                    PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(format!(
+                        "rust doesn't have f128"
+                    )))?,
+                };
+                (name.to_owned(), None)
+            }
+            Ty::Array(ArrayTy { elem_ty, len }) => {
+                let elem_tyname = &state.tynames[elem_ty];
+                let borrowed_tyname = state
+                    .borrowed_tynames
+                    .get(elem_ty)
+                    .map(|elem_tyname| format!("[{elem_tyname}; {len}]"));
+                (format!("[{elem_tyname}; {len}]"), borrowed_tyname)
+            }
+            Ty::Ref(RefTy { pointee_ty }) => {
+                let pointee_tyname = &state.tynames[pointee_ty];
+                let borrowed_pointee_tyname = state
+                    .borrowed_tynames
+                    .get(pointee_ty)
+                    .unwrap_or(pointee_tyname);
+                (
+                    format!("&mut {pointee_tyname}"),
+                    Some(format!("&'a mut {borrowed_pointee_tyname}")),
+                )
+            }
+            Ty::Empty => ("()".to_owned(), None),
+            // Nominal types we need to emit a decl for
+            Ty::Struct(struct_ty) => {
+                let has_borrows = struct_ty
+                    .fields
+                    .iter()
+                    .any(|field| state.borrowed_tynames.contains_key(&field.ty));
+                let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", struct_ty.name));
+                ((*struct_ty.name).clone(), borrowed_tyname)
+            }
+            Ty::Union(union_ty) => {
+                let has_borrows = union_ty
+                    .fields
+                    .iter()
+                    .any(|field| state.borrowed_tynames.contains_key(&field.ty));
+                let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", union_ty.name));
+                ((*union_ty.name).clone(), borrowed_tyname)
+            }
+            Ty::Enum(enum_ty) => ((*enum_ty.name).clone(), None),
+            Ty::Tagged(tagged_ty) => {
+                let has_borrows = tagged_ty.variants.iter().any(|v| {
+                    v.fields
+                        .as_ref()
+                        .map(|fields| {
+                            fields
+                                .iter()
+                                .any(|field| state.borrowed_tynames.contains_key(&field.ty))
+                        })
+                        .unwrap_or(false)
+                });
+                let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", tagged_ty.name));
+                ((*tagged_ty.name).clone(), borrowed_tyname)
+            }
+            Ty::Alias(AliasTy { name, real, attrs }) => {
+                let borrowed_tyname = state
+                    .borrowed_tynames
+                    .get(&real)
+                    .map(|name| format!("{name}<'a>"));
+                ((**name).clone(), borrowed_tyname)
+            }
+
+            // Puns should be evaporated
+            Ty::Pun(pun) => {
+                let real_ty = state.test.typed.resolve_pun(pun, &state.test.env).unwrap();
+                (
+                    state.tynames[&real_ty].clone(),
+                    state.borrowed_tynames.get(&real_ty).cloned(),
+                )
+            }
+        };
+
+        state.tynames.insert(ty, tyname);
+        if let Some(borrowed) = borrowed_tyname {
+            state.borrowed_tynames.insert(ty, borrowed);
+        }
+
+        Ok(())
+    }
+
+    pub fn generate_tydef(
+        &self,
+        f: &mut Fivemat,
+        state: &mut GenState,
+        ty: TyIdx,
+    ) -> Result<(), GenerateError> {
+        // Make sure our own name is interned
+        self.intern_tyname(f, state, ty)?;
+
+        match state.test.typed.realize_ty(ty) {
+            // Nominal types we need to emit a decl for
+            Ty::Struct(struct_ty) => {
+                assert!(
+                    struct_ty.attrs.is_empty(),
+                    "don't yet know how to apply attrs to structs"
+                );
+
+                let has_borrows = struct_ty
+                    .fields
+                    .iter()
+                    .any(|field| state.borrowed_tynames.contains_key(&field.ty));
+
+                // Emit an actual struct decl
+                writeln!(f, "#[repr(C)]")?;
+                if has_borrows {
+                    writeln!(f, "struct {}<'a> {{", struct_ty.name)?;
+                } else {
+                    writeln!(f, "struct {} {{", struct_ty.name)?;
+                }
+                f.add_indent(1);
+                for field in &struct_ty.fields {
+                    let field_name = &field.ident;
+                    let field_tyname = state
+                        .borrowed_tynames
+                        .get(&field.ty)
+                        .unwrap_or(&state.tynames[&field.ty]);
+                    writeln!(f, "{field_name}: {field_tyname},")?;
+                }
+                f.sub_indent(1);
+                writeln!(f, "}}\n")?;
+            }
+            Ty::Union(union_ty) => {
+                assert!(
+                    union_ty.attrs.is_empty(),
+                    "don't yet know how to apply attrs to unions"
+                );
+
+                let has_borrows = union_ty
+                    .fields
+                    .iter()
+                    .any(|field| state.borrowed_tynames.contains_key(&field.ty));
+
+                // Emit an actual union decl
+                writeln!(f, "#[repr(C)]")?;
+                if has_borrows {
+                    writeln!(f, "union {}<'a> {{", union_ty.name)?;
+                } else {
+                    writeln!(f, "union {} {{", union_ty.name)?;
+                }
+                f.add_indent(1);
+                for field in &union_ty.fields {
+                    let field_name = &field.ident;
+                    let field_tyname = state
+                        .borrowed_tynames
+                        .get(&field.ty)
+                        .unwrap_or(&state.tynames[&field.ty]);
+                    writeln!(f, "{field_name}: {field_tyname},")?;
+                }
+                f.sub_indent(1);
+                writeln!(f, "}}\n")?;
+            }
+            Ty::Enum(enum_ty) => {
+                assert!(
+                    enum_ty.attrs.is_empty(),
+                    "don't yet know how to apply attrs to enums"
+                );
+
+                // Emit an actual enum decl
+                writeln!(f, "#[repr(C)]")?;
+                writeln!(f, "enum {} {{", enum_ty.name)?;
+                f.add_indent(1);
+                for variant in &enum_ty.variants {
+                    let variant_name = &variant.name;
+                    writeln!(f, "{variant_name},")?;
+                }
+                f.sub_indent(1);
+                writeln!(f, "}}\n")?;
+            }
+            Ty::Tagged(tagged_ty) => {
+                assert!(
+                    tagged_ty.attrs.is_empty(),
+                    "don't yet know how to apply attrs to tagged unions"
+                );
+
+                let has_borrows = tagged_ty.variants.iter().any(|v| {
+                    v.fields
+                        .as_ref()
+                        .map(|fields| {
+                            fields
+                                .iter()
+                                .any(|field| state.borrowed_tynames.contains_key(&field.ty))
+                        })
+                        .unwrap_or(false)
+                });
+
+                // Emit an actual enum decl
+                writeln!(f, "#[repr(C)]")?;
+                if has_borrows {
+                    writeln!(f, "enum {}<'a> {{", tagged_ty.name)?;
+                } else {
+                    writeln!(f, "enum {} {{", tagged_ty.name)?;
+                }
+                f.add_indent(1);
+                for variant in &tagged_ty.variants {
+                    let variant_name = &variant.name;
+                    if let Some(fields) = &variant.fields {
+                        writeln!(f, "{variant_name} {{")?;
+                        f.add_indent(1);
+                        for field in fields {
+                            let field_name = &field.ident;
+                            let field_tyname = state
+                                .borrowed_tynames
+                                .get(&field.ty)
+                                .unwrap_or(&state.tynames[&field.ty]);
+                            writeln!(f, "{field_name}: {field_tyname},")?;
+                        }
+                        f.sub_indent(1);
+                        writeln!(f, "}},")?;
+                    } else {
+                        writeln!(f, "{variant_name},")?;
+                    }
+                }
+                f.sub_indent(1);
+                writeln!(f, "}}\n")?;
+            }
+            Ty::Alias(AliasTy { name, real, attrs }) => {
+                assert!(
+                    attrs.is_empty(),
+                    "don't yet know how to apply attrs to type aliases"
+                );
+
+                // Emit an actual type alias decl
+                if let Some(real_tyname) = state.borrowed_tynames.get(&real) {
+                    writeln!(f, "type {name}<'a> = {real_tyname};\n")?;
+                } else {
+                    let real_tyname = &state.tynames[&real];
+                    writeln!(f, "type {name} = {real_tyname};\n")?;
+                }
+            }
+            Ty::Pun(..) => {
+                // Puns should be evaporated by the type name interner
+            }
+            Ty::Primitive(prim) => {
+                match prim {
+                    PrimitiveTy::I8
+                    | PrimitiveTy::I16
+                    | PrimitiveTy::I32
+                    | PrimitiveTy::I64
+                    | PrimitiveTy::I128
+                    | PrimitiveTy::I256
+                    | PrimitiveTy::U8
+                    | PrimitiveTy::U16
+                    | PrimitiveTy::U32
+                    | PrimitiveTy::U64
+                    | PrimitiveTy::U128
+                    | PrimitiveTy::U256
+                    | PrimitiveTy::F16
+                    | PrimitiveTy::F32
+                    | PrimitiveTy::F64
+                    | PrimitiveTy::F128
+                    | PrimitiveTy::Bool
+                    | PrimitiveTy::Ptr => {
+                        // Builtin
+                    }
+                };
+            }
+            Ty::Array(ArrayTy { .. }) => {
+                // Builtin
+            }
+            Ty::Ref(RefTy { .. }) => {
+                // Builtin
+            }
+            Ty::Empty => {
+                // Builtin
+            }
+        }
+        Ok(())
+    }
+
+    pub fn generate_value(
+        &self,
+        f: &mut Fivemat,
+        state: &GenState,
+        ty: TyIdx,
+        val_idx: &mut usize,
+        alias: Option<&str>,
+        ref_temp_name: &str,
+        extra_decls: &mut Vec<String>,
+    ) -> Result<(), GenerateError> {
+        let names = match state.test.typed.realize_ty(ty) {
+            // Primitives are the only "real" values with actual bytes that advance val_idx
+            Ty::Primitive(prim) => {
+                match prim {
+                    PrimitiveTy::I8 => {
+                        write!(f, "{:#X}u8 as i8", graffiti_primitive::<i8>(*val_idx))?
+                    }
+                    PrimitiveTy::I16 => {
+                        write!(f, "{:#X}u16 as i16", graffiti_primitive::<i16>(*val_idx))?
+                    }
+                    PrimitiveTy::I32 => {
+                        write!(f, "{:#X}u32 as i32", graffiti_primitive::<i32>(*val_idx))?
+                    }
+                    PrimitiveTy::I64 => {
+                        write!(f, "{:#X}u64 as i64", graffiti_primitive::<i64>(*val_idx))?
+                    }
+                    PrimitiveTy::I128 => write!(f, "{:#X}", graffiti_primitive::<i128>(*val_idx))?,
+                    PrimitiveTy::U8 => write!(f, "{:#X}", graffiti_primitive::<u8>(*val_idx))?,
+                    PrimitiveTy::U16 => write!(f, "{:#X}", graffiti_primitive::<u16>(*val_idx))?,
+                    PrimitiveTy::U32 => write!(f, "{:#X}", graffiti_primitive::<u32>(*val_idx))?,
+                    PrimitiveTy::U64 => write!(f, "{:#X}", graffiti_primitive::<u64>(*val_idx))?,
+                    PrimitiveTy::U128 => write!(f, "{:#X}", graffiti_primitive::<u128>(*val_idx))?,
+
+                    PrimitiveTy::F32 => write!(
+                        f,
+                        "f32::from_bits({:#X}u32)",
+                        graffiti_primitive::<u32>(*val_idx)
+                    )?,
+                    PrimitiveTy::F64 => write!(
+                        f,
+                        "f64::from_bits({:#X}u64)",
+                        graffiti_primitive::<u64>(*val_idx)
+                    )?,
+                    PrimitiveTy::Bool => write!(f, "{}", true)?,
+                    PrimitiveTy::Ptr => {
+                        if true {
+                            write!(f, "{:#X} as *mut ()", graffiti_primitive::<u64>(*val_idx))?
+                        } else {
+                            write!(f, "{:#X} as *mut ()", graffiti_primitive::<u32>(*val_idx))?
+                        }
+                    }
+                    PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(format!(
+                        "rust doesn't have i256"
+                    )))?,
+                    PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(format!(
+                        "rust doesn't have u256"
+                    )))?,
+                    PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(format!(
+                        "rust doesn't have f16"
+                    )))?,
+                    PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(format!(
+                        "rust doesn't have f128"
+                    )))?,
+                };
+                *val_idx += 1;
+            }
+            Ty::Empty => {
+                write!(f, "()")?;
+            }
+            Ty::Ref(RefTy { pointee_ty }) => {
+                // The value is a mutable reference to a temporary
+                write!(f, "&mut {ref_temp_name}")?;
+
+                // TODO: should this be a recursive call to create_var (need create_var_inner?)
+                // Now do the rest of the recursion on constructing the temporary
+                let mut ref_temp = String::new();
+                let mut ref_temp_f = Fivemat::new(&mut ref_temp, INDENT);
+                let ty_name = &state.tynames[pointee_ty];
+                write!(&mut ref_temp_f, "let mut {ref_temp_name}: {ty_name} = ")?;
+                let ref_temp_name = format!("{ref_temp_name}_");
+                self.generate_value(
+                    &mut ref_temp_f,
+                    state,
+                    *pointee_ty,
+                    val_idx,
+                    alias,
+                    &ref_temp_name,
+                    extra_decls,
+                )?;
+                write!(&mut ref_temp_f, ";")?;
+                extra_decls.push(ref_temp);
+            }
+            Ty::Array(ArrayTy { elem_ty, len }) => {
+                write!(f, "[")?;
+                for arr_idx in 0..*len {
+                    if arr_idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    let ref_temp_name = format!("{ref_temp_name}{arr_idx}_");
+                    self.generate_value(
+                        f,
+                        state,
+                        *elem_ty,
+                        val_idx,
+                        alias,
+                        &ref_temp_name,
+                        extra_decls,
+                    )?;
+                }
+                write!(f, "]")?;
+            }
+            // Nominal types we need to emit a decl for
+            Ty::Struct(struct_ty) => {
+                let name = alias.unwrap_or(&struct_ty.name);
+                write!(f, "{name} {{ ")?;
+                for (field_idx, field) in struct_ty.fields.iter().enumerate() {
+                    if field_idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    let field_name = &field.ident;
+                    write!(f, "{field_name}: ")?;
+                    let ref_temp_name = format!("{ref_temp_name}{field_name}_");
+                    self.generate_value(
+                        f,
+                        state,
+                        field.ty,
+                        val_idx,
+                        alias,
+                        &ref_temp_name,
+                        extra_decls,
+                    )?;
+                }
+                write!(f, " }}")?;
+            }
+            Ty::Union(union_ty) => {
+                let name = alias.unwrap_or(&union_ty.name);
+                write!(f, "{name} {{ ")?;
+                // FIXME(variant_select):have a way to pick the variant!
+                if let Some(field) = union_ty.fields.get(0) {
+                    let field_name = &field.ident;
+                    write!(f, "{field_name}: ")?;
+                    let ref_temp_name = format!("{ref_temp_name}{field_name}_");
+                    self.generate_value(
+                        f,
+                        state,
+                        field.ty,
+                        val_idx,
+                        alias,
+                        &ref_temp_name,
+                        extra_decls,
+                    )?;
+                }
+                write!(f, " }}")?;
+            }
+            Ty::Enum(enum_ty) => {
+                let name = alias.unwrap_or(&enum_ty.name);
+                // FIXME(variant_select):have a way to pick the variant!
+                if let Some(variant) = enum_ty.variants.get(0) {
+                    let variant_name = &variant.name;
+                    write!(f, "{name}::{variant_name}")?;
+                }
+            }
+            Ty::Tagged(tagged_ty) => {
+                let name = alias.unwrap_or(&tagged_ty.name);
+                // FIXME(variant_select): have a way to pick the variant!
+                if let Some(variant) = tagged_ty.variants.get(0) {
+                    let variant_name = &variant.name;
+                    write!(f, "{name}::{variant_name}")?;
+                    if let Some(fields) = &variant.fields {
+                        write!(f, " {{ ")?;
+                        for (field_idx, field) in fields.iter().enumerate() {
+                            if field_idx > 0 {
+                                write!(f, ", ")?;
+                            }
+                            let field_name = &field.ident;
+                            write!(f, "{field_name}: ")?;
+                            let ref_temp_name = format!("{ref_temp_name}{field_name}_");
+                            self.generate_value(
+                                f,
+                                state,
+                                field.ty,
+                                val_idx,
+                                alias,
+                                &ref_temp_name,
+                                extra_decls,
+                            )?;
+                        }
+                        write!(f, " }}")?;
+                    }
+                }
+            }
+            Ty::Alias(AliasTy { real, name, .. }) => {
+                let alias = alias.or_else(|| Some(name));
+                self.generate_value(f, state, *real, val_idx, alias, ref_temp_name, extra_decls)?;
+            }
+
+            // Puns should be evaporated
+            Ty::Pun(pun) => {
+                let real_ty = state.test.typed.resolve_pun(pun, &state.test.env).unwrap();
+                self.generate_value(
+                    f,
+                    state,
+                    real_ty,
+                    val_idx,
+                    alias,
+                    ref_temp_name,
+                    extra_decls,
+                )?;
+            }
+        };
+
+        Ok(names)
+    }
+
+    fn convention_decl(
+        &self,
+        convention: CallingConvention,
+    ) -> Result<&'static str, GenerateError> {
+        let conv = match convention {
             CallingConvention::All => {
                 unreachable!("CallingConvention::All is sugar that shouldn't reach here")
             }
@@ -252,410 +918,325 @@ impl RustcAbiImpl {
             CallingConvention::Stdcall => "stdcall",
             CallingConvention::Fastcall => "fastcall",
             CallingConvention::Vectorcall => "vectorcall",
-        }
+        };
+        Ok(conv)
     }
 
     /// Every test should start by loading in the harness' "header"
     /// and forward-declaring any structs that will be used.
-    fn write_rust_prefix(
-        &self,
-        f: &mut dyn Write,
-        test: &Test,
-        convention: CallingConvention,
-    ) -> Result<(), GenerateError> {
-        if convention == CallingConvention::Vectorcall {
+    fn write_harness_prefix(&self, f: &mut Fivemat, state: &GenState) -> Result<(), GenerateError> {
+        if state.test.convention == CallingConvention::Vectorcall {
             writeln!(f, "#![feature(abi_vectorcall)]")?;
         }
         // Load test harness "headers"
-        write!(f, "{}", RUST_TEST_PREFIX)?;
-
-        // Forward-decl struct types
-        let mut forward_decls = std::collections::HashMap::<String, String>::new();
-        for function in &test.funcs {
-            for val in function.inputs.iter().chain(function.output.as_ref()) {
-                for (name, decl) in self.rust_forward_decl(val)? {
-                    match forward_decls.entry(name) {
-                        std::collections::hash_map::Entry::Occupied(entry) => {
-                            if entry.get() != &decl {
-                                return Err(GenerateError::InconsistentStructDefinition {
-                                    name: entry.key().clone(),
-                                    old_decl: entry.remove(),
-                                    new_decl: decl,
-                                });
-                            }
-                        }
-                        std::collections::hash_map::Entry::Vacant(entry) => {
-                            writeln!(f, "{decl}")?;
-                            entry.insert(decl);
-                        }
-                    }
-                }
-            }
-        }
+        writeln!(f, "{}", RUST_TEST_PREFIX)?;
+        writeln!(f)?;
 
         Ok(())
     }
 
-    fn write_rust_signature(
+    fn generate_signature(
         &self,
-        f: &mut dyn Write,
-        function: &Func,
+        f: &mut Fivemat,
+        state: &GenState,
+        func: FuncIdx,
     ) -> Result<(), GenerateError> {
+        let function = state.test.typed.realize_func(func);
+
         write!(f, "fn {}(", function.name)?;
-        for (idx, input) in function.inputs.iter().enumerate() {
-            write!(f, "{}, ", self.rust_arg_decl(input, ARG_NAMES[idx])?)?;
-        }
-        if let Some(output) = &function.output {
-            if let Some(out_param) = self.rust_out_param(output, OUT_PARAM_NAME)? {
-                write!(f, "{}", out_param)?;
-                write!(f, ")")?;
-            } else {
-                write!(f, ")")?;
-                let ty = self.rust_arg_type(output)?;
-                write!(f, " -> {ty}")?;
+        let mut multiarg = false;
+        // Add inputs
+        for (_idx, arg) in function.inputs.iter().enumerate() {
+            if multiarg {
+                write!(f, ", ")?;
             }
-        } else {
+            multiarg = true;
+            let arg_name = &arg.name;
+            let arg_ty = &state.tynames[&arg.ty];
+            write!(f, "{}: {}", arg_name, arg_ty)?;
+        }
+        // Add outparams
+        for (_idx, arg) in function.outputs.iter().enumerate() {
+            let is_outparam = state.borrowed_tynames.contains_key(&arg.ty);
+            if !is_outparam {
+                // Handled in next loop
+                continue;
+            }
+            if multiarg {
+                write!(f, ", ")?;
+            }
+            multiarg = true;
+            // NOTE: we intentionally don't use the "borrowed" tyname
+            // as we still don't need lifetimes here!
+            let arg_name = &arg.name;
+            let arg_ty = &state.tynames[&arg.ty];
+            write!(f, "{}: {}", arg_name, arg_ty)?;
+        }
+        // Add normal returns
+        let mut has_normal_return = false;
+        for (_idx, arg) in function.outputs.iter().enumerate() {
+            let is_outparam = state.borrowed_tynames.contains_key(&arg.ty);
+            if is_outparam {
+                // Already handled
+                continue;
+            }
+            if has_normal_return {
+                return Err(GenerateError::RustUnsupported(format!(
+                    "multiple normal returns (should this be a tuple?)"
+                )));
+            }
+            has_normal_return = true;
+            let arg_ty = &state.tynames[&arg.ty];
+            write!(f, ") -> {}", arg_ty)?;
+        }
+        if !has_normal_return {
             write!(f, ")")?;
         }
         Ok(())
     }
 
-    /// If this value defines a nominal type, this will spit out:
-    ///
-    /// * The type name
-    /// * The forward-declaration of that type
-    ///
-    /// To catch buggy test definitions, you should validate that all
-    /// structs that claim a particular name have the same declaration.
-    /// This is done in write_rust_prefix.
-    fn rust_forward_decl(&self, val: &Val) -> Result<Vec<(String, String)>, GenerateError> {
-        use Val::*;
-        match val {
-            Struct(name, fields) => {
-                let mut results = vec![];
-                for field in fields.iter() {
-                    results.extend(self.rust_forward_decl(field)?);
-                }
-                let mut output = String::new();
-                let ref_name = name.to_string();
-                output.push_str("\n#[repr(C)]\n");
-                output.push_str(&format!("pub struct {name} {{\n"));
-                for (idx, field) in fields.iter().enumerate() {
-                    let line = format!(
-                        "    {}: {},\n",
-                        FIELD_NAMES[idx],
-                        self.rust_nested_type(field)?
-                    );
-                    output.push_str(&line);
-                }
-                output.push('}');
-                results.push((ref_name, output));
-                Ok(results)
-            }
-            Array(vals) => self.rust_forward_decl(&vals[0]),
-            Ref(pointee) => self.rust_forward_decl(pointee),
-            _ => Ok(vec![]),
-        }
-    }
-
-    /// The decl to use for a local var (reference-ness stripped)
-    fn rust_var_decl(&self, val: &Val, var_name: &str) -> Result<String, GenerateError> {
-        if let Val::Ref(pointee) = val {
-            Ok(self.rust_var_decl(pointee, var_name)?)
-        } else {
-            Ok(format!("let {var_name}: {}", self.rust_arg_type(val)?))
-        }
-    }
-
-    /// The decl to use for a function arg (apply referenceness)
-    fn rust_arg_decl(&self, val: &Val, arg_name: &str) -> Result<String, GenerateError> {
-        if let Val::Ref(pointee) = val {
-            Ok(format!("{arg_name}: &{}", self.rust_arg_type(pointee)?))
-        } else {
-            Ok(format!("{arg_name}: {}", self.rust_arg_type(val)?))
-        }
-    }
-
-    /// If the return type needs to be an out_param, this returns it
-    fn rust_out_param(
+    fn create_var(
         &self,
-        val: &Val,
-        out_param_name: &str,
-    ) -> Result<Option<String>, GenerateError> {
-        if let Val::Ref(pointee) = val {
-            Ok(Some(format!(
-                "{out_param_name}: &mut {}",
-                self.rust_arg_type(pointee)?
-            )))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// If the return type needs to be an out_param, this returns it
-    fn rust_out_param_var(
-        &self,
-        val: &Val,
-        output_name: &str,
-    ) -> Result<Option<String>, GenerateError> {
-        if let Val::Ref(pointee) = val {
-            Ok(Some(format!(
-                "let mut {output_name}: {} = {};",
-                self.rust_arg_type(pointee)?,
-                self.rust_default_val(pointee)?
-            )))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// How to pass an argument
-    fn rust_arg_pass(&self, val: &Val, arg_name: &str) -> Result<String, GenerateError> {
-        if let Val::Ref(_) = val {
-            Ok(format!("&{arg_name}"))
-        } else {
-            Ok(arg_name.to_string())
-        }
-    }
-
-    /// How to return a value
-    fn rust_var_return(
-        &self,
-        val: &Val,
+        f: &mut Fivemat,
+        state: &GenState,
         var_name: &str,
-        out_param_name: &str,
-    ) -> Result<String, GenerateError> {
-        if let Val::Ref(_) = val {
-            Ok(format!("*{out_param_name} = {var_name};"))
-        } else {
-            Ok(format!("return {var_name};"))
+        var_ty: TyIdx,
+        val_idx: &mut usize,
+    ) -> Result<(), GenerateError> {
+        // Generate the input
+        let ty_name = &state.tynames[&var_ty];
+        let needs_mut = false;
+        let let_mut = if needs_mut { "let mut" } else { "let" };
+        let mut real_var_decl = String::new();
+        let mut real_var_decl_f = Fivemat::new(&mut real_var_decl, INDENT);
+        let mut extra_decls = Vec::new();
+        write!(&mut real_var_decl_f, "{let_mut} {var_name}: {ty_name} = ")?;
+        let ref_temp_name = format!("{var_name}_");
+        self.generate_value(
+            &mut real_var_decl_f,
+            state,
+            var_ty,
+            val_idx,
+            None,
+            &ref_temp_name,
+            &mut extra_decls,
+        )?;
+        writeln!(&mut real_var_decl, ";")?;
+
+        for decl in extra_decls {
+            writeln!(f, "{}", decl)?;
         }
-    }
-
-    /// The type name to use for this value when it is stored in args/vars.
-    fn rust_arg_type(&self, val: &Val) -> Result<String, GenerateError> {
-        use IntVal::*;
-        use Val::*;
-        let out = match val {
-            Ref(pointee) => format!("*mut {}", self.rust_arg_type(pointee)?),
-            Ptr(_) => "*mut ()".to_string(),
-            Bool(_) => "bool".to_string(),
-            Array(vals) => format!("[{}; {}]", self.rust_arg_type(&vals[0])?, vals.len()),
-            Struct(name, _) => name.to_string(),
-            Float(FloatVal::c_double(_)) => "f64".to_string(),
-            Float(FloatVal::c_float(_)) => "f32".to_string(),
-            Int(int_val) => match int_val {
-                c__int128(_) => {
-                    if STRUCT_128 {
-                        "FfiI128".to_string()
-                    } else {
-                        "i128".to_string()
-                    }
-                }
-                c_int64_t(_) => "i64".to_string(),
-                c_int32_t(_) => "i32".to_string(),
-                c_int16_t(_) => "i16".to_string(),
-                c_int8_t(_) => "i8".to_string(),
-                c__uint128(_) => {
-                    if STRUCT_128 {
-                        "FfiU128".to_string()
-                    } else {
-                        "u128".to_string()
-                    }
-                }
-                c_uint64_t(_) => "u64".to_string(),
-                c_uint32_t(_) => "u32".to_string(),
-                c_uint16_t(_) => "u16".to_string(),
-                c_uint8_t(_) => "u8".to_string(),
-            },
-        };
-        Ok(out)
-    }
-
-    /// The type name to use for this value when it is stored in composite.
-    ///
-    /// This is separated out in case there's a type that needs different
-    /// handling in this context to conform to a layout (i.e. how C arrays
-    /// decay into pointers when used in function args).
-    fn rust_nested_type(&self, val: &Val) -> Result<String, GenerateError> {
-        self.rust_arg_type(val)
-    }
-
-    /// An expression that generates this value.
-    fn rust_val(&self, val: &Val) -> Result<String, GenerateError> {
-        use IntVal::*;
-        use Val::*;
-        let out = match val {
-            Ref(pointee) => self.rust_val(pointee)?,
-            Ptr(addr) => format!("{addr:#X} as *mut ()"),
-            Bool(val) => format!("{val}"),
-            Array(vals) => {
-                let mut output = String::new();
-                output.push('[');
-                for elem in vals {
-                    let part = format!("{}, ", self.rust_val(elem)?);
-                    output.push_str(&part);
-                }
-                output.push(']');
-                output
-            }
-            Struct(name, fields) => {
-                let mut output = String::new();
-                output.push_str(&format!("{name} {{ "));
-                for (idx, field) in fields.iter().enumerate() {
-                    let part = format!("{}: {},", FIELD_NAMES[idx], self.rust_val(field)?);
-                    output.push_str(&part);
-                }
-                output.push_str(" }");
-                output
-            }
-            Float(FloatVal::c_double(val)) => {
-                if val.fract() == 0.0 {
-                    format!("{val}.0")
-                } else {
-                    format!("{val}")
-                }
-            }
-            Float(FloatVal::c_float(val)) => {
-                if val.fract() == 0.0 {
-                    format!("{val}.0")
-                } else {
-                    format!("{val}")
-                }
-            }
-            Int(int_val) => match int_val {
-                c__int128(val) => {
-                    if STRUCT_128 {
-                        format!("FfiI128::new({val})")
-                    } else {
-                        format!("{val}")
-                    }
-                }
-                c_int64_t(val) => format!("{val}"),
-                c_int32_t(val) => format!("{val}"),
-                c_int16_t(val) => format!("{val}"),
-                c_int8_t(val) => format!("{val}"),
-                c__uint128(val) => {
-                    if STRUCT_128 {
-                        format!("FfiU128::new({val:#X})")
-                    } else {
-                        format!("{val:#X}")
-                    }
-                }
-                c_uint64_t(val) => format!("{val:#X}"),
-                c_uint32_t(val) => format!("{val:#X}"),
-                c_uint16_t(val) => format!("{val:#X}"),
-                c_uint8_t(val) => format!("{val:#X}"),
-            },
-        };
-        Ok(out)
-    }
-
-    /// A suitable default value for this type
-    fn rust_default_val(&self, val: &Val) -> Result<String, GenerateError> {
-        use Val::*;
-        let out = match val {
-            Ref(pointee) => self.rust_default_val(pointee)?,
-            Ptr(_) => "0 as *mut ()".to_string(),
-            Bool(_) => "false".to_string(),
-            Array(vals) => {
-                let mut output = String::new();
-                output.push('[');
-                for elem in vals {
-                    let part = format!("{}, ", self.rust_default_val(elem)?);
-                    output.push_str(&part);
-                }
-                output.push(']');
-                output
-            }
-            Struct(name, fields) => {
-                let mut output = String::new();
-                output.push_str(&format!("{name} {{ "));
-                for (idx, field) in fields.iter().enumerate() {
-                    let part = format!("{}: {},", FIELD_NAMES[idx], self.rust_default_val(field)?);
-                    output.push_str(&part);
-                }
-                output.push_str(" }");
-                output
-            }
-            Float(..) => "0.0".to_string(),
-            Int(IntVal::c__int128(..)) => {
-                if STRUCT_128 {
-                    "FfiI128::new(0)".to_string()
-                } else {
-                    "0".to_string()
-                }
-            }
-            Int(IntVal::c__uint128(..)) => {
-                if STRUCT_128 {
-                    "FfiU128::new(0)".to_string()
-                } else {
-                    "0".to_string()
-                }
-            }
-            Int(..) => "0".to_string(),
-        };
-        Ok(out)
+        writeln!(f, "{}", real_var_decl)?;
+        Ok(())
     }
 
     /// Emit the WRITE calls and FINISHED_VAL for this value.
     /// This will WRITE every leaf subfield of the type.
     /// `to` is the BUFFER to use, `from` is the variable name of the value.
-    fn rust_write_val(
+    fn write_var(
         &self,
-        val: &Val,
+        f: &mut Fivemat,
+        state: &GenState,
+        var_name: &str,
+        var_ty: TyIdx,
+        to: &str,
+    ) -> Result<(), GenerateError> {
+        // If noop, don't bother doing anything (avoids tagged union matches being generated)
+        if let WriteImpl::Noop = state.val_writer {
+            return Ok(());
+        };
+        self.write_fields(f, state, to, var_name, var_ty)?;
+
+        // If doing full harness callbacks, signal we wrote all the fields of a variable
+        if let WriteImpl::HarnessCallback = state.val_writer {
+            writeln!(f, "finished_val({to});")?;
+            writeln!(f)?;
+        }
+        Ok(())
+    }
+
+    /// Recursive subroutine of write_var, which builds up rvalue paths and generates
+    /// appropriate match statements. Actual WRITE calls are done by write_leaf_field.
+    fn write_fields(
+        &self,
+        f: &mut Fivemat,
+        state: &GenState,
         to: &str,
         from: &str,
-        is_var_root: bool,
-    ) -> Result<String, GenerateError> {
-        use std::fmt::Write;
-        let mut output = String::new();
-        for path in self.rust_var_paths(val, from, is_var_root)? {
-            writeln!(output, "        WRITE_FIELD.unwrap()({to}, &{path} as *const _ as *const _, core::mem::size_of_val(&{path}) as u32);").unwrap();
-        }
-        write!(output, "        FINISHED_VAL.unwrap()({to});").unwrap();
-
-        Ok(output)
-    }
-
-    /// Compute the paths to every subfield of this value, with `from`
-    /// as the base path to that value, for rust_write_val's use.
-    fn rust_var_paths(
-        &self,
-        val: &Val,
-        from: &str,
-        is_var_root: bool,
-    ) -> Result<Vec<String>, GenerateError> {
-        let paths = match val {
-            Val::Int(_) | Val::Float(_) | Val::Bool(_) | Val::Ptr(_) => {
-                vec![format!("{from}")]
+        var_ty: TyIdx,
+    ) -> Result<(), GenerateError> {
+        match state.test.typed.realize_ty(var_ty) {
+            Ty::Primitive(_) | Ty::Enum(_) => {
+                // Hey an actual leaf, report it
+                self.write_leaf_field(f, state, to, from)?;
             }
-            Val::Struct(_name, fields) => {
-                let mut paths = vec![];
-                for (idx, field) in fields.iter().enumerate() {
-                    let base = format!("{from}.{}", FIELD_NAMES[idx]);
-                    paths.extend(self.rust_var_paths(field, &base, false)?);
-                }
-                paths
+            Ty::Empty => {
+                // nothing worth producing
             }
-            Val::Ref(pointee) => {
-                if is_var_root {
-                    self.rust_var_paths(pointee, from, false)?
-                } else {
-                    let base = format!("(*{from})");
-                    self.rust_var_paths(pointee, &base, false)?
-                }
+            Ty::Alias(alias_ty) => {
+                // keep going but with the type changed
+                self.write_fields(f, state, to, from, alias_ty.real)?;
             }
-            Val::Array(vals) => {
-                let mut paths = vec![];
-                for (i, elem) in vals.iter().enumerate() {
+            Ty::Pun(pun) => {
+                // keep going but with the type changed
+                let real_ty = state.test.typed.resolve_pun(pun, &state.test.env).unwrap();
+                self.write_fields(f, state, to, from, real_ty)?
+            }
+            Ty::Array(array_ty) => {
+                // recurse into each array index
+                for i in 0..array_ty.len {
                     let base = format!("{from}[{i}]");
-                    paths.extend(self.rust_var_paths(elem, &base, false)?);
+                    self.write_fields(f, state, to, &base, array_ty.elem_ty)?;
                 }
-                paths
+            }
+            Ty::Struct(struct_ty) => {
+                // recurse into each field
+                for field in &struct_ty.fields {
+                    let field_name = &field.ident;
+                    let base = format!("{from}.{field_name}");
+                    self.write_fields(f, state, to, &base, field.ty)?;
+                }
+            }
+            Ty::Tagged(tagged_ty) => {
+                // generate a wrapper match, then recurse into each field of each variant
+                writeln!(f, "match &{from} {{")?;
+                f.add_indent(1);
+                let tagged_name = &tagged_ty.name;
+                for variant in &tagged_ty.variants {
+                    let variant_name = &variant.name;
+                    match &variant.fields {
+                        Some(fields) => {
+                            // Variant with fields, recurse into them
+                            let field_list = fields
+                                .iter()
+                                .map(|f| f.ident.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            writeln!(f, "{tagged_name}::{variant_name} {{ {field_list} }} => {{")?;
+                            f.add_indent(1);
+                            for field in fields {
+                                self.write_fields(f, state, to, &field.ident, field.ty)?;
+                            }
+                            f.sub_indent(1);
+                            writeln!(f, "}}")?;
+                        }
+                        None => {
+                            // Variant without fields, need to include branch for exhaustiveness
+                            writeln!(f, "{tagged_name}::{variant_name} => {{ }}")?;
+                        }
+                    }
+                }
+                f.sub_indent(1);
+                writeln!(f, "}}")?;
+            }
+            Ty::Ref(ref_ty) => {
+                // Add a deref, and recurse into the pointee
+                let base = format!("(*{from})");
+                self.write_fields(f, state, to, &base, ref_ty.pointee_ty)?
+            }
+            Ty::Union(union_ty) => {
+                // FIXME(variant_select): hardcoded to access field 0 for now
+                if let Some(field) = union_ty.fields.get(0) {
+                    let field_name = &field.ident;
+                    let base = format!("{from}.{field_name}");
+                    self.write_fields(f, state, to, &base, field.ty)?;
+                }
             }
         };
-
-        Ok(paths)
+        Ok(())
     }
+
+    /// WRITE an actual indivisible value (primitive or c-like enum)
+    fn write_leaf_field(
+        &self,
+        f: &mut Fivemat,
+        state: &GenState,
+        to: &str,
+        path: &str,
+    ) -> Result<(), GenerateError> {
+        match state.val_writer {
+            WriteImpl::HarnessCallback => {
+                writeln!(f, "write_field({to}, &{path});")?;
+            }
+            WriteImpl::Print => {
+                writeln!(f, "println!(\"{{}}\", {path});")?;
+            }
+            WriteImpl::Noop => {
+                // Noop, do nothing
+            }
+        }
+        Ok(())
+    }
+
+    fn end_function(
+        &self,
+        f: &mut dyn Write,
+        state: &GenState,
+        inputs: &str,
+        outputs: &str,
+    ) -> Result<(), GenerateError> {
+        match state.val_writer {
+            WriteImpl::HarnessCallback => {
+                writeln!(f, "finished_func({inputs}, {outputs});")?;
+            }
+            WriteImpl::Print | WriteImpl::Noop => {
+                // Noop
+            }
+        }
+        Ok(())
+    }
+
+    fn pass_var(
+        &self,
+        f: &mut dyn Write,
+        state: &GenState,
+        var_name: &str,
+        var_ty: TyIdx,
+    ) -> Result<(), GenerateError> {
+        write!(f, "{var_name}")?;
+        Ok(())
+    }
+
+    fn return_var(
+        &self,
+        f: &mut dyn Write,
+        state: &GenState,
+        var_name: &str,
+        var_ty: TyIdx,
+    ) -> Result<(), GenerateError> {
+        // TODO: implement outparam returns
+        write!(f, "{var_name}")?;
+        Ok(())
+    }
+}
+
+fn gen_state(test: &TestImpl) -> GenState {
+    GenState {
+        test,
+        tynames: HashMap::new(),
+        borrowed_tynames: HashMap::new(),
+        funcs: vec![],
+        val_writer: WriteImpl::HarnessCallback,
+    }
+}
+
+/// For a given primitive type, generate an instance
+/// where all the high nybbles of each byte is val_idx
+/// and all the low nybbles are the number byte.
+///
+/// This lets us look at a random byte a function read
+/// and go "hey this was SUPPOSED to be the 3rd byte of the 7th arg",
+/// which is useful for figuring out how an argument got fucked up
+/// (how much it was misaligned, or passed in the wrong slot).
+fn graffiti_primitive<T: Copy>(val_idx: usize) -> T {
+    const MAX_SIZE: usize = 32;
+    const MAX_HEX: usize = 16;
+    assert!(
+        std::mem::size_of::<T>() <= MAX_SIZE,
+        "only primitives as big as u256 are supported!"
+    );
+
+    let bytes: [u8; MAX_SIZE] =
+        std::array::from_fn(|i| (0x10 * (val_idx % MAX_HEX) as u8) | ((i % MAX_HEX) as u8));
+    unsafe { std::mem::transmute_copy(&bytes) }
 }

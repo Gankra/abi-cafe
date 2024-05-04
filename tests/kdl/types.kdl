@@ -53,7 +53,6 @@ tagged "InnerContainsRefs" {
     C { w "bool"; }
 }
 
-/*
 fn "func1" {
     inputs { a "Complex"; b "Simple"; }
     outputs { out "()"; }
@@ -86,9 +85,6 @@ fn "enumtime" {
         c "MyDeepResult"
     }
 }
-
-
-*/
 
 fn "reftime" {
     inputs {

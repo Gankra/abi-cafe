@@ -190,9 +190,9 @@ pub struct TestKey {
     pub caller_id: String,
     pub callee_id: String,
     #[serde(skip)]
-    pub caller_variant: TestVariant,
+    pub caller_variant: TestForAbi,
     #[serde(skip)]
-    pub callee_variant: TestVariant,
+    pub callee_variant: TestForAbi,
 }
 
 #[derive(Debug, Clone, Serialize)]

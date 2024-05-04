@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use kdl_script::parse::FuncDecl;
 use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use kdl_script::{DefinitionGraph, PunEnv, TypedProgram};
 
@@ -25,27 +24,6 @@ static STRUCT_128: bool = false; // cfg!(target_arch="x86_64");
 pub struct RustcAbiImpl {
     is_nightly: bool,
     codegen_backend: Option<String>,
-}
-
-pub struct TestImpl {
-    pub typed: Arc<TypedProgram>,
-    pub env: Arc<PunEnv>,
-    pub graph: Arc<DefinitionGraph>,
-    pub convention: CallingConvention,
-}
-
-pub struct GenState<'a> {
-    test: &'a TestImpl,
-    tynames: HashMap<TyIdx, String>,
-    borrowed_tynames: HashMap<TyIdx, String>,
-    funcs: Vec<FuncIdx>,
-    val_writer: WriteImpl,
-}
-
-enum WriteImpl {
-    HarnessCallback,
-    Print,
-    Noop,
 }
 
 impl AbiImpl for RustcAbiImpl {
@@ -114,63 +92,35 @@ impl AbiImpl for RustcAbiImpl {
         self.compile_callee(src_path, lib_name)
     }
 
-    fn generate_callee(
-        &self,
-        f: &mut dyn Write,
-        test: &abis::Test,
-        variant: &TestVariant,
-        convention: CallingConvention,
-    ) -> Result<(), GenerateError> {
-        let query = test.program.all_funcs();
-        let test = TestImpl {
-            typed: test.program.clone(),
-            env: variant.env.clone(),
-            graph: variant.graph.clone(),
-            convention,
-        };
-        self.generate_callee_impl(f, &test, query)
+    fn generate_callee(&self, f: &mut dyn Write, mut test: TestImpl) -> Result<(), GenerateError> {
+        let mut f = Fivemat::new(f, INDENT);
+        self.generate_callee_impl(&mut f, &mut test)
     }
 
-    fn generate_caller(
-        &self,
-        f: &mut dyn Write,
-        test: &abis::Test,
-        variant: &TestVariant,
-        convention: CallingConvention,
-    ) -> Result<(), GenerateError> {
-        let query = test.program.all_funcs();
-        let test = TestImpl {
-            typed: test.program.clone(),
-            env: variant.env.clone(),
-            graph: variant.graph.clone(),
-            convention,
-        };
-        self.generate_caller_impl(f, &test, query)
+    fn generate_caller(&self, f: &mut dyn Write, mut test: TestImpl) -> Result<(), GenerateError> {
+        let mut f = Fivemat::new(f, INDENT);
+        self.generate_caller_impl(&mut f, &mut test)
     }
 }
 
 impl RustcAbiImpl {
     pub fn generate_caller_impl(
         &self,
-        f: &mut dyn Write,
-        test: &TestImpl,
-        query: impl Iterator<Item = FuncIdx>,
+        f: &mut Fivemat,
+        state: &mut TestImpl,
     ) -> Result<(), GenerateError> {
-        let mut state = gen_state(test);
-        let mut f = Fivemat::new(f, INDENT);
-
         // Generate type decls and gather up functions
-        self.generate_definitions(&mut f, &mut state, query)?;
+        self.generate_definitions(f, state)?;
         // Generate decls of the functions we want to call
-        self.generate_caller_externs(&mut f, &state)?;
+        self.generate_caller_externs(f, &state)?;
 
         // Generate the test function the harness will call
         writeln!(f, "#[no_mangle]\npub extern \"C\" fn do_test() {{")?;
-        for &func in &state.funcs {
+        for &func in &state.desired_funcs {
             // Generate the individual function calls
-            self.generate_caller_body(&mut f, &state, func)?;
+            self.generate_caller_body(f, &state, func)?;
         }
-        writeln!(&mut f, "}}")?;
+        writeln!(f, "}}")?;
 
         Ok(())
     }
@@ -178,12 +128,12 @@ impl RustcAbiImpl {
     fn generate_caller_externs(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
     ) -> Result<(), GenerateError> {
-        let convention_decl = self.convention_decl(state.test.convention)?;
+        let convention_decl = self.convention_decl(state.convention)?;
         writeln!(f, "extern \"{convention_decl}\" {{",)?;
         f.add_indent(1);
-        for &func in &state.funcs {
+        for &func in &state.desired_funcs {
             self.generate_signature(f, &state, func)?;
             writeln!(f, ";")?;
         }
@@ -196,12 +146,12 @@ impl RustcAbiImpl {
     fn generate_caller_body(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
         writeln!(f, "unsafe {{")?;
         f.add_indent(1);
-        let function = state.test.typed.realize_func(func);
+        let function = state.types.realize_func(func);
         let mut val_idx = 0;
 
         // Create vars for all the inputs
@@ -230,7 +180,7 @@ impl RustcAbiImpl {
     fn call_function(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         function: &Func,
     ) -> Result<(), GenerateError> {
         let func_name = &function.name;
@@ -274,19 +224,15 @@ impl RustcAbiImpl {
 impl RustcAbiImpl {
     pub fn generate_callee_impl(
         &self,
-        f: &mut dyn std::fmt::Write,
-        test: &TestImpl,
-        query: impl Iterator<Item = FuncIdx>,
+        f: &mut Fivemat,
+        state: &mut TestImpl,
     ) -> Result<(), GenerateError> {
-        let mut state = gen_state(test);
-        let mut f = Fivemat::new(f, INDENT);
-
         // Generate type decls and gather up functions
-        self.generate_definitions(&mut f, &mut state, query)?;
+        self.generate_definitions(f, state)?;
 
-        for &func in &state.funcs {
+        for &func in &state.desired_funcs {
             // Generate the individual function definitions
-            self.generate_callee_body(&mut f, &state, func)?;
+            self.generate_callee_body(f, &state, func)?;
         }
         Ok(())
     }
@@ -294,11 +240,11 @@ impl RustcAbiImpl {
     fn generate_callee_body(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
-        let function = state.test.typed.realize_func(func);
-        let convention_decl = self.convention_decl(state.test.convention)?;
+        let function = state.types.realize_func(func);
+        let convention_decl = self.convention_decl(state.convention)?;
         writeln!(f, "#[no_mangle]")?;
         write!(f, "pub unsafe extern \"{convention_decl}\" ")?;
         self.generate_signature(f, &state, func)?;
@@ -346,22 +292,21 @@ impl RustcAbiImpl {
     pub fn generate_definitions(
         &self,
         f: &mut Fivemat,
-        state: &mut GenState,
-        query: impl Iterator<Item = FuncIdx>,
+        state: &mut TestImpl,
     ) -> Result<(), GenerateError> {
         self.write_harness_prefix(f, &state)?;
 
-        for def in state.test.graph.definitions(query) {
+        for def in state.defs.definitions(state.desired_funcs.iter().copied()) {
             match def {
                 kdl_script::Definition::DeclareTy(ty) => {
-                    self.intern_tyname(f, state, ty)?;
+                    self.intern_tyname(state, ty)?;
                 }
                 kdl_script::Definition::DefineTy(ty) => {
                     self.generate_tydef(f, state, ty)?;
                 }
                 kdl_script::Definition::DefineFunc(func) => {
-                    // Buffer up the funcs
-                    state.funcs.push(func);
+                    // we'd buffer these up to generate them all at the end,
+                    // but we've already got them buffered, so... do nothing.
                 }
                 kdl_script::Definition::DeclareFunc(_) => {
                     // nothing to do, executable kdl-script isn't real and can't hurt us
@@ -372,18 +317,13 @@ impl RustcAbiImpl {
         Ok(())
     }
 
-    pub fn intern_tyname(
-        &self,
-        f: &mut Fivemat,
-        state: &mut GenState,
-        ty: TyIdx,
-    ) -> Result<(), GenerateError> {
+    pub fn intern_tyname(&self, state: &mut TestImpl, ty: TyIdx) -> Result<(), GenerateError> {
         // Don't double-intern
         if state.tynames.contains_key(&ty) {
             return Ok(());
         }
 
-        let (tyname, borrowed_tyname) = match state.test.typed.realize_ty(ty) {
+        let (tyname, borrowed_tyname) = match state.types.realize_ty(ty) {
             // Structural types that don't need definitions but we should
             // intern the name of
             Ty::Primitive(prim) => {
@@ -479,7 +419,7 @@ impl RustcAbiImpl {
 
             // Puns should be evaporated
             Ty::Pun(pun) => {
-                let real_ty = state.test.typed.resolve_pun(pun, &state.test.env).unwrap();
+                let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();
                 (
                     state.tynames[&real_ty].clone(),
                     state.borrowed_tynames.get(&real_ty).cloned(),
@@ -498,13 +438,13 @@ impl RustcAbiImpl {
     pub fn generate_tydef(
         &self,
         f: &mut Fivemat,
-        state: &mut GenState,
+        state: &mut TestImpl,
         ty: TyIdx,
     ) -> Result<(), GenerateError> {
         // Make sure our own name is interned
-        self.intern_tyname(f, state, ty)?;
+        self.intern_tyname(state, ty)?;
 
-        match state.test.typed.realize_ty(ty) {
+        match state.types.realize_ty(ty) {
             // Nominal types we need to emit a decl for
             Ty::Struct(struct_ty) => {
                 assert!(
@@ -687,14 +627,14 @@ impl RustcAbiImpl {
     pub fn generate_value(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         ty: TyIdx,
         val_idx: &mut usize,
         alias: Option<&str>,
         ref_temp_name: &str,
         extra_decls: &mut Vec<String>,
     ) -> Result<(), GenerateError> {
-        let names = match state.test.typed.realize_ty(ty) {
+        let names = match state.types.realize_ty(ty) {
             // Primitives are the only "real" values with actual bytes that advance val_idx
             Ty::Primitive(prim) => {
                 match prim {
@@ -882,7 +822,7 @@ impl RustcAbiImpl {
 
             // Puns should be evaporated
             Ty::Pun(pun) => {
-                let real_ty = state.test.typed.resolve_pun(pun, &state.test.env).unwrap();
+                let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();
                 self.generate_value(
                     f,
                     state,
@@ -924,8 +864,8 @@ impl RustcAbiImpl {
 
     /// Every test should start by loading in the harness' "header"
     /// and forward-declaring any structs that will be used.
-    fn write_harness_prefix(&self, f: &mut Fivemat, state: &GenState) -> Result<(), GenerateError> {
-        if state.test.convention == CallingConvention::Vectorcall {
+    fn write_harness_prefix(&self, f: &mut Fivemat, state: &TestImpl) -> Result<(), GenerateError> {
+        if state.convention == CallingConvention::Vectorcall {
             writeln!(f, "#![feature(abi_vectorcall)]")?;
         }
         // Load test harness "headers"
@@ -938,10 +878,10 @@ impl RustcAbiImpl {
     fn generate_signature(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
-        let function = state.test.typed.realize_func(func);
+        let function = state.types.realize_func(func);
 
         write!(f, "fn {}(", function.name)?;
         let mut multiarg = false;
@@ -998,7 +938,7 @@ impl RustcAbiImpl {
     fn create_var(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         var_name: &str,
         var_ty: TyIdx,
         val_idx: &mut usize,
@@ -1036,7 +976,7 @@ impl RustcAbiImpl {
     fn write_var(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         var_name: &str,
         var_ty: TyIdx,
         to: &str,
@@ -1060,12 +1000,12 @@ impl RustcAbiImpl {
     fn write_fields(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         to: &str,
         from: &str,
         var_ty: TyIdx,
     ) -> Result<(), GenerateError> {
-        match state.test.typed.realize_ty(var_ty) {
+        match state.types.realize_ty(var_ty) {
             Ty::Primitive(_) | Ty::Enum(_) => {
                 // Hey an actual leaf, report it
                 self.write_leaf_field(f, state, to, from)?;
@@ -1079,7 +1019,7 @@ impl RustcAbiImpl {
             }
             Ty::Pun(pun) => {
                 // keep going but with the type changed
-                let real_ty = state.test.typed.resolve_pun(pun, &state.test.env).unwrap();
+                let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();
                 self.write_fields(f, state, to, from, real_ty)?
             }
             Ty::Array(array_ty) => {
@@ -1150,7 +1090,7 @@ impl RustcAbiImpl {
     fn write_leaf_field(
         &self,
         f: &mut Fivemat,
-        state: &GenState,
+        state: &TestImpl,
         to: &str,
         path: &str,
     ) -> Result<(), GenerateError> {
@@ -1171,7 +1111,7 @@ impl RustcAbiImpl {
     fn end_function(
         &self,
         f: &mut dyn Write,
-        state: &GenState,
+        state: &TestImpl,
         inputs: &str,
         outputs: &str,
     ) -> Result<(), GenerateError> {
@@ -1189,7 +1129,7 @@ impl RustcAbiImpl {
     fn pass_var(
         &self,
         f: &mut dyn Write,
-        state: &GenState,
+        state: &TestImpl,
         var_name: &str,
         var_ty: TyIdx,
     ) -> Result<(), GenerateError> {
@@ -1200,23 +1140,13 @@ impl RustcAbiImpl {
     fn return_var(
         &self,
         f: &mut dyn Write,
-        state: &GenState,
+        state: &TestImpl,
         var_name: &str,
         var_ty: TyIdx,
     ) -> Result<(), GenerateError> {
         // TODO: implement outparam returns
         write!(f, "{var_name}")?;
         Ok(())
-    }
-}
-
-fn gen_state(test: &TestImpl) -> GenState {
-    GenState {
-        test,
-        tynames: HashMap::new(),
-        borrowed_tynames: HashMap::new(),
-        funcs: vec![],
-        val_writer: WriteImpl::HarnessCallback,
     }
 }
 

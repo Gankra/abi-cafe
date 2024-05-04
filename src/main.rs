@@ -5,13 +5,11 @@ mod fivemat;
 mod report;
 
 use abis::*;
-use kdl_script::types::Arg;
 use kdl_script::types::Ty;
 use kdl_script::types::TyIdx;
 use kdl_script::PunEnv;
 use kdl_script::TypedProgram;
 use linked_hash_map::LinkedHashMap;
-use log::warn;
 use report::*;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -174,8 +172,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 convention: convention_name.to_owned(),
                                 caller_id: caller_id.to_owned(),
                                 callee_id: callee_id.to_owned(),
-                                caller_variant: test.abi_variant(caller).unwrap(),
-                                callee_variant: test.abi_variant(callee).unwrap(),
+                                caller_variant: test.for_abi(caller).unwrap(),
+                                callee_variant: test.for_abi(callee).unwrap(),
                             };
                             let rules = get_test_rules(&test_key, caller, callee);
                             let results = do_test(
@@ -326,7 +324,7 @@ fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
 
     if ext == "kdl" {
         let mut compiler = kdl_script::Compiler::new();
-        let program = compiler.compile_string(&test_file.to_string_lossy(), input)?;
+        let types = compiler.compile_string(&test_file.to_string_lossy(), input)?;
         Ok(Test {
             name: test_file
                 .file_stem()
@@ -334,7 +332,7 @@ fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
                 .to_str()
                 .expect("test filename wasn't utf8")
                 .to_owned(),
-            program,
+            types,
         })
     } else {
         Err(GenerateError::Skipped)
@@ -398,9 +396,11 @@ fn generate_test_src(
         let mut caller_output_string = String::new();
         caller.generate_caller(
             &mut caller_output_string,
-            test,
-            &test_key.caller_variant,
-            convention,
+            test_key.caller_variant.for_impl(
+                convention,
+                test_key.caller_variant.types.all_funcs(),
+                WriteImpl::HarnessCallback,
+            )?,
         )?;
         caller_output.write_all(caller_output_string.as_bytes())?;
 
@@ -408,9 +408,11 @@ fn generate_test_src(
         let mut callee_output_string = String::new();
         callee.generate_callee(
             &mut callee_output_string,
-            test,
-            &test_key.callee_variant,
-            convention,
+            test_key.callee_variant.for_impl(
+                convention,
+                test_key.callee_variant.types.all_funcs(),
+                WriteImpl::HarnessCallback,
+            )?,
         )?;
         callee_output.write_all(callee_output_string.as_bytes())?;
     }
@@ -626,7 +628,7 @@ fn run_dynamic_test(
         // As a basic sanity-check, make sure everything agrees on how
         // many tests actually executed. If this fails, then something
         // is very fundamentally broken and needs to be fixed.
-        let all_func_ids = test.program.all_funcs().collect::<Vec<_>>();
+        let all_func_ids = test.types.all_funcs().collect::<Vec<_>>();
         let expected_test_count = all_func_ids.len();
         if caller_inputs.funcs.len() != expected_test_count
             || caller_outputs.funcs.len() != expected_test_count
@@ -758,7 +760,7 @@ fn run_dynamic_test(
         let empty_func = Vec::new();
         let empty_arg = Vec::new();
         for (func_idx, func_id) in all_func_ids.into_iter().enumerate() {
-            let func = test.program.realize_func(func_id);
+            let func = test.types.realize_func(func_id);
             let caller_func = caller.entry(func.name.clone()).or_default();
             let callee_func = callee.entry(func.name.clone()).or_default();
             for (arg_idx, arg) in func.inputs.iter().enumerate() {
@@ -779,7 +781,7 @@ fn run_dynamic_test(
                     .unwrap_or(&empty_arg);
 
                 add_field(
-                    &test.program,
+                    &test.types,
                     &test_key.caller_variant.env,
                     caller_arg_bytes,
                     caller_arg,
@@ -788,7 +790,7 @@ fn run_dynamic_test(
                     arg.ty,
                 );
                 add_field(
-                    &test.program,
+                    &test.types,
                     &test_key.callee_variant.env,
                     callee_arg_bytes,
                     callee_arg,
@@ -816,7 +818,7 @@ fn run_dynamic_test(
                     .unwrap_or(&empty_arg);
 
                 add_field(
-                    &test.program,
+                    &test.types,
                     &test_key.caller_variant.env,
                     caller_output_bytes,
                     caller_arg,
@@ -825,7 +827,7 @@ fn run_dynamic_test(
                     arg.ty,
                 );
                 add_field(
-                    &test.program,
+                    &test.types,
                     &test_key.callee_variant.env,
                     callee_output_bytes,
                     callee_arg,
@@ -981,9 +983,9 @@ fn check_test(
     // useful to keep a version of this near the actual compilation/execution
     // in case the compilers spit anything interesting to stdout/stderr.
     let names = test
-        .program
+        .types
         .all_funcs()
-        .map(|func_id| full_subtest_name(test_key, &test.program.realize_func(func_id).name))
+        .map(|func_id| full_subtest_name(test_key, &test.types.realize_func(func_id).name))
         .collect::<Vec<_>>();
     let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
     let num_passed = results.iter().filter(|r| r.is_ok()).count();

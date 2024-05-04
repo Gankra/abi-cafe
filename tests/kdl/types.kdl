@@ -94,3 +94,10 @@ fn "reftime" {
         d "ContainsRefs"
     }
 }
+
+fn "simple" {
+    inputs {
+        a "i32"
+        b "i32"
+    }
+}

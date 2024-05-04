@@ -5,6 +5,8 @@ use std::sync::Arc;
 use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use kdl_script::{DefinitionGraph, PunEnv, TypedProgram};
 
+use self::error::GenerateError;
+
 use super::super::*;
 use super::*;
 use crate::fivemat::Fivemat;

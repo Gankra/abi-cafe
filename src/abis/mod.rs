@@ -10,7 +10,7 @@ use kdl_script::{
 };
 pub use rust::RustcAbiImpl;
 
-use crate::BuildError;
+use crate::error::{BuildError, GenerateError};
 
 pub static ABI_IMPL_RUSTC: &str = "rustc";
 pub static ABI_IMPL_CC: &str = "cc";
@@ -177,44 +177,6 @@ impl TestForAbi {
             borrowed_tynames: Default::default(),
         })
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[allow(dead_code)]
-pub enum GenerateError {
-    #[error("io error\n{0}")]
-    Fmt(#[from] std::fmt::Error),
-    #[error("io error\n{0}")]
-    Io(#[from] std::io::Error),
-    #[error("parse error {0}\n{2}\n{}\n{:width$}^",
-        .1.lines().nth(.2.position.line.saturating_sub(1)).unwrap(),
-        "",
-        width=.2.position.col.saturating_sub(1),
-    )]
-    ParseError(String, String, ron::error::Error),
-    #[error("kdl parse error {}", .2)]
-    KdlParseError(String, String, kdl::KdlError),
-    #[error("kdl-script error {0}")]
-    KdlScriptError(#[from] kdl_script::KdlScriptError),
-    #[error("Two structs had the name {name}, but different layout! \nExpected {old_decl} \nGot {new_decl}")]
-    InconsistentStructDefinition {
-        name: String,
-        old_decl: String,
-        new_decl: String,
-    },
-    #[error("If you use the Handwritten calling convention, all functions in the test must use only that.")]
-    HandwrittenMixing,
-    #[error("No handwritten source for this pairing (skipping)")]
-    NoHandwrittenSource,
-    #[error("Unsupported Signature For Rust: {0}")]
-    RustUnsupported(String),
-    #[error("Unsupported Signature For C: {0}")]
-    CUnsupported(String),
-    #[error("ABI impl doesn't support this calling convention.")]
-    UnsupportedConvention,
-    /// Used to signal we just skipped it
-    #[error("<skipped>")]
-    Skipped,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]

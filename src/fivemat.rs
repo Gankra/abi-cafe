@@ -25,9 +25,6 @@ impl<'a> Fivemat<'a> {
     pub fn sub_indent(&mut self, count: usize) {
         self.indent -= count;
     }
-    pub fn offset_indent(&mut self, count: isize) {
-        self.indent = (self.indent as isize + count) as usize;
-    }
     pub fn ensure_indent(&mut self) -> std::fmt::Result {
         if !self.indent_pending {
             return Ok(());

@@ -1,10 +1,13 @@
 pub mod c;
 pub mod rust;
 
-use std::{fmt::Write, path::Path, sync::Arc};
+use std::{collections::HashMap, fmt::Write, path::Path, sync::Arc};
 
 pub use c::CcAbiImpl;
-use kdl_script::{DefinitionGraph, KdlScriptError, PunEnv, TypedProgram};
+use kdl_script::{
+    types::{FuncIdx, TyIdx},
+    DefinitionGraph, PunEnv, TypedProgram,
+};
 pub use rust::RustcAbiImpl;
 
 use crate::BuildError;
@@ -31,15 +34,100 @@ pub static ALL_CONVENTIONS: &[CallingConvention] = &[
 
 pub static OUTPUT_NAME: &str = "output";
 
+/// A test case, fully abstract.
+///
+/// An abi-cafe Test is essentially a series of function signatures
+/// that we're interested in testing. That is, we want to generate a
+/// caller and a callee that implement the signature, and check that
+/// both sides agree on the values that were passed between them
+/// (implying the two implementations agree on the ABI for that signature).
+///
+/// To describe these signatures, we use a toy programming language called
+/// [kdl-script][], which was designed explicitly for the purpose of declaring
+/// type definitions and function signatures, without mandating a specific impl.
+///
+/// At this point we have parsed and typechecked the kdl-script program,
+/// giving us the signatures but no specific compiler/language to lower them to.
+///
+/// Notably, at this level of abtraction kdl-script [Pun Types][pun-types] are
+/// still unresolved. You can think of these as types wrapped in
+/// an `ifdef`/`#[cfg]`, allowing a test program to declare that
+/// two different compilers/languages have fundamentally different
+/// understandings of the *shape* of a type, but are still expected
+/// to interopate if a function signature puns them.
+///
+/// [kdl-script]: https://github.com/Gankra/kdl-script
+/// [pun-types]: https://github.com/Gankra/kdl-script/blob/main/README.md#pun-types
+#[derive(Debug, Clone)]
 pub struct Test {
+    /// Name of the test (file stem)
     pub name: String,
-    pub program: Arc<TypedProgram>,
+    /// Parsed and Typechecked kdl-script program
+    pub types: Arc<TypedProgram>,
+}
+
+/// A test case, specialized to a specific ABI (PunEnv)
+///
+/// This refines a [`Test`][] with a specific [`AbiImpl`][] like "Rust (rustc)" or "C (gcc)".
+/// The [`PunEnv`][] describes how the AbiImpl wishes to resolve any "Pun Types".
+///
+/// The [`DefinitionGraph`][] provides a DAG of the type/function
+/// definitions that result from applying the PunEnv to the Program.
+/// This can only be computed once we know how to resolve Puns because
+/// an ifdef can completely change which types are referenced.
+///
+/// This DAG is queried with a list of functions we're interested
+/// in generating code for, producing a topological sort of the type
+/// and function declarations so each [`AbiImpl`][] doesn't need to work that out.
+///
+/// Typically the query is "all functions", because we want to test everything.
+/// However if a test fails we can requery with "just this one failing function"
+/// to generate a minimized test-case for debugging/reporting.
+#[derive(Debug, Clone)]
+pub struct TestForAbi {
+    pub inner: Test,
+    pub env: Arc<PunEnv>,
+    pub defs: Arc<DefinitionGraph>,
+}
+impl std::ops::Deref for TestForAbi {
+    type Target = Test;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+/// A test case, fully specialized to specify:
+///
+/// * What [`AbiImpl`][] (compiler/language) we're using
+/// * What [`CallingConvention`] we're using
+/// * Which functions we're generating (usually "all of them")
+/// * How to [display/report][`WriteImpl`] values (callbacks vs print vs noop)
+/// * Whether we're generating the callee or caller (currently implicit)
+///
+/// This also contains some utilities for interning compute type names/expressions.
+#[derive(Debug, Clone)]
+pub struct TestImpl {
+    pub inner: TestForAbi,
+    pub convention: CallingConvention,
+    pub desired_funcs: Vec<FuncIdx>,
+    pub val_writer: WriteImpl,
+
+    // interning state
+    pub tynames: HashMap<TyIdx, String>,
+    pub borrowed_tynames: HashMap<TyIdx, String>,
+}
+impl std::ops::Deref for TestImpl {
+    type Target = TestForAbi;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 #[derive(Debug, Clone)]
-pub struct TestVariant {
-    pub env: Arc<PunEnv>,
-    pub graph: Arc<DefinitionGraph>,
+pub enum WriteImpl {
+    HarnessCallback,
+    Print,
+    Noop,
 }
 
 /// ABI is probably a bad name for this... it's like, a language/compiler impl. idk.
@@ -49,20 +137,8 @@ pub trait AbiImpl {
     fn src_ext(&self) -> &'static str;
     fn supports_convention(&self, _convention: CallingConvention) -> bool;
     fn pun_env(&self) -> Arc<PunEnv>;
-    fn generate_callee(
-        &self,
-        f: &mut dyn Write,
-        test: &Test,
-        variant: &TestVariant,
-        convention: CallingConvention,
-    ) -> Result<(), GenerateError>;
-    fn generate_caller(
-        &self,
-        f: &mut dyn Write,
-        test: &Test,
-        variant: &TestVariant,
-        convention: CallingConvention,
-    ) -> Result<(), GenerateError>;
+    fn generate_callee(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError>;
+    fn generate_caller(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError>;
 
     fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
     fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
@@ -73,13 +149,33 @@ impl Test {
         // TODO
         true
     }
-    pub fn abi_variant(
-        &self,
-        abi: &(dyn AbiImpl + Send + Sync),
-    ) -> Result<TestVariant, GenerateError> {
+    pub fn for_abi(&self, abi: &(dyn AbiImpl + Send + Sync)) -> Result<TestForAbi, GenerateError> {
         let env = abi.pun_env();
-        let graph = Arc::new(self.program.definition_graph(&env)?);
-        Ok(TestVariant { env, graph })
+        let defs = Arc::new(self.types.definition_graph(&env)?);
+        Ok(TestForAbi {
+            inner: self.clone(),
+            env,
+            defs,
+        })
+    }
+}
+
+impl TestForAbi {
+    pub fn for_impl(
+        &self,
+        convention: CallingConvention,
+        query: impl Iterator<Item = FuncIdx>,
+        val_writer: WriteImpl,
+    ) -> Result<TestImpl, GenerateError> {
+        Ok(TestImpl {
+            inner: self.clone(),
+            convention,
+            desired_funcs: query.collect(),
+            val_writer,
+
+            tynames: Default::default(),
+            borrowed_tynames: Default::default(),
+        })
     }
 }
 

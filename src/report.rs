@@ -5,7 +5,10 @@ use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
 use serde_json::json;
 
-use crate::{abis::*, full_test_name, WriteBuffer};
+use crate::abis::*;
+use crate::error::*;
+use crate::full_test_name;
+use crate::WriteBuffer;
 
 /// These are the builtin test-expectations, edit these if there are new rules!
 pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl) -> TestRules {
@@ -58,59 +61,6 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
     result
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum BuildError {
-    #[error("io error\n{0}")]
-    Io(#[from] std::io::Error),
-    #[error("rust compile error \n{} \n{}",
-        std::str::from_utf8(&.0.stdout).unwrap(),
-        std::str::from_utf8(&.0.stderr).unwrap())]
-    RustCompile(std::process::Output),
-    #[error("c compile errror\n{0}")]
-    CCompile(#[from] cc::Error),
-}
-
-#[allow(clippy::enum_variant_names)]
-#[derive(Debug, thiserror::Error)]
-pub enum CheckFailure {
-    #[error("test {0} {5} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}")]
-    InputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>, String),
-    #[error(
-        "test {0} {} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}",
-        OUTPUT_NAME
-    )]
-    OutputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>),
-    #[error("test {0} {4} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}")]
-    InputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>, String),
-    #[error(
-        "test {0} {} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}",
-        OUTPUT_NAME
-    )]
-    OutputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>),
-    #[error("test {0} input count mismatch \ncaller: {1:#02X?} \ncallee: {2:#02X?}")]
-    InputCountMismatch(usize, Vec<Vec<Vec<u8>>>, Vec<Vec<Vec<u8>>>),
-    #[error("test {0} output count mismatch \ncaller: {1:#02X?} \ncallee: {2:#02X?}")]
-    OutputCountMismatch(usize, Vec<Vec<Vec<u8>>>, Vec<Vec<Vec<u8>>>),
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum LinkError {
-    #[error("io error\n{0}")]
-    Io(#[from] std::io::Error),
-    #[error("rust link error \n{} \n{}",
-        std::str::from_utf8(&.0.stdout).unwrap(),
-        std::str::from_utf8(&.0.stderr).unwrap())]
-    RustLink(std::process::Output),
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum RunError {
-    #[error("test loading error (dynamic linking failed)\n{0}")]
-    LoadError(#[from] libloading::Error),
-    #[error("wrong number of tests reported! \nExpected {0} \nGot (caller_in: {1}, caller_out: {2}, callee_in: {3}, callee_out: {4})")]
-    TestCountMismatch(usize, usize, usize, usize, usize),
-}
-
 impl Serialize for BuildError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -154,6 +104,78 @@ impl Serialize for GenerateError {
     {
         let string = self.to_string();
         serializer.serialize_str(&string)
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct RunOutput {
+    pub caller: Functions,
+    pub callee: Functions,
+    #[serde(skip)]
+    pub caller_inputs: WriteBuffer,
+    #[serde(skip)]
+    pub caller_outputs: WriteBuffer,
+    #[serde(skip)]
+    pub callee_inputs: WriteBuffer,
+    #[serde(skip)]
+    pub callee_outputs: WriteBuffer,
+}
+
+pub fn report_test(key: TestKey, rules: TestRules, results: TestRunResults) -> TestReport {
+    use TestConclusion::*;
+    use TestRunMode::*;
+    // Ok now check if it matched our expectation
+    let conclusion = if rules.run == Skip {
+        // If we were told to skip, we skipped
+        Skipped
+    } else if let Some(Err(GenerateError::Skipped)) = results.source {
+        // The generate step is allowed to unilaterally skip things
+        // to avoid different configs having to explicitly disable
+        // a million unsupported combinations
+        Skipped
+    } else {
+        let passed = match &rules.check {
+            TestCheckMode::Pass(must_pass) => match must_pass {
+                Skip => true,
+                Generate => results.source.as_ref().map(|r| r.is_ok()).unwrap_or(false),
+                Build => results.build.as_ref().map(|r| r.is_ok()).unwrap_or(false),
+                Link => results.link.as_ref().map(|r| r.is_ok()).unwrap_or(false),
+                Run => results.run.as_ref().map(|r| r.is_ok()).unwrap_or(false),
+                Check => results
+                    .check
+                    .as_ref()
+                    .map(|r| r.all_passed)
+                    .unwrap_or(false),
+            },
+            TestCheckMode::Fail(must_fail) | TestCheckMode::Busted(must_fail) => match must_fail {
+                Skip => true,
+                Generate => results.source.as_ref().map(|r| !r.is_ok()).unwrap_or(false),
+                Build => results.build.as_ref().map(|r| !r.is_ok()).unwrap_or(false),
+                Link => results.link.as_ref().map(|r| !r.is_ok()).unwrap_or(false),
+                Run => results.run.as_ref().map(|r| !r.is_ok()).unwrap_or(false),
+                Check => results
+                    .check
+                    .as_ref()
+                    .map(|r| !r.all_passed)
+                    .unwrap_or(false),
+            },
+            TestCheckMode::Random => true,
+        };
+        if passed {
+            if matches!(rules.check, TestCheckMode::Busted(_)) {
+                TestConclusion::Busted
+            } else {
+                TestConclusion::Passed
+            }
+        } else {
+            TestConclusion::Failed
+        }
+    };
+    TestReport {
+        key,
+        rules,
+        conclusion,
+        results,
     }
 }
 
@@ -279,20 +301,6 @@ pub struct BuildOutput {
 #[derive(Debug, Serialize)]
 pub struct LinkOutput {
     pub test_bin: PathBuf,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RunOutput {
-    pub caller: Functions,
-    pub callee: Functions,
-    #[serde(skip)]
-    pub caller_inputs: WriteBuffer,
-    #[serde(skip)]
-    pub caller_outputs: WriteBuffer,
-    #[serde(skip)]
-    pub callee_inputs: WriteBuffer,
-    #[serde(skip)]
-    pub callee_outputs: WriteBuffer,
 }
 
 pub type Functions =

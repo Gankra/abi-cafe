@@ -8,14 +8,18 @@ mod harness;
 mod report;
 
 use abis::*;
+use camino::{Utf8Path, Utf8PathBuf};
 use error::*;
 use harness::*;
 use report::*;
-use std::collections::HashMap;
-use std::env;
 use std::error::Error;
-use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Arc, Mutex};
+use tokio::sync::OnceCell;
+
+pub type SortedMap<K, V> = std::collections::BTreeMap<K, V>;
+pub type AbiImplId = String;
+pub type TestId = String;
 
 /// Slurps up details of how this crate was compiled, which we can use
 /// to better compile the actual tests since we're currently compiling them on
@@ -29,6 +33,29 @@ pub enum OutputFormat {
     Human,
     Json,
     RustcJson,
+}
+impl std::fmt::Display for OutputFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = match self {
+            OutputFormat::Human => "human",
+            OutputFormat::Json => "json",
+            OutputFormat::RustcJson => "rustc-json",
+        };
+        string.fmt(f)
+    }
+}
+impl std::str::FromStr for OutputFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let val = match s {
+            "human" => OutputFormat::Human,
+            "json" => OutputFormat::Json,
+            "rustc-json" => OutputFormat::RustcJson,
+            _ => return Err(format!("unknown output format: {s}")),
+        };
+        Ok(val)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +73,228 @@ pub struct Config {
 #[error("some tests failed")]
 pub struct TestsFailed {}
 
+#[derive(Default)]
+pub struct TestRunner {
+    pub tests: SortedMap<TestId, Arc<Test>>,
+    pub abi_impls: SortedMap<AbiImplId, Arc<dyn AbiImpl + Send + Sync>>,
+    pub test_with_abi_impls: Mutex<SortedMap<(TestId, AbiImplId), Arc<OnceCell<Arc<TestForAbi>>>>>,
+    pub sources: Mutex<SortedMap<Utf8PathBuf, Arc<OnceCell<()>>>>,
+    pub static_libs: Mutex<SortedMap<Utf8PathBuf, Arc<OnceCell<()>>>>,
+    pub dynamic_libs: Mutex<SortedMap<Utf8PathBuf, Arc<OnceCell<()>>>>,
+}
+
+impl TestRunner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn add_abi_impl<A: AbiImpl + Send + Sync + 'static>(&mut self, id: AbiImplId, abi_impl: A) {
+        let old = self.abi_impls.insert(id.clone(), Arc::new(abi_impl));
+        assert!(old.is_none(), "duplicate abi impl id: {}", id);
+    }
+    pub fn set_tests(&mut self, tests: Vec<Test>) {
+        for test in tests {
+            let id = test.name.clone();
+            let old = self.tests.insert(id.clone(), Arc::new(test));
+            assert!(old.is_none(), "duplicate test id: {}", id);
+        }
+    }
+    pub async fn test_with_abi_impl(
+        &self,
+        test: &Test,
+        abi_id: AbiImplId,
+    ) -> Result<Arc<TestForAbi>, GenerateError> {
+        let test_id = test.name.clone();
+        let abi_impl = self.abi_impls[&abi_id].clone();
+        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
+        let once = self
+            .test_with_abi_impls
+            .lock()
+            .unwrap()
+            .entry((test_id, abi_id.clone()))
+            .or_insert_with(|| Arc::new(OnceCell::new()))
+            .clone();
+        // Either acquire the cached result, or make it
+        let output = once
+            .get_or_try_init(|| test.for_abi(&*abi_impl))
+            .await?
+            .clone();
+        Ok(output)
+    }
+    pub async fn generate_src(
+        &self,
+        test_id: TestId,
+        abi_id: AbiImplId,
+        call_side: CallSide,
+        options: TestOptions,
+    ) -> Result<Utf8PathBuf, GenerateError> {
+        let abi_impl = self.abi_impls[&abi_id].clone();
+        let src_path = harness::src_path(&test_id, &abi_id, &*abi_impl, call_side, &options);
+        let test = self.tests[&test_id].clone();
+        let test_with_abi = self.test_with_abi_impl(&test, abi_id).await?;
+        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
+        let once = self
+            .sources
+            .lock()
+            .unwrap()
+            .entry(src_path.clone())
+            .or_insert_with(|| Arc::new(OnceCell::new()))
+            .clone();
+        // Either acquire the cached result, or make it
+        let _ = once
+            .get_or_try_init(|| {
+                generate_src(&src_path, abi_impl, test_with_abi, call_side, options)
+            })
+            .await?;
+        Ok(src_path)
+    }
+    pub fn get_test_rules(&self, test_key: &TestKey) -> TestRules {
+        let caller = self.abi_impls[&test_key.caller].clone();
+        let callee = self.abi_impls[&test_key.callee].clone();
+
+        get_test_rules(test_key, &*caller, &*callee)
+    }
+    /// Generate, Compile, Link, Load, and Run this test.
+    pub async fn do_test(
+        &self,
+        test_key: TestKey,
+        test_rules: TestRules,
+        out_dir: Utf8PathBuf,
+    ) -> TestRunResults {
+        use TestRunMode::*;
+
+        let mut run_results = TestRunResults::default();
+        if test_rules.run <= Skip {
+            return run_results;
+        }
+
+        run_results.ran_to = Generate;
+        run_results.source = Some(self.generate_test(&test_key).await);
+        let source = match run_results.source.as_ref().unwrap() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to generate source: {}", e);
+                return run_results;
+            }
+        };
+        if test_rules.run <= Generate {
+            return run_results;
+        }
+
+        run_results.ran_to = Build;
+        run_results.build = Some(self.build_test(&test_key, source, &out_dir).await);
+        let build = match run_results.build.as_ref().unwrap() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to build test: {}", e);
+                return run_results;
+            }
+        };
+        if test_rules.run <= Build {
+            return run_results;
+        }
+
+        run_results.ran_to = Link;
+        run_results.link = Some(self.link_test(&test_key, build, &out_dir).await);
+        let link = match run_results.link.as_ref().unwrap() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to link test: {}", e);
+                return run_results;
+            }
+        };
+        if test_rules.run <= Link {
+            return run_results;
+        }
+
+        run_results.ran_to = Run;
+        run_results.run = Some(self.run_dynamic_test(&test_key, link).await);
+        let run = match run_results.run.as_ref().unwrap() {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to run test: {}", e);
+                return run_results;
+            }
+        };
+        if test_rules.run <= Run {
+            return run_results;
+        }
+
+        run_results.ran_to = Check;
+        run_results.check = Some(self.check_test(&test_key, run).await);
+
+        run_results
+    }
+    pub async fn generate_test(&self, key: &TestKey) -> Result<GenerateOutput, GenerateError> {
+        let caller_src = self
+            .generate_src(
+                key.test.clone(),
+                key.caller.clone(),
+                CallSide::Caller,
+                key.options.clone(),
+            )
+            .await?;
+        let callee_src = self
+            .generate_src(
+                key.test.clone(),
+                key.callee.clone(),
+                CallSide::Callee,
+                key.options.clone(),
+            )
+            .await?;
+
+        Ok(GenerateOutput {
+            caller_src,
+            callee_src,
+        })
+    }
+    pub async fn build_test(
+        &self,
+        key: &TestKey,
+        src: &GenerateOutput,
+        out_dir: &Utf8Path,
+    ) -> Result<BuildOutput, BuildError> {
+        let caller = self.abi_impls[&key.caller].clone();
+        let callee = self.abi_impls[&key.callee].clone();
+        build_test(key, &*caller, &*callee, src, out_dir)
+    }
+    pub async fn link_test(
+        &self,
+        key: &TestKey,
+        build: &BuildOutput,
+        out_dir: &Utf8Path,
+    ) -> Result<LinkOutput, LinkError> {
+        link_test(key, build, out_dir)
+    }
+    pub async fn run_dynamic_test(
+        &self,
+        key: &TestKey,
+        test_dylib: &LinkOutput,
+    ) -> Result<RunOutput, RunError> {
+        let test = self.tests[&key.test].clone();
+        let caller_impl = self
+            .test_with_abi_impl(&test, key.caller.clone())
+            .await
+            .unwrap();
+        let callee_impl = self
+            .test_with_abi_impl(&test, key.callee.clone())
+            .await
+            .unwrap();
+        run_dynamic_test(key, caller_impl, callee_impl, test_dylib)
+    }
+    pub async fn check_test(&self, key: &TestKey, results: &RunOutput) -> CheckOutput {
+        let test = self.tests[&key.test].clone();
+        let caller_impl = self
+            .test_with_abi_impl(&test, key.caller.clone())
+            .await
+            .unwrap();
+        let callee_impl = self
+            .test_with_abi_impl(&test, key.callee.clone())
+            .await
+            .unwrap();
+        check_test(key, caller_impl, callee_impl, results)
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("starting!");
     let cfg = cli::make_app();
@@ -53,61 +302,56 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Before doing anything, regenerate the procgen tests, if needed.
     // TODO: procgen::procgen_tests(cfg.procgen_tests);
     eprintln!("generated tests!");
+    init_generate_dir()?;
+    let out_dir = init_build_dir()?;
 
-    let out_dir = PathBuf::from("target/temp/");
-    std::fs::create_dir_all(&out_dir).unwrap();
-    std::fs::remove_dir_all(&out_dir).unwrap();
-    std::fs::create_dir_all(&out_dir).unwrap();
+    let mut runner = TestRunner::new();
 
-    // Set up env vars for CC
-    env::set_var("OUT_DIR", &out_dir);
-    env::set_var("HOST", built_info::HOST);
-    env::set_var("TARGET", built_info::TARGET);
-    env::set_var("OPT_LEVEL", "0");
-
-    let mut abi_impls: HashMap<&str, Box<dyn AbiImpl + Send + Sync>> = HashMap::new();
-    abi_impls.insert(
-        ABI_IMPL_RUSTC,
-        Box::new(abis::RustcAbiImpl::new(&cfg, None)),
+    runner.add_abi_impl(
+        ABI_IMPL_RUSTC.to_owned(),
+        abis::RustcAbiImpl::new(&cfg, None),
     );
     /*
-    abi_impls.insert(
-        ABI_IMPL_CC,
-        Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_CC)),
+    runner.add_abi_impl(
+        ABI_IMPL_CC.to_owned(),
+        abis::CcAbiImpl::new(&cfg, ABI_IMPL_CC),
     );
-    abi_impls.insert(
-        ABI_IMPL_GCC,
-        Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_GCC)),
+    runner.add_abi_impl(
+        ABI_IMPL_GCC.to_owned(),
+        abis::CcAbiImpl::new(&cfg, ABI_IMPL_GCC),
     );
-    abi_impls.insert(
-        ABI_IMPL_CLANG,
-        Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_CLANG)),
+    runner.add_abi_impl(
+        ABI_IMPL_CLANG.to_owned(),
+        abis::CcAbiImpl::new(&cfg, ABI_IMPL_CLANG),
     );
-    abi_impls.insert(
-        ABI_IMPL_MSVC,
-        Box::new(abis::CcAbiImpl::new(&cfg, ABI_IMPL_MSVC)),
+    runner.add_abi_impl(
+        ABI_IMPL_MSVC.to_owned(),
+        abis::CcAbiImpl::new(&cfg, ABI_IMPL_MSVC),
     );
     */
     for &(ref name, ref path) in &cfg.rustc_codegen_backends {
-        abi_impls.insert(
-            name,
-            Box::new(abis::RustcAbiImpl::new(&cfg, Some(path.to_owned()))),
+        runner.add_abi_impl(
+            name.to_owned(),
+            abis::RustcAbiImpl::new(&cfg, Some(path.to_owned())),
         );
     }
     eprintln!("configured ABIs!");
 
     // Grab all the tests
     let tests = read_tests()?;
+    runner.set_tests(tests);
     eprintln!("got tests!");
-
+    let runner = Arc::new(runner);
     // Run the tests
     use TestConclusion::*;
-
+    let rt = tokio::runtime::Runtime::new().expect("failed to init tokio runtime");
+    let _handle = rt.enter();
     // This is written as nested iterator adaptors so that it can maybe be changed to use
     // rayon's par_iter, but currently the code isn't properly threadsafe due to races on
     // the filesystem when setting up the various output dirs :(
-    let reports = tests
-        .iter()
+    let tasks = runner
+        .tests
+        .values()
         .flat_map(|test| {
             // If the cli has test filters, apply those
             if !cfg.run_tests.is_empty() && !cfg.run_tests.contains(&test.name) {
@@ -130,40 +374,43 @@ fn main() -> Result<(), Box<dyn Error>> {
                             {
                                 return None;
                             }
-                            let caller =
-                                &**abi_impls.get(&**caller_id).expect("invalid id for caller!");
-                            let callee =
-                                &**abi_impls.get(&**callee_id).expect("invalid id for callee!");
-
-                            let convention_name = convention.name();
 
                             // Run the test!
                             let test_key = TestKey {
-                                test_name: test.name.to_owned(),
-                                convention: convention_name.to_owned(),
-                                caller_id: caller_id.to_owned(),
-                                callee_id: callee_id.to_owned(),
-                                caller_variant: test.for_abi(caller).unwrap(),
-                                callee_variant: test.for_abi(callee).unwrap(),
+                                test: test.name.to_owned(),
+                                caller: caller_id.to_owned(),
+                                callee: callee_id.to_owned(),
+                                options: TestOptions {
+                                    convention: convention.clone(),
+                                },
                             };
-                            let rules = get_test_rules(&test_key, caller, callee);
-                            let results = do_test(
-                                test,
-                                &test_key,
-                                &rules,
-                                *convention,
-                                caller,
-                                callee,
-                                &out_dir,
-                            );
-                            let report = report_test(test_key, rules, results);
-                            Some(report)
+                            let rules = runner.get_test_rules(&test_key);
+
+                            let task = {
+                                let runner = runner.clone();
+                                let rules = rules.clone();
+                                let test_key = test_key.clone();
+                                let out_dir = out_dir.clone();
+                                rt.spawn(
+                                    async move { runner.do_test(test_key, rules, out_dir).await },
+                                )
+                            };
+                            // FIXME: we can make everything parallel by immediately returning
+                            // and making the following code happen in subsequent pass. For now
+                            // let's stay single-threaded to do things one step at a time.
+                            // Some((test_key, rules, task))
+
+                            let results = rt.block_on(task).expect("failed to join task");
+                            Some(report_test(test_key, rules, results))
                         })
                         .collect()
                 })
                 .collect()
         })
         .collect::<Vec<_>>();
+
+    // Join on all the tasks, and compute their results
+    let reports = tasks.into_iter().map(|report| report).collect::<Vec<_>>();
 
     // Compute the final report
     let mut num_tests = 0;
@@ -205,81 +452,4 @@ fn main() -> Result<(), Box<dyn Error>> {
         Err(TestsFailed {})?;
     }
     Ok(())
-}
-
-/// Generate, Compile, Link, Load, and Run this test.
-fn do_test(
-    test: &Test,
-    test_key: &TestKey,
-    test_rules: &TestRules,
-    convention: CallingConvention,
-    caller: &dyn AbiImpl,
-    callee: &dyn AbiImpl,
-    _out_dir: &Path,
-) -> TestRunResults {
-    use TestRunMode::*;
-
-    let mut run_results = TestRunResults::default();
-    if test_rules.run <= Skip {
-        return run_results;
-    }
-
-    run_results.ran_to = Generate;
-    run_results.source = Some(generate_test_src(
-        test, test_key, convention, caller, callee,
-    ));
-    let source = match run_results.source.as_ref().unwrap() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Failed to generate source: {}", e);
-            return run_results;
-        }
-    };
-    if test_rules.run <= Generate {
-        return run_results;
-    }
-
-    run_results.ran_to = Build;
-    run_results.build = Some(build_test(test, test_key, caller, callee, source));
-    let build = match run_results.build.as_ref().unwrap() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Failed to build test: {}", e);
-            return run_results;
-        }
-    };
-    if test_rules.run <= Build {
-        return run_results;
-    }
-
-    run_results.ran_to = Link;
-    run_results.link = Some(link_test(test, test_key, build));
-    let link = match run_results.link.as_ref().unwrap() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Failed to link test: {}", e);
-            return run_results;
-        }
-    };
-    if test_rules.run <= Link {
-        return run_results;
-    }
-
-    run_results.ran_to = Run;
-    run_results.run = Some(run_dynamic_test(test, test_key, link));
-    let run = match run_results.run.as_ref().unwrap() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Failed to run test: {}", e);
-            return run_results;
-        }
-    };
-    if test_rules.run <= Run {
-        return run_results;
-    }
-
-    run_results.ran_to = Check;
-    run_results.check = Some(check_test(test, test_key, run));
-
-    run_results
 }

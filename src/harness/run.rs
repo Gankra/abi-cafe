@@ -1,14 +1,15 @@
 //! The runtime actual types and functions that are injected into
 //! compiled tests.
 
+use std::sync::Arc;
+
 use kdl_script::types::{Ty, TyIdx};
-use kdl_script::{PunEnv, TypedProgram};
 use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
 
-use crate::error::*;
 use crate::harness::full_test_name;
 use crate::report::*;
+use crate::{error::*, TestForAbi};
 use crate::{LinkOutput, Test, TestKey};
 
 /// Tests write back the raw bytes of their values to a WriteBuffer.
@@ -98,8 +99,9 @@ pub unsafe extern "C" fn finished_func(output1: &mut WriteBuffer, output2: &mut 
 ///
 /// See the README for a high-level description of this design.
 pub fn run_dynamic_test(
-    test: &Test,
     test_key: &TestKey,
+    caller_impl: Arc<TestForAbi>,
+    callee_impl: Arc<TestForAbi>,
     test_dylib: &LinkOutput,
 ) -> Result<RunOutput, RunError> {
     // Initialize all the buffers the tests will write to
@@ -112,7 +114,7 @@ pub fn run_dynamic_test(
         let full_test_name = full_test_name(test_key);
 
         // Load the dylib of the test, and get its test_start symbol
-        eprintln!("loading: {}", &test_dylib.test_bin.display());
+        eprintln!("loading: {}", &test_dylib.test_bin);
         let lib = libloading::Library::new(&test_dylib.test_bin)?;
         let do_test: libloading::Symbol<TestInit> = lib.get(b"test_start")?;
         eprintln!("running    {full_test_name}");
@@ -136,8 +138,8 @@ pub fn run_dynamic_test(
     }
 
     digest_test_run(
-        test,
-        test_key,
+        caller_impl,
+        callee_impl,
         caller_inputs,
         caller_outputs,
         callee_inputs,
@@ -146,8 +148,8 @@ pub fn run_dynamic_test(
 }
 
 fn digest_test_run(
-    test: &Test,
-    test_key: &TestKey,
+    caller_impl: Arc<TestForAbi>,
+    callee_impl: Arc<TestForAbi>,
     caller_inputs: WriteBuffer,
     caller_outputs: WriteBuffer,
     callee_inputs: WriteBuffer,
@@ -159,7 +161,7 @@ fn digest_test_run(
     // As a basic sanity-check, make sure everything agrees on how
     // many tests actually executed. If this fails, then something
     // is very fundamentally broken and needs to be fixed.
-    let all_func_ids = test.types.all_funcs().collect::<Vec<_>>();
+    let all_func_ids = caller_impl.types.all_funcs().collect::<Vec<_>>();
     let expected_test_count = all_func_ids.len();
     if caller_inputs.funcs.len() != expected_test_count
         || caller_outputs.funcs.len() != expected_test_count
@@ -178,7 +180,7 @@ fn digest_test_run(
     let empty_func = Vec::new();
     let empty_arg = Vec::new();
     for (func_idx, func_id) in all_func_ids.into_iter().enumerate() {
-        let func = test.types.realize_func(func_id);
+        let func = caller_impl.types.realize_func(func_id);
         let caller_func = caller.entry(func.name.clone()).or_default();
         let callee_func = callee.entry(func.name.clone()).or_default();
         for (arg_idx, arg) in func.inputs.iter().enumerate() {
@@ -199,8 +201,7 @@ fn digest_test_run(
                 .unwrap_or(&empty_arg);
 
             add_field(
-                &test.types,
-                &test_key.caller_variant.env,
+                &callee_impl,
                 caller_arg_bytes,
                 caller_arg,
                 &mut 0,
@@ -208,8 +209,7 @@ fn digest_test_run(
                 arg.ty,
             );
             add_field(
-                &test.types,
-                &test_key.callee_variant.env,
+                &callee_impl,
                 callee_arg_bytes,
                 callee_arg,
                 &mut 0,
@@ -236,8 +236,7 @@ fn digest_test_run(
                 .unwrap_or(&empty_arg);
 
             add_field(
-                &test.types,
-                &test_key.caller_variant.env,
+                &caller_impl,
                 caller_output_bytes,
                 caller_arg,
                 &mut 0,
@@ -245,8 +244,7 @@ fn digest_test_run(
                 arg.ty,
             );
             add_field(
-                &test.types,
-                &test_key.callee_variant.env,
+                &callee_impl,
                 callee_output_bytes,
                 callee_arg,
                 &mut 0,
@@ -286,8 +284,11 @@ fn format_bytes(input: &[Vec<u8>], cur_idx: &mut usize) -> String {
 /// Recursive subroutine of write_var, which builds up rvalue paths and generates
 /// appropriate match statements. Actual WRITE calls are done by write_leaf_field.
 fn add_field(
-    program: &TypedProgram,
-    env: &PunEnv,
+    test_impl @ TestForAbi {
+        inner: Test { types: program, .. },
+        env,
+        ..
+    }: &TestForAbi,
     input: &[Vec<u8>],
     output: &mut LinkedHashMap<String, String>,
     cur_idx: &mut usize,
@@ -305,26 +306,18 @@ fn add_field(
         }
         Ty::Alias(alias_ty) => {
             // keep going but with the type changed
-            add_field(
-                program,
-                env,
-                input,
-                output,
-                cur_idx,
-                cur_path,
-                alias_ty.real,
-            );
+            add_field(test_impl, input, output, cur_idx, cur_path, alias_ty.real);
         }
         Ty::Pun(pun) => {
             // keep going but with the type changed
             let real_ty = program.resolve_pun(pun, env).unwrap();
-            add_field(program, env, input, output, cur_idx, cur_path, real_ty);
+            add_field(test_impl, input, output, cur_idx, cur_path, real_ty);
         }
         Ty::Array(array_ty) => {
             // recurse into each array index
             for i in 0..array_ty.len {
                 let base = format!("{cur_path}[{i}]");
-                add_field(program, env, input, output, cur_idx, base, array_ty.elem_ty);
+                add_field(test_impl, input, output, cur_idx, base, array_ty.elem_ty);
             }
         }
         Ty::Struct(struct_ty) => {
@@ -332,7 +325,7 @@ fn add_field(
             for field in &struct_ty.fields {
                 let field_name = &field.ident;
                 let base = format!("{cur_path}.{field_name}");
-                add_field(program, env, input, output, cur_idx, base, field.ty);
+                add_field(test_impl, input, output, cur_idx, base, field.ty);
             }
         }
         Ty::Tagged(tagged_ty) => {
@@ -341,8 +334,7 @@ fn add_field(
                 if let Some(fields) = &variant.fields {
                     for field in fields {
                         add_field(
-                            program,
-                            env,
+                            test_impl,
                             input,
                             output,
                             cur_idx,
@@ -356,22 +348,14 @@ fn add_field(
         Ty::Ref(ref_ty) => {
             // Add a deref, and recurse into the pointee
             let base = format!("(*{cur_path})");
-            add_field(
-                program,
-                env,
-                input,
-                output,
-                cur_idx,
-                base,
-                ref_ty.pointee_ty,
-            );
+            add_field(test_impl, input, output, cur_idx, base, ref_ty.pointee_ty);
         }
         Ty::Union(union_ty) => {
             // FIXME(variant_select): hardcoded to access field 0 for now
             if let Some(field) = union_ty.fields.get(0) {
                 let field_name = &field.ident;
                 let base = format!("{cur_path}.{field_name}");
-                add_field(program, env, input, output, cur_idx, base, field.ty);
+                add_field(test_impl, input, output, cur_idx, base, field.ty);
             }
         }
     }

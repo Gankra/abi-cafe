@@ -1,11 +1,14 @@
+use std::sync::Arc;
+
 use crate::error::*;
 use crate::harness::full_subtest_name;
 use crate::report::*;
-use crate::Test;
+use crate::TestForAbi;
 
 pub fn check_test(
-    test: &Test,
     test_key: &TestKey,
+    caller_impl: Arc<TestForAbi>,
+    _callee_impl: Arc<TestForAbi>,
     RunOutput {
         caller_inputs,
         caller_outputs,
@@ -136,10 +139,10 @@ pub fn check_test(
     // This will be done again after all tests have been run, but it's
     // useful to keep a version of this near the actual compilation/execution
     // in case the compilers spit anything interesting to stdout/stderr.
-    let names = test
+    let names = caller_impl
         .types
         .all_funcs()
-        .map(|func_id| full_subtest_name(test_key, &test.types.realize_func(func_id).name))
+        .map(|func_id| full_subtest_name(test_key, &caller_impl.types.realize_func(func_id).name))
         .collect::<Vec<_>>();
     let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
     let num_passed = results.iter().filter(|r| r.is_ok()).count();

@@ -75,12 +75,11 @@ pub struct TestsFailed {}
 
 #[derive(Default)]
 pub struct TestRunner {
-    pub tests: SortedMap<TestId, Arc<Test>>,
-    pub abi_impls: SortedMap<AbiImplId, Arc<dyn AbiImpl + Send + Sync>>,
-    pub test_with_abi_impls: Mutex<SortedMap<(TestId, AbiImplId), Arc<OnceCell<Arc<TestForAbi>>>>>,
-    pub sources: Mutex<SortedMap<Utf8PathBuf, Arc<OnceCell<()>>>>,
-    pub static_libs: Mutex<SortedMap<Utf8PathBuf, Arc<OnceCell<()>>>>,
-    pub dynamic_libs: Mutex<SortedMap<Utf8PathBuf, Arc<OnceCell<()>>>>,
+    tests: SortedMap<TestId, Arc<Test>>,
+    abi_impls: SortedMap<AbiImplId, Arc<dyn AbiImpl + Send + Sync>>,
+    test_with_abi_impls: Mutex<SortedMap<(TestId, AbiImplId), Arc<OnceCell<Arc<TestForAbi>>>>>,
+    sources: Mutex<SortedMap<Utf8PathBuf, Arc<OnceCell<()>>>>,
+    static_libs: Mutex<SortedMap<String, Arc<OnceCell<String>>>>,
 }
 
 impl TestRunner {
@@ -146,6 +145,32 @@ impl TestRunner {
             })
             .await?;
         Ok(src_path)
+    }
+    pub async fn build_lib(
+        &self,
+        test_id: TestId,
+        abi_id: AbiImplId,
+        call_side: CallSide,
+        options: TestOptions,
+        src_path: &Utf8Path,
+        out_dir: &Utf8Path,
+    ) -> Result<String, BuildError> {
+        let abi_impl = self.abi_impls[&abi_id].clone();
+        let lib_name = harness::lib_name(&test_id, &abi_id, call_side, &options);
+        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
+        let once = self
+            .static_libs
+            .lock()
+            .unwrap()
+            .entry(lib_name.clone())
+            .or_insert_with(|| Arc::new(OnceCell::new()))
+            .clone();
+        // Either acquire the cached result, or make it
+        let real_lib_name = once
+            .get_or_try_init(|| compile_lib(&src_path, abi_impl, call_side, out_dir, &lib_name))
+            .await?
+            .clone();
+        Ok(real_lib_name)
     }
     pub fn get_test_rules(&self, test_key: &TestKey) -> TestRules {
         let caller = self.abi_impls[&test_key.caller].clone();
@@ -225,6 +250,10 @@ impl TestRunner {
         run_results
     }
     pub async fn generate_test(&self, key: &TestKey) -> Result<GenerateOutput, GenerateError> {
+        let full_test_name = full_test_name(key);
+        eprintln!("generating  {full_test_name}");
+
+        // FIXME: these two could be done concurrently
         let caller_src = self
             .generate_src(
                 key.test.clone(),
@@ -253,9 +282,34 @@ impl TestRunner {
         src: &GenerateOutput,
         out_dir: &Utf8Path,
     ) -> Result<BuildOutput, BuildError> {
-        let caller = self.abi_impls[&key.caller].clone();
-        let callee = self.abi_impls[&key.callee].clone();
-        build_test(key, &*caller, &*callee, src, out_dir)
+        let full_test_name = full_test_name(key);
+        eprintln!("compiling  {full_test_name}");
+
+        // FIXME: these two could be done concurrently
+        let caller_lib = self
+            .build_lib(
+                key.test.clone(),
+                key.caller.clone(),
+                CallSide::Caller,
+                key.options.clone(),
+                &src.caller_src,
+                out_dir,
+            )
+            .await?;
+        let callee_lib = self
+            .build_lib(
+                key.test.clone(),
+                key.callee.clone(),
+                CallSide::Callee,
+                key.options.clone(),
+                &src.callee_src,
+                out_dir,
+            )
+            .await?;
+        Ok(BuildOutput {
+            caller_lib,
+            callee_lib,
+        })
     }
     pub async fn link_test(
         &self,

@@ -1,13 +1,14 @@
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::harness::full_test_name;
-use crate::report::*;
 use crate::{built_info, AbiImpl, TestKey};
 use crate::{error::*, TestOptions};
+use crate::{report::*, AbiImplId, CallSide, TestId};
 
 const OUT_DIR: &str = "target/temp";
 
@@ -27,32 +28,29 @@ pub fn init_build_dir() -> Result<Utf8PathBuf, BuildError> {
     Ok(out_dir)
 }
 
-pub fn build_test(
-    test_key @ TestKey {
-        test: test_id,
-        caller: caller_id,
-        callee: callee_id,
-        options: TestOptions { convention },
-    }: &TestKey,
-    caller: &dyn AbiImpl,
-    callee: &dyn AbiImpl,
-    src: &GenerateOutput,
+pub fn lib_name(
+    test_id: &TestId,
+    abi_impl: &AbiImplId,
+    call_side: CallSide,
+    options: &TestOptions,
+) -> String {
+    let TestOptions { convention } = options;
+    format!("{test_id}_{convention}_{abi_impl}_{call_side}")
+}
+
+pub async fn compile_lib(
+    src_path: &Utf8Path,
+    abi: Arc<dyn AbiImpl + Send + Sync>,
+    call_side: CallSide,
     out_dir: &Utf8Path,
-) -> Result<BuildOutput, BuildError> {
-    let full_test_name = full_test_name(test_key);
-    eprintln!("compiling  {full_test_name}");
+    lib_name: &str,
+) -> Result<String, BuildError> {
+    let lib_name = match call_side {
+        CallSide::Callee => abi.compile_callee(src_path, out_dir, lib_name)?,
+        CallSide::Caller => abi.compile_caller(src_path, out_dir, lib_name)?,
+    };
 
-    let caller_lib = format!("{test_id}_{convention}_{caller_id}_caller");
-    let callee_lib = format!("{test_id}_{convention}_{callee_id}_callee");
-
-    // Compile the tests (and let them change the lib name).
-    let caller_lib = caller.compile_caller(&src.caller_src, out_dir, &caller_lib)?;
-    let callee_lib = callee.compile_callee(&src.callee_src, out_dir, &callee_lib)?;
-
-    Ok(BuildOutput {
-        caller_lib,
-        callee_lib,
-    })
+    Ok(lib_name)
 }
 
 /// Compile and link the test harness with the two sides of the FFI boundary.

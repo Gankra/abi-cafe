@@ -14,7 +14,7 @@ mod generate;
 mod read;
 mod run;
 
-pub use build::{build_test, init_build_dir, link_test};
+pub use build::{compile_lib, init_build_dir, lib_name, link_test};
 pub use check::check_test;
 pub use generate::{generate_src, init_generate_dir, src_path};
 pub use read::read_tests;

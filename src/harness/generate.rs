@@ -1,93 +1,72 @@
+use camino::Utf8Path;
+use camino::Utf8PathBuf;
 use std::fs::File;
 use std::io::Write;
-use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::abis::*;
 use crate::error::*;
-use crate::report::*;
+use crate::{AbiImplId, CallSide, TestId, TestOptions};
 
-use super::full_test_name;
+const GENERATED_SRC_DIR: &str = "generated_impls";
+const HANDWRITTEN_SRC_DIR: &str = "handwritten_impls";
 
-pub fn generate_test_src(
-    test: &Test,
-    test_key: &TestKey,
-    convention: CallingConvention,
-    caller: &dyn AbiImpl,
-    callee: &dyn AbiImpl,
-) -> Result<GenerateOutput, GenerateError> {
-    let test_name = &test_key.test_name;
-    let convention_name = &test_key.convention;
-    let caller_src_ext = caller.src_ext();
-    let callee_src_ext = callee.src_ext();
-    let full_test_name = full_test_name(test_key);
-    let caller_id = &test_key.caller_id;
-    let callee_id = &test_key.callee_id;
-
-    if !caller.supports_convention(convention) {
-        eprintln!(
-            "skipping {full_test_name}: {caller_id} doesn't support convention {convention_name}"
-        );
-        return Err(GenerateError::Skipped);
-    }
-    if !callee.supports_convention(convention) {
-        eprintln!(
-            "skipping {full_test_name}: {callee_id} doesn't support convention {convention_name}"
-        );
-        return Err(GenerateError::Skipped);
-    }
-
-    let src_dir = if convention == CallingConvention::Handwritten {
-        PathBuf::from("handwritten_impls/")
+pub fn src_path(
+    test_id: &TestId,
+    abi_id: &AbiImplId,
+    abi: &dyn AbiImpl,
+    call_side: CallSide,
+    options: &TestOptions,
+) -> Utf8PathBuf {
+    let src_ext = abi.src_ext();
+    let convention_name = options.convention.name();
+    let call_side = call_side.name();
+    let src_dir = if options.convention == CallingConvention::Handwritten {
+        Utf8PathBuf::from(HANDWRITTEN_SRC_DIR)
     } else {
-        PathBuf::from("generated_impls/")
+        Utf8PathBuf::from(GENERATED_SRC_DIR)
     };
 
-    let caller_src = src_dir.join(format!(
-        "{caller_id}/{test_name}_{convention_name}_{caller_id}_caller.{caller_src_ext}"
-    ));
-    let callee_src = src_dir.join(format!(
-        "{callee_id}/{test_name}_{convention_name}_{callee_id}_callee.{callee_src_ext}"
-    ));
+    src_dir.join(abi_id).join(format!(
+        "{test_id}_{convention_name}_{abi_id}_{call_side}.{src_ext}"
+    ))
+}
 
-    if convention == CallingConvention::Handwritten {
-        if !caller_src.exists() || !callee_src.exists() {
-            eprintln!("skipping {full_test_name}: source for callee and caller doesn't exist");
+/// Delete and recreate the generated src dir
+pub fn init_generate_dir() -> Result<(), GenerateError> {
+    std::fs::create_dir_all(GENERATED_SRC_DIR)?;
+    std::fs::remove_dir_all(GENERATED_SRC_DIR)?;
+    std::fs::create_dir_all(GENERATED_SRC_DIR)?;
+    Ok(())
+}
+
+pub async fn generate_src(
+    src_path: &Utf8Path,
+    abi: Arc<dyn AbiImpl + Send + Sync>,
+    test_with_abi: Arc<TestForAbi>,
+    call_side: CallSide,
+    options: TestOptions,
+) -> Result<(), GenerateError> {
+    if let CallingConvention::Handwritten = options.convention {
+        if src_path.exists() {
+            return Ok(());
+        } else {
             return Err(GenerateError::Skipped);
         }
-    } else {
-        eprintln!("generating {full_test_name}");
-        // If the impl isn't handwritten, then we need to generate it.
-        std::fs::create_dir_all(&src_dir).unwrap();
-        std::fs::remove_dir_all(&src_dir).unwrap();
-        std::fs::create_dir_all(caller_src.parent().unwrap())?;
-        std::fs::create_dir_all(callee_src.parent().unwrap())?;
-        let mut caller_output = File::create(&caller_src)?;
-        let mut caller_output_string = String::new();
-        caller.generate_caller(
-            &mut caller_output_string,
-            test_key.caller_variant.for_impl(
-                convention,
-                test_key.caller_variant.types.all_funcs(),
-                WriteImpl::HarnessCallback,
-            )?,
-        )?;
-        caller_output.write_all(caller_output_string.as_bytes())?;
-
-        let mut callee_output = File::create(&callee_src)?;
-        let mut callee_output_string = String::new();
-        callee.generate_callee(
-            &mut callee_output_string,
-            test_key.callee_variant.for_impl(
-                convention,
-                test_key.callee_variant.types.all_funcs(),
-                WriteImpl::HarnessCallback,
-            )?,
-        )?;
-        callee_output.write_all(callee_output_string.as_bytes())?;
+    }
+    let mut output_string = String::new();
+    let query = test_with_abi.types.all_funcs();
+    let write_impl = WriteImpl::HarnessCallback;
+    let test = test_with_abi.with_options(options, query, write_impl)?;
+    match call_side {
+        CallSide::Callee => abi.generate_callee(&mut output_string, test)?,
+        CallSide::Caller => abi.generate_caller(&mut output_string, test)?,
     }
 
-    Ok(GenerateOutput {
-        caller_src,
-        callee_src,
-    })
+    // Write the result to disk
+    std::fs::create_dir_all(src_path.parent().expect("source file had no parent!?"))?;
+    let mut output = File::create(src_path)?;
+    output.write_all(output_string.as_bytes())?;
+
+    Ok(())
 }

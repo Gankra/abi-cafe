@@ -2,8 +2,9 @@
 
 use std::sync::Arc;
 
+use camino::Utf8Path;
 use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
-use kdl_script::{DefinitionGraph, PunEnv, TypedProgram};
+use kdl_script::PunEnv;
 
 use self::error::GenerateError;
 
@@ -43,7 +44,8 @@ impl AbiImpl for RustcAbiImpl {
             lang: "rust".to_string(),
         })
     }
-    fn supports_convention(&self, convention: CallingConvention) -> bool {
+    fn supports_options(&self, options: &TestOptions) -> bool {
+        let TestOptions { convention } = options;
         // NOTE: Rustc spits out:
         //
         // Rust, C, C-unwind, cdecl, stdcall, stdcall-unwind, fastcall,
@@ -67,12 +69,17 @@ impl AbiImpl for RustcAbiImpl {
         }
     }
 
-    fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
+    fn compile_callee(
+        &self,
+        src_path: &Utf8Path,
+        out_dir: &Utf8Path,
+        lib_name: &str,
+    ) -> Result<String, BuildError> {
         let mut cmd = Command::new("rustc");
         cmd.arg("--crate-type")
             .arg("staticlib")
             .arg("--out-dir")
-            .arg("target/temp/")
+            .arg(out_dir)
             .arg("--target")
             .arg(built_info::TARGET)
             .arg(format!("-Cmetadata={lib_name}"))
@@ -89,9 +96,14 @@ impl AbiImpl for RustcAbiImpl {
             Ok(String::from(lib_name))
         }
     }
-    fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError> {
+    fn compile_caller(
+        &self,
+        src_path: &Utf8Path,
+        out_dir: &Utf8Path,
+        lib_name: &str,
+    ) -> Result<String, BuildError> {
         // Currently no need to be different
-        self.compile_callee(src_path, lib_name)
+        self.compile_callee(src_path, out_dir, lib_name)
     }
 
     fn generate_callee(&self, f: &mut dyn Write, mut test: TestImpl) -> Result<(), GenerateError> {
@@ -132,7 +144,7 @@ impl RustcAbiImpl {
         f: &mut Fivemat,
         state: &TestImpl,
     ) -> Result<(), GenerateError> {
-        let convention_decl = self.convention_decl(state.convention)?;
+        let convention_decl = self.convention_decl(state.options.convention)?;
         writeln!(f, "extern \"{convention_decl}\" {{",)?;
         f.add_indent(1);
         for &func in &state.desired_funcs {
@@ -246,7 +258,7 @@ impl RustcAbiImpl {
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
         let function = state.types.realize_func(func);
-        let convention_decl = self.convention_decl(state.convention)?;
+        let convention_decl = self.convention_decl(state.options.convention)?;
         writeln!(f, "#[no_mangle]")?;
         write!(f, "pub unsafe extern \"{convention_decl}\" ")?;
         self.generate_signature(f, &state, func)?;
@@ -867,7 +879,7 @@ impl RustcAbiImpl {
     /// Every test should start by loading in the harness' "header"
     /// and forward-declaring any structs that will be used.
     fn write_harness_prefix(&self, f: &mut Fivemat, state: &TestImpl) -> Result<(), GenerateError> {
-        if state.convention == CallingConvention::Vectorcall {
+        if state.options.convention == CallingConvention::Vectorcall {
             writeln!(f, "#![feature(abi_vectorcall)]")?;
         }
         // Load test harness "headers"

@@ -1,14 +1,16 @@
 pub mod c;
 pub mod rust;
 
-use std::{collections::HashMap, fmt::Write, path::Path, sync::Arc};
+use std::{collections::HashMap, fmt::Write, sync::Arc};
 
 pub use c::CcAbiImpl;
+use camino::Utf8Path;
 use kdl_script::{
     types::{FuncIdx, TyIdx},
     DefinitionGraph, PunEnv, TypedProgram,
 };
 pub use rust::RustcAbiImpl;
+use serde::Serialize;
 
 use crate::error::{BuildError, GenerateError};
 
@@ -113,6 +115,27 @@ pub struct Test {
     // easy cases.
 }
 
+/// Options for a test
+#[derive(Clone, Debug, Serialize)]
+pub struct TestOptions {
+    /// The calling convention
+    pub convention: CallingConvention,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum CallSide {
+    Caller,
+    Callee,
+}
+impl CallSide {
+    pub fn name(&self) -> &'static str {
+        match self {
+            CallSide::Caller => "caller",
+            CallSide::Callee => "callee",
+        }
+    }
+}
+
 /// A test case, specialized to a specific ABI (PunEnv)
 ///
 /// This refines a [`Test`][] with a specific [`AbiImpl`][] like "Rust (rustc)" or "C (gcc)".
@@ -155,7 +178,7 @@ impl std::ops::Deref for TestForAbi {
 #[derive(Debug, Clone)]
 pub struct TestImpl {
     pub inner: TestForAbi,
-    pub convention: CallingConvention,
+    pub options: TestOptions,
     pub desired_funcs: Vec<FuncIdx>,
     pub val_writer: WriteImpl,
 
@@ -182,13 +205,23 @@ pub trait AbiImpl {
     fn name(&self) -> &'static str;
     fn lang(&self) -> &'static str;
     fn src_ext(&self) -> &'static str;
-    fn supports_convention(&self, _convention: CallingConvention) -> bool;
+    fn supports_options(&self, options: &TestOptions) -> bool;
     fn pun_env(&self) -> Arc<PunEnv>;
     fn generate_callee(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError>;
     fn generate_caller(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError>;
 
-    fn compile_callee(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
-    fn compile_caller(&self, src_path: &Path, lib_name: &str) -> Result<String, BuildError>;
+    fn compile_callee(
+        &self,
+        src_path: &Utf8Path,
+        out_dir: &Utf8Path,
+        lib_name: &str,
+    ) -> Result<String, BuildError>;
+    fn compile_caller(
+        &self,
+        src_path: &Utf8Path,
+        out_dir: &Utf8Path,
+        lib_name: &str,
+    ) -> Result<String, BuildError>;
 }
 
 impl Test {
@@ -196,27 +229,30 @@ impl Test {
         // TODO
         true
     }
-    pub fn for_abi(&self, abi: &(dyn AbiImpl + Send + Sync)) -> Result<TestForAbi, GenerateError> {
+    pub async fn for_abi(
+        &self,
+        abi: &(dyn AbiImpl + Send + Sync),
+    ) -> Result<Arc<TestForAbi>, GenerateError> {
         let env = abi.pun_env();
         let defs = Arc::new(self.types.definition_graph(&env)?);
-        Ok(TestForAbi {
+        Ok(Arc::new(TestForAbi {
             inner: self.clone(),
             env,
             defs,
-        })
+        }))
     }
 }
 
 impl TestForAbi {
-    pub fn for_impl(
+    pub fn with_options(
         &self,
-        convention: CallingConvention,
+        options: TestOptions,
         query: impl Iterator<Item = FuncIdx>,
         val_writer: WriteImpl,
     ) -> Result<TestImpl, GenerateError> {
         Ok(TestImpl {
             inner: self.clone(),
-            convention,
+            options,
             desired_funcs: query.collect(),
             val_writer,
 
@@ -227,6 +263,7 @@ impl TestForAbi {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename = "lowercase")]
 pub enum CallingConvention {
     // These conventions are special ones that "desugar" to others
     /// Sugar for "every possible convention"
@@ -278,8 +315,19 @@ impl CallingConvention {
             CallingConvention::Vectorcall => "vectorcall",
         }
     }
-    pub fn from_str(input: &str) -> Option<Self> {
-        Some(match input {
+}
+
+impl std::fmt::Display for CallingConvention {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.name().fmt(f)
+    }
+}
+
+impl std::str::FromStr for CallingConvention {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let val = match s {
             "all" => CallingConvention::All,
             "handwritten" => CallingConvention::Handwritten,
             "c" => CallingConvention::C,
@@ -291,7 +339,8 @@ impl CallingConvention {
             "stdcall" => CallingConvention::Stdcall,
             "fastcall" => CallingConvention::Fastcall,
             "vectorcall" => CallingConvention::Vectorcall,
-            _ => return None,
-        })
+            _ => return Err(format!("unknown CallingConvention: {s}")),
+        };
+        Ok(val)
     }
 }

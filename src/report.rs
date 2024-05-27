@@ -1,5 +1,4 @@
-use std::path::PathBuf;
-
+use camino::Utf8PathBuf;
 use kdl_script::spanned::Spanned;
 use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
@@ -8,6 +7,8 @@ use serde_json::json;
 use crate::abis::*;
 use crate::error::*;
 use crate::full_test_name;
+use crate::AbiImplId;
+use crate::TestId;
 use crate::WriteBuffer;
 
 /// These are the builtin test-expectations, edit these if there are new rules!
@@ -21,6 +22,11 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
         check: Pass(Check),
     };
 
+    // If the caller/callee don't support these options, skip them
+    if !caller.supports_options(&test.options) || !callee.supports_options(&test.options) {
+        result.run = Skip;
+    }
+
     // Now apply specific custom expectations for platforms/suites
     let is_c = caller.lang() == "c" || callee.lang() == "c";
     let is_rust = caller.lang() == "rust" || callee.lang() == "rust";
@@ -30,7 +36,7 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
     // This is Bad! Ideally we should check for all clang<->gcc pairs but to start
     // let's mark rust <-> C as disagreeing (because rust also disagrees with clang).
     if !cfg!(any(target_arch = "aarch64", target_arch = "s390x"))
-        && test.test_name == "ui128"
+        && test.test == "ui128"
         && is_rust_and_c
     {
         result.check = Busted(Check);
@@ -41,12 +47,12 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
     // so let's keep running them and just ignore the result for now.
     //
     // Anyone who cares about this situation more can make the expectations more precise.
-    if cfg!(windows) && test.test_name == "ui128" {
+    if cfg!(windows) && test.test == "ui128" {
         result.check = Random;
     }
 
     // This test is just for investigation right now, nothing normative
-    if test.test_name == "sysv_i128_emulation" {
+    if test.test == "sysv_i128_emulation" {
         result.check = Random;
     }
 
@@ -207,14 +213,10 @@ pub struct TestSummary {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TestKey {
-    pub test_name: String,
-    pub convention: String,
-    pub caller_id: String,
-    pub callee_id: String,
-    #[serde(skip)]
-    pub caller_variant: TestForAbi,
-    #[serde(skip)]
-    pub callee_variant: TestForAbi,
+    pub test: TestId,
+    pub caller: AbiImplId,
+    pub callee: AbiImplId,
+    pub options: TestOptions,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -288,8 +290,8 @@ impl Default for TestRunResults {
 
 #[derive(Debug, Serialize)]
 pub struct GenerateOutput {
-    pub caller_src: PathBuf,
-    pub callee_src: PathBuf,
+    pub caller_src: Utf8PathBuf,
+    pub callee_src: Utf8PathBuf,
 }
 
 #[derive(Debug, Serialize)]
@@ -300,7 +302,7 @@ pub struct BuildOutput {
 
 #[derive(Debug, Serialize)]
 pub struct LinkOutput {
-    pub test_bin: PathBuf,
+    pub test_bin: Utf8PathBuf,
 }
 
 pub type Functions =

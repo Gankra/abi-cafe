@@ -1,7 +1,25 @@
 use crate::{abis::*, Config, OutputFormat};
-use clap::{AppSettings, Arg};
+use clap::Parser;
 use log::LevelFilter;
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
+
+#[derive(Parser)]
+struct Cli {
+    #[clap(long)]
+    procgen_tests: bool,
+    #[clap(long)]
+    conventions: Vec<CallingConvention>,
+    #[clap(long)]
+    impls: Vec<String>,
+    #[clap(long)]
+    pairs: Vec<String>,
+    #[clap(long)]
+    tests: Vec<String>,
+    #[clap(long)]
+    add_rustc_codegen_backend: Vec<String>,
+    #[clap(long, default_value_t = OutputFormat::Human)]
+    output_format: OutputFormat,
+}
 
 pub fn make_app() -> Config {
     static ABI_IMPLS: &[&str] = &[
@@ -18,120 +36,36 @@ pub fn make_app() -> Config {
                                           // (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
     ];
 
-    let app = clap::Command::new("abi-cafe")
-        .version(clap::crate_version!())
-        .about("Compares the FFI ABIs of different langs/compilers by generating and running them.")
-        .next_line_help(true)
-        .setting(AppSettings::DeriveDisplayOrder)
-        .arg(
-            Arg::new("procgen-tests")
-                .long("procgen-tests")
-                .long_help("Regenerate the procgen test manifests"),
-        )
-        .arg(
-            Arg::new("conventions")
-                .long("conventions")
-                .long_help("Only run the given calling conventions")
-                .possible_values(&[
-                    "c",
-                    "cdecl",
-                    "fastcall",
-                    "stdcall",
-                    "vectorcall",
-                    "handwritten",
-                ])
-                .multiple_values(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::new("impls")
-                .long("impls")
-                .long_help("Only run the given impls (compilers/languages)")
-                .possible_values(ABI_IMPLS)
-                .multiple_values(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::new("tests")
-                .long("tests")
-                .long_help("Only run the given tests")
-                .multiple_values(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::new("pairs")
-                .long("pairs")
-                .long_help("Only run the given impl pairs, in the form of impl_calls_impl")
-                .multiple_values(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::new("add-rustc-codegen-backend")
-                .long("add-rustc-codegen-backend")
-                .long_help("Add a rustc codegen backend, in the form of impl_name:path/to/backend")
-                .multiple_values(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::new("output-format")
-                .long("output-format")
-                .long_help("Set the output format")
-                .possible_values(&["human", "json", "rustc-json"])
-                .default_value("human")
-                .takes_value(true),
-        )
-        .after_help("");
+    let config = Cli::parse();
+    let procgen_tests = config.procgen_tests;
+    let run_conventions = if config.conventions.is_empty() {
+        ALL_CONVENTIONS.to_vec()
+    } else {
+        config.conventions
+    };
 
-    let matches = app.get_matches();
-    let procgen_tests = matches.is_present("procgen-tests");
+    let run_impls = config.impls;
 
-    let mut run_conventions: Vec<_> = matches
-        .values_of("conventions")
-        .into_iter()
-        .flatten()
-        .map(|conv| CallingConvention::from_str(conv).unwrap())
-        .collect();
-
-    if run_conventions.is_empty() {
-        run_conventions = ALL_CONVENTIONS.to_vec();
-    }
-
-    let run_impls = matches
-        .values_of("impls")
-        .into_iter()
-        .flatten()
-        .map(String::from)
-        .collect();
-
-    let mut run_pairs: Vec<_> = matches
-        .values_of("pairs")
-        .into_iter()
-        .flatten()
+    let mut run_pairs: Vec<_> = config
+        .pairs
+        .iter()
         .map(|pair| {
             pair.split_once("_calls_")
                 .expect("invalid 'pair' syntax, must be 'impl_calls_impl'")
         })
         .map(|(a, b)| (String::from(a), String::from(b)))
         .collect();
-
     if run_pairs.is_empty() {
         run_pairs = DEFAULT_TEST_PAIRS
             .iter()
             .map(|&(a, b)| (String::from(a), String::from(b)))
             .collect()
     }
+    let run_tests = config.tests;
 
-    let run_tests = matches
-        .values_of("tests")
-        .into_iter()
-        .flatten()
-        .map(String::from)
-        .collect();
-
-    let rustc_codegen_backends: Vec<(String, String)> = matches
-        .values_of("add-rustc-codegen-backend")
-        .into_iter()
-        .flatten()
+    let rustc_codegen_backends: Vec<(String, String)> = config
+        .add_rustc_codegen_backend
+        .iter()
         .map(|pair| {
             pair.split_once(':')
                 .expect("invalid syntax, must be 'impl_name:path/to/backend'")
@@ -149,13 +83,7 @@ pub fn make_app() -> Config {
         }
     }
 
-    let output_format = match matches.value_of("output-format").unwrap() {
-        "human" => OutputFormat::Human,
-        "json" => OutputFormat::Json,
-        "rustc-json" => OutputFormat::RustcJson,
-        _ => unreachable!(),
-    };
-
+    let output_format = config.output_format;
     let _ = TermLogger::init(
         LevelFilter::Info,
         simplelog::Config::default(),

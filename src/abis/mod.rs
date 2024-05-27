@@ -135,6 +135,11 @@ impl CallSide {
         }
     }
 }
+impl std::fmt::Display for CallSide {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.name().fmt(f)
+    }
+}
 
 /// A test case, specialized to a specific ABI (PunEnv)
 ///

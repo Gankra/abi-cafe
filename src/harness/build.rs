@@ -5,12 +5,85 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::harness::full_test_name;
-use crate::{built_info, AbiImpl, TestKey};
-use crate::{error::*, TestOptions};
-use crate::{report::*, AbiImplId, CallSide, TestId};
+use crate::error::*;
+use crate::report::*;
+use crate::*;
 
 const OUT_DIR: &str = "target/temp";
+
+impl TestRunner {
+    pub async fn build_test(
+        &self,
+        key: &TestKey,
+        src: &GenerateOutput,
+        out_dir: &Utf8Path,
+    ) -> Result<BuildOutput, BuildError> {
+        let full_test_name = full_test_name(key);
+        eprintln!("compiling  {full_test_name}");
+
+        // FIXME: these two could be done concurrently
+        let caller_lib = self
+            .build_lib(
+                key.test.clone(),
+                key.caller.clone(),
+                CallSide::Caller,
+                key.options.clone(),
+                &src.caller_src,
+                out_dir,
+            )
+            .await?;
+        let callee_lib = self
+            .build_lib(
+                key.test.clone(),
+                key.callee.clone(),
+                CallSide::Callee,
+                key.options.clone(),
+                &src.callee_src,
+                out_dir,
+            )
+            .await?;
+        Ok(BuildOutput {
+            caller_lib,
+            callee_lib,
+        })
+    }
+
+    async fn build_lib(
+        &self,
+        test_id: TestId,
+        abi_id: AbiImplId,
+        call_side: CallSide,
+        options: TestOptions,
+        src_path: &Utf8Path,
+        out_dir: &Utf8Path,
+    ) -> Result<String, BuildError> {
+        let abi_impl = self.abi_impls[&abi_id].clone();
+        let lib_name = lib_name(&test_id, &abi_id, call_side, &options);
+        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
+        let once = self
+            .static_libs
+            .lock()
+            .unwrap()
+            .entry(lib_name.clone())
+            .or_insert_with(|| Arc::new(OnceCell::new()))
+            .clone();
+        // Either acquire the cached result, or make it
+        let real_lib_name = once
+            .get_or_try_init(|| compile_lib(&src_path, abi_impl, call_side, out_dir, &lib_name))
+            .await?
+            .clone();
+        Ok(real_lib_name)
+    }
+
+    pub async fn link_test(
+        &self,
+        key: &TestKey,
+        build: &BuildOutput,
+        out_dir: &Utf8Path,
+    ) -> Result<LinkOutput, LinkError> {
+        link_test(key, build, out_dir)
+    }
+}
 
 /// Delete and recreate the build dir
 pub fn init_build_dir() -> Result<Utf8PathBuf, BuildError> {
@@ -28,7 +101,7 @@ pub fn init_build_dir() -> Result<Utf8PathBuf, BuildError> {
     Ok(out_dir)
 }
 
-pub fn lib_name(
+fn lib_name(
     test_id: &TestId,
     abi_impl: &AbiImplId,
     call_side: CallSide,

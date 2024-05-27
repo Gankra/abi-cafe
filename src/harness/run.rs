@@ -7,10 +7,28 @@ use kdl_script::types::{Ty, TyIdx};
 use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
 
-use crate::harness::full_test_name;
+use crate::error::*;
 use crate::report::*;
-use crate::{error::*, TestForAbi};
-use crate::{LinkOutput, Test, TestKey};
+use crate::*;
+
+impl TestRunner {
+    pub async fn run_dynamic_test(
+        &self,
+        key: &TestKey,
+        test_dylib: &LinkOutput,
+    ) -> Result<RunOutput, RunError> {
+        let test = self.tests[&key.test].clone();
+        let caller_impl = self
+            .test_with_abi_impl(&test, key.caller.clone())
+            .await
+            .unwrap();
+        let callee_impl = self
+            .test_with_abi_impl(&test, key.callee.clone())
+            .await
+            .unwrap();
+        run_dynamic_test(key, caller_impl, callee_impl, test_dylib)
+    }
+}
 
 /// Tests write back the raw bytes of their values to a WriteBuffer.
 ///

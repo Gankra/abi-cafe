@@ -3,15 +3,73 @@ use camino::Utf8PathBuf;
 use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
+use tokio::sync::OnceCell;
 
 use crate::abis::*;
 use crate::error::*;
-use crate::{AbiImplId, CallSide, TestId, TestOptions};
-
+use crate::*;
 const GENERATED_SRC_DIR: &str = "generated_impls";
 const HANDWRITTEN_SRC_DIR: &str = "handwritten_impls";
 
-pub fn src_path(
+impl TestRunner {
+    pub async fn generate_test(&self, key: &TestKey) -> Result<GenerateOutput, GenerateError> {
+        let full_test_name = full_test_name(key);
+        eprintln!("generating  {full_test_name}");
+
+        // FIXME: these two could be done concurrently
+        let caller_src = self
+            .generate_src(
+                key.test.clone(),
+                key.caller.clone(),
+                CallSide::Caller,
+                key.options.clone(),
+            )
+            .await?;
+        let callee_src = self
+            .generate_src(
+                key.test.clone(),
+                key.callee.clone(),
+                CallSide::Callee,
+                key.options.clone(),
+            )
+            .await?;
+
+        Ok(GenerateOutput {
+            caller_src,
+            callee_src,
+        })
+    }
+
+    async fn generate_src(
+        &self,
+        test_id: TestId,
+        abi_id: AbiImplId,
+        call_side: CallSide,
+        options: TestOptions,
+    ) -> Result<Utf8PathBuf, GenerateError> {
+        let abi_impl = self.abi_impls[&abi_id].clone();
+        let src_path = src_path(&test_id, &abi_id, &*abi_impl, call_side, &options);
+        let test = self.tests[&test_id].clone();
+        let test_with_abi = self.test_with_abi_impl(&test, abi_id).await?;
+        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
+        let once = self
+            .sources
+            .lock()
+            .unwrap()
+            .entry(src_path.clone())
+            .or_insert_with(|| Arc::new(OnceCell::new()))
+            .clone();
+        // Either acquire the cached result, or make it
+        let _ = once
+            .get_or_try_init(|| {
+                generate_src(&src_path, abi_impl, test_with_abi, call_side, options)
+            })
+            .await?;
+        Ok(src_path)
+    }
+}
+
+fn src_path(
     test_id: &TestId,
     abi_id: &AbiImplId,
     abi: &dyn AbiImpl,

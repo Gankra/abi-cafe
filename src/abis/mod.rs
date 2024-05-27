@@ -14,6 +14,9 @@ use serde::Serialize;
 
 use crate::error::{BuildError, GenerateError};
 
+pub type AbiImplId = String;
+pub type TestId = String;
+
 pub static ABI_IMPL_RUSTC: &str = "rustc";
 pub static ABI_IMPL_CC: &str = "cc";
 pub static ABI_IMPL_GCC: &str = "gcc";

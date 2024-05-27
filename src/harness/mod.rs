@@ -6,6 +6,8 @@
 //! 4. running the test impls
 //! 5. checking the test results
 
+use std::error::Error;
+
 use crate::{TestKey, TestOptions};
 
 mod build;
@@ -14,11 +16,17 @@ mod generate;
 mod read;
 mod run;
 
-pub use build::{compile_lib, init_build_dir, lib_name, link_test};
-pub use check::check_test;
-pub use generate::{generate_src, init_generate_dir, src_path};
+use build::init_build_dir;
+use camino::Utf8PathBuf;
+use generate::init_generate_dir;
 pub use read::read_tests;
-pub use run::{run_dynamic_test, WriteBuffer};
+pub use run::WriteBuffer;
+
+pub fn init_dirs() -> Result<Utf8PathBuf, Box<dyn Error>> {
+    init_generate_dir()?;
+    let build_dir = init_build_dir()?;
+    Ok(build_dir)
+}
 
 /// The name of a test for pretty-printing.
 pub fn full_test_name(

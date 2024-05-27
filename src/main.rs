@@ -8,7 +8,7 @@ mod harness;
 mod report;
 
 use abis::*;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use error::*;
 use harness::*;
 use report::*;
@@ -18,8 +18,6 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::OnceCell;
 
 pub type SortedMap<K, V> = std::collections::BTreeMap<K, V>;
-pub type AbiImplId = String;
-pub type TestId = String;
 
 /// Slurps up details of how this crate was compiled, which we can use
 /// to better compile the actual tests since we're currently compiling them on
@@ -119,59 +117,6 @@ impl TestRunner {
             .clone();
         Ok(output)
     }
-    pub async fn generate_src(
-        &self,
-        test_id: TestId,
-        abi_id: AbiImplId,
-        call_side: CallSide,
-        options: TestOptions,
-    ) -> Result<Utf8PathBuf, GenerateError> {
-        let abi_impl = self.abi_impls[&abi_id].clone();
-        let src_path = harness::src_path(&test_id, &abi_id, &*abi_impl, call_side, &options);
-        let test = self.tests[&test_id].clone();
-        let test_with_abi = self.test_with_abi_impl(&test, abi_id).await?;
-        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
-        let once = self
-            .sources
-            .lock()
-            .unwrap()
-            .entry(src_path.clone())
-            .or_insert_with(|| Arc::new(OnceCell::new()))
-            .clone();
-        // Either acquire the cached result, or make it
-        let _ = once
-            .get_or_try_init(|| {
-                generate_src(&src_path, abi_impl, test_with_abi, call_side, options)
-            })
-            .await?;
-        Ok(src_path)
-    }
-    pub async fn build_lib(
-        &self,
-        test_id: TestId,
-        abi_id: AbiImplId,
-        call_side: CallSide,
-        options: TestOptions,
-        src_path: &Utf8Path,
-        out_dir: &Utf8Path,
-    ) -> Result<String, BuildError> {
-        let abi_impl = self.abi_impls[&abi_id].clone();
-        let lib_name = harness::lib_name(&test_id, &abi_id, call_side, &options);
-        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
-        let once = self
-            .static_libs
-            .lock()
-            .unwrap()
-            .entry(lib_name.clone())
-            .or_insert_with(|| Arc::new(OnceCell::new()))
-            .clone();
-        // Either acquire the cached result, or make it
-        let real_lib_name = once
-            .get_or_try_init(|| compile_lib(&src_path, abi_impl, call_side, out_dir, &lib_name))
-            .await?
-            .clone();
-        Ok(real_lib_name)
-    }
     pub fn get_test_rules(&self, test_key: &TestKey) -> TestRules {
         let caller = self.abi_impls[&test_key.caller].clone();
         let callee = self.abi_impls[&test_key.callee].clone();
@@ -249,104 +194,6 @@ impl TestRunner {
 
         run_results
     }
-    pub async fn generate_test(&self, key: &TestKey) -> Result<GenerateOutput, GenerateError> {
-        let full_test_name = full_test_name(key);
-        eprintln!("generating  {full_test_name}");
-
-        // FIXME: these two could be done concurrently
-        let caller_src = self
-            .generate_src(
-                key.test.clone(),
-                key.caller.clone(),
-                CallSide::Caller,
-                key.options.clone(),
-            )
-            .await?;
-        let callee_src = self
-            .generate_src(
-                key.test.clone(),
-                key.callee.clone(),
-                CallSide::Callee,
-                key.options.clone(),
-            )
-            .await?;
-
-        Ok(GenerateOutput {
-            caller_src,
-            callee_src,
-        })
-    }
-    pub async fn build_test(
-        &self,
-        key: &TestKey,
-        src: &GenerateOutput,
-        out_dir: &Utf8Path,
-    ) -> Result<BuildOutput, BuildError> {
-        let full_test_name = full_test_name(key);
-        eprintln!("compiling  {full_test_name}");
-
-        // FIXME: these two could be done concurrently
-        let caller_lib = self
-            .build_lib(
-                key.test.clone(),
-                key.caller.clone(),
-                CallSide::Caller,
-                key.options.clone(),
-                &src.caller_src,
-                out_dir,
-            )
-            .await?;
-        let callee_lib = self
-            .build_lib(
-                key.test.clone(),
-                key.callee.clone(),
-                CallSide::Callee,
-                key.options.clone(),
-                &src.callee_src,
-                out_dir,
-            )
-            .await?;
-        Ok(BuildOutput {
-            caller_lib,
-            callee_lib,
-        })
-    }
-    pub async fn link_test(
-        &self,
-        key: &TestKey,
-        build: &BuildOutput,
-        out_dir: &Utf8Path,
-    ) -> Result<LinkOutput, LinkError> {
-        link_test(key, build, out_dir)
-    }
-    pub async fn run_dynamic_test(
-        &self,
-        key: &TestKey,
-        test_dylib: &LinkOutput,
-    ) -> Result<RunOutput, RunError> {
-        let test = self.tests[&key.test].clone();
-        let caller_impl = self
-            .test_with_abi_impl(&test, key.caller.clone())
-            .await
-            .unwrap();
-        let callee_impl = self
-            .test_with_abi_impl(&test, key.callee.clone())
-            .await
-            .unwrap();
-        run_dynamic_test(key, caller_impl, callee_impl, test_dylib)
-    }
-    pub async fn check_test(&self, key: &TestKey, results: &RunOutput) -> CheckOutput {
-        let test = self.tests[&key.test].clone();
-        let caller_impl = self
-            .test_with_abi_impl(&test, key.caller.clone())
-            .await
-            .unwrap();
-        let callee_impl = self
-            .test_with_abi_impl(&test, key.callee.clone())
-            .await
-            .unwrap();
-        check_test(key, caller_impl, callee_impl, results)
-    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -356,8 +203,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Before doing anything, regenerate the procgen tests, if needed.
     // TODO: procgen::procgen_tests(cfg.procgen_tests);
     eprintln!("generated tests!");
-    init_generate_dir()?;
-    let out_dir = init_build_dir()?;
+    let out_dir = init_dirs()?;
 
     let mut runner = TestRunner::new();
 

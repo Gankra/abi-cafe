@@ -1,11 +1,25 @@
 use std::sync::Arc;
 
 use crate::error::*;
-use crate::harness::full_subtest_name;
 use crate::report::*;
-use crate::TestForAbi;
+use crate::*;
 
-pub fn check_test(
+impl TestRunner {
+    pub async fn check_test(&self, key: &TestKey, results: &RunOutput) -> CheckOutput {
+        let test = self.tests[&key.test].clone();
+        let caller_impl = self
+            .test_with_abi_impl(&test, key.caller.clone())
+            .await
+            .unwrap();
+        let callee_impl = self
+            .test_with_abi_impl(&test, key.callee.clone())
+            .await
+            .unwrap();
+        check_test(key, caller_impl, callee_impl, results)
+    }
+}
+
+fn check_test(
     test_key: &TestKey,
     caller_impl: Arc<TestForAbi>,
     _callee_impl: Arc<TestForAbi>,

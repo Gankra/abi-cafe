@@ -11,13 +11,14 @@ use crate::error::*;
 use crate::report::*;
 use crate::*;
 
-impl TestRunner {
+impl TestHarness {
     pub async fn run_dynamic_test(
         &self,
         key: &TestKey,
         test_dylib: &LinkOutput,
     ) -> Result<RunOutput, RunError> {
         let test = self.tests[&key.test].clone();
+        let full_test_name = self.full_test_name(key);
         let caller_impl = self
             .test_with_abi_impl(&test, key.caller.clone())
             .await
@@ -26,7 +27,7 @@ impl TestRunner {
             .test_with_abi_impl(&test, key.callee.clone())
             .await
             .unwrap();
-        run_dynamic_test(key, caller_impl, callee_impl, test_dylib)
+        run_dynamic_test(caller_impl, callee_impl, test_dylib, &full_test_name)
     }
 }
 
@@ -116,11 +117,11 @@ pub unsafe extern "C" fn finished_func(output1: &mut WriteBuffer, output2: &mut 
 /// Run the test!
 ///
 /// See the README for a high-level description of this design.
-pub fn run_dynamic_test(
-    test_key: &TestKey,
+fn run_dynamic_test(
     caller_impl: Arc<TestForAbi>,
     callee_impl: Arc<TestForAbi>,
     test_dylib: &LinkOutput,
+    full_test_name: &str,
 ) -> Result<RunOutput, RunError> {
     // Initialize all the buffers the tests will write to
     let mut caller_inputs = WriteBuffer::new();
@@ -129,8 +130,6 @@ pub fn run_dynamic_test(
     let mut callee_outputs = WriteBuffer::new();
 
     unsafe {
-        let full_test_name = full_test_name(test_key);
-
         // Load the dylib of the test, and get its test_start symbol
         eprintln!("loading: {}", &test_dylib.test_bin);
         let lib = libloading::Library::new(&test_dylib.test_bin)?;

@@ -72,7 +72,7 @@ pub struct Config {
 pub struct TestsFailed {}
 
 #[derive(Default)]
-pub struct TestRunner {
+pub struct TestHarness {
     tests: SortedMap<TestId, Arc<Test>>,
     abi_impls: SortedMap<AbiImplId, Arc<dyn AbiImpl + Send + Sync>>,
     test_with_abi_impls: Mutex<SortedMap<(TestId, AbiImplId), Arc<OnceCell<Arc<TestForAbi>>>>>,
@@ -80,7 +80,7 @@ pub struct TestRunner {
     static_libs: Mutex<SortedMap<String, Arc<OnceCell<String>>>>,
 }
 
-impl TestRunner {
+impl TestHarness {
     pub fn new() -> Self {
         Self::default()
     }
@@ -88,6 +88,15 @@ impl TestRunner {
         let old = self.abi_impls.insert(id.clone(), Arc::new(abi_impl));
         assert!(old.is_none(), "duplicate abi impl id: {}", id);
     }
+    pub fn abi_by_test_key(
+        &self,
+        key: &TestKey,
+        call_side: CallSide,
+    ) -> Arc<dyn AbiImpl + Send + Sync> {
+        let abi_id = key.abi_id(call_side);
+        self.abi_impls[abi_id].clone()
+    }
+
     pub fn set_tests(&mut self, tests: Vec<Test>) {
         for test in tests {
             let id = test.name.clone();
@@ -164,7 +173,7 @@ impl TestRunner {
         }
 
         run_results.ran_to = Link;
-        run_results.link = Some(self.link_test(&test_key, build, &out_dir).await);
+        run_results.link = Some(self.link_dynamic_lib(&test_key, build, &out_dir).await);
         let link = match run_results.link.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
@@ -205,9 +214,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("generated tests!");
     let out_dir = init_dirs()?;
 
-    let mut runner = TestRunner::new();
+    let mut harness = TestHarness::new();
 
-    runner.add_abi_impl(
+    harness.add_abi_impl(
         ABI_IMPL_RUSTC.to_owned(),
         abis::RustcAbiImpl::new(&cfg, None),
     );
@@ -230,7 +239,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
     */
     for &(ref name, ref path) in &cfg.rustc_codegen_backends {
-        runner.add_abi_impl(
+        harness.add_abi_impl(
             name.to_owned(),
             abis::RustcAbiImpl::new(&cfg, Some(path.to_owned())),
         );
@@ -239,9 +248,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Grab all the tests
     let tests = read_tests()?;
-    runner.set_tests(tests);
+    harness.set_tests(tests);
     eprintln!("got tests!");
-    let runner = Arc::new(runner);
+    let harness = Arc::new(harness);
     // Run the tests
     use TestConclusion::*;
     let rt = tokio::runtime::Runtime::new().expect("failed to init tokio runtime");
@@ -249,7 +258,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // This is written as nested iterator adaptors so that it can maybe be changed to use
     // rayon's par_iter, but currently the code isn't properly threadsafe due to races on
     // the filesystem when setting up the various output dirs :(
-    let tasks = runner
+    let tasks = harness
         .tests
         .values()
         .flat_map(|test| {
@@ -282,12 +291,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 callee: callee_id.to_owned(),
                                 options: TestOptions {
                                     convention: convention.clone(),
+                                    functions: FunctionSelector::All,
                                 },
                             };
-                            let rules = runner.get_test_rules(&test_key);
+                            let rules = harness.get_test_rules(&test_key);
 
                             let task = {
-                                let runner = runner.clone();
+                                let runner = harness.clone();
                                 let rules = rules.clone();
                                 let test_key = test_key.clone();
                                 let out_dir = out_dir.clone();
@@ -343,9 +353,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut output = std::io::stdout();
     match cfg.output_format {
-        OutputFormat::Human => full_report.print_human(&mut output).unwrap(),
-        OutputFormat::Json => full_report.print_json(&mut output).unwrap(),
-        OutputFormat::RustcJson => full_report.print_rustc_json(&mut output).unwrap(),
+        OutputFormat::Human => full_report.print_human(&harness, &mut output).unwrap(),
+        OutputFormat::Json => full_report.print_json(&harness, &mut output).unwrap(),
+        OutputFormat::RustcJson => full_report.print_rustc_json(&harness, &mut output).unwrap(),
     }
 
     if full_report.failed() {

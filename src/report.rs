@@ -6,8 +6,8 @@ use serde_json::json;
 
 use crate::abis::*;
 use crate::error::*;
-use crate::full_test_name;
 use crate::AbiImplId;
+use crate::TestHarness;
 use crate::TestId;
 use crate::WriteBuffer;
 
@@ -218,6 +218,14 @@ pub struct TestKey {
     pub callee: AbiImplId,
     pub options: TestOptions,
 }
+impl TestKey {
+    pub(crate) fn abi_id(&self, call_side: CallSide) -> &str {
+        match call_side {
+            CallSide::Caller => &self.caller,
+            CallSide::Callee => &self.callee,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TestRules {
@@ -324,13 +332,17 @@ pub enum TestConclusion {
 }
 
 impl FullReport {
-    pub fn print_human(&self, mut f: impl std::io::Write) -> Result<(), std::io::Error> {
+    pub fn print_human(
+        &self,
+        harness: &TestHarness,
+        mut f: impl std::io::Write,
+    ) -> Result<(), std::io::Error> {
         use TestCheckMode::*;
         use TestConclusion::*;
         writeln!(f, "Final Results:")?;
 
         for test in &self.tests {
-            let pretty_test_name = full_test_name(&test.key);
+            let pretty_test_name = harness.full_test_name(&test.key);
             write!(f, "{pretty_test_name:<40} ")?;
             match (&test.conclusion, &test.rules.check) {
                 (Skipped, _) => write!(f, "skipped")?,
@@ -394,11 +406,19 @@ impl FullReport {
         Ok(())
     }
 
-    pub fn print_json(&self, f: impl std::io::Write) -> Result<(), std::io::Error> {
+    pub fn print_json(
+        &self,
+        _harness: &TestHarness,
+        f: impl std::io::Write,
+    ) -> Result<(), std::io::Error> {
         serde_json::to_writer_pretty(f, self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
     }
-    pub fn print_rustc_json(&self, mut f: impl std::io::Write) -> Result<(), std::io::Error> {
+    pub fn print_rustc_json(
+        &self,
+        harness: &TestHarness,
+        mut f: impl std::io::Write,
+    ) -> Result<(), std::io::Error> {
         serde_json::to_writer(
             &mut f,
             &json!({
@@ -417,7 +437,7 @@ impl FullReport {
                 TestConclusion::Failed => ("failed", Some("todo fill this message in")),
                 TestConclusion::Busted => ("ok", None),
             };
-            let test_name = full_test_name(&test.key);
+            let test_name = harness.full_test_name(&test.key);
             serde_json::to_writer(
                 &mut f,
                 &json!({

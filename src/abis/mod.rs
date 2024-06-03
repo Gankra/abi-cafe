@@ -123,6 +123,19 @@ pub struct Test {
 pub struct TestOptions {
     /// The calling convention
     pub convention: CallingConvention,
+    pub functions: FunctionSelector,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub enum FunctionSelector {
+    All,
+    One { idx: FuncIdx, args: ArgSelector },
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub enum ArgSelector {
+    All,
+    One { idx: usize },
 }
 
 #[derive(Copy, Clone, Debug)]

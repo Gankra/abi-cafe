@@ -8,7 +8,7 @@
 
 use std::error::Error;
 
-use crate::{TestKey, TestOptions};
+use crate::{ArgSelector, CallSide, FunctionSelector, TestHarness, TestKey, TestOptions};
 
 mod build;
 mod check;
@@ -28,27 +28,66 @@ pub fn init_dirs() -> Result<Utf8PathBuf, Box<dyn Error>> {
     Ok(build_dir)
 }
 
-/// The name of a test for pretty-printing.
-pub fn full_test_name(
-    TestKey {
-        test,
-        options: TestOptions { convention },
-        caller,
-        callee,
-    }: &TestKey,
-) -> String {
-    format!("{test}::{convention}::{caller}_calls_{callee}")
-}
+impl TestHarness {
+    fn base_id(
+        &self,
+        TestKey {
+            test,
+            options:
+                TestOptions {
+                    convention,
+                    functions,
+                },
+            caller,
+            callee,
+        }: &TestKey,
+        call_side: Option<CallSide>,
+        separator: &str,
+    ) -> String {
+        let mut output = format!("{test}{separator}{convention}");
+        if let FunctionSelector::One { idx, args } = functions {
+            let test = self.tests[test].clone();
+            let func = test.types.realize_func(*idx);
+            output.push_str(separator);
+            output.push_str(&func.name);
+            if let ArgSelector::One { idx } = args {
+                let arg = func
+                    .inputs
+                    .iter()
+                    .chain(&func.outputs)
+                    .nth(*idx)
+                    .expect("argument index out of bounds");
+                output.push_str(separator);
+                output.push_str(&arg.name);
+            }
+        }
+        output.push_str(separator);
+        match call_side {
+            None => {
+                output.push_str(caller);
+                output.push_str("_calls_");
+                output.push_str(callee);
+            }
+            Some(CallSide::Caller) => {
+                output.push_str(caller);
+                output.push_str("_caller");
+            }
+            Some(CallSide::Callee) => {
+                output.push_str(callee);
+                output.push_str("_callee");
+            }
+        }
+        output
+    }
 
-/// The name of a subtest for pretty-printing.
-pub fn full_subtest_name(
-    TestKey {
-        test,
-        options: TestOptions { convention },
-        caller,
-        callee,
-    }: &TestKey,
-    func_name: &str,
-) -> String {
-    format!("{test}::{convention}::{caller}_calls_{callee}::{func_name}")
+    /// The name of a test for pretty-printing.
+    pub fn full_test_name(&self, key: &TestKey) -> String {
+        self.base_id(key, None, "::")
+    }
+
+    /// The name of a subtest for pretty-printing.
+    pub fn full_subtest_name(&self, key: &TestKey, func_name: &str) -> String {
+        let base = self.full_test_name(key);
+        format!("{base}::{func_name}")
+    }
 }

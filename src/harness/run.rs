@@ -347,7 +347,8 @@ fn add_field(
         }
         Ty::Tagged(tagged_ty) => {
             // FIXME(variant_select): hardcoded to access variant 0 for now
-            if let Some(variant) = tagged_ty.variants.get(0) {
+            let idx = 0;
+            if let Some(variant) = tagged_ty.variants.get(idx) {
                 if let Some(fields) = &variant.fields {
                     for field in fields {
                         add_field(
@@ -369,7 +370,8 @@ fn add_field(
         }
         Ty::Union(union_ty) => {
             // FIXME(variant_select): hardcoded to access field 0 for now
-            if let Some(field) = union_ty.fields.get(0) {
+            let idx = 0;
+            if let Some(field) = union_ty.fields.get(idx) {
                 let field_name = &field.ident;
                 let base = format!("{cur_path}.{field_name}");
                 add_field(test_impl, input, output, cur_idx, base, field.ty);

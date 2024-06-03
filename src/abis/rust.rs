@@ -145,13 +145,13 @@ impl RustcAbiImpl {
         // Generate type decls and gather up functions
         self.generate_definitions(f, state)?;
         // Generate decls of the functions we want to call
-        self.generate_caller_externs(f, &state)?;
+        self.generate_caller_externs(f, state)?;
 
         // Generate the test function the harness will call
         writeln!(f, "#[no_mangle]\npub extern \"C\" fn do_test() {{")?;
         for &func in &state.desired_funcs {
             // Generate the individual function calls
-            self.generate_caller_body(f, &state, func)?;
+            self.generate_caller_body(f, state, func)?;
         }
         writeln!(f, "}}")?;
 
@@ -167,7 +167,7 @@ impl RustcAbiImpl {
         writeln!(f, "extern \"{convention_decl}\" {{",)?;
         f.add_indent(1);
         for &func in &state.desired_funcs {
-            self.generate_signature(f, &state, func)?;
+            self.generate_signature(f, state, func)?;
             writeln!(f, ";")?;
         }
         f.sub_indent(1);
@@ -245,9 +245,9 @@ impl RustcAbiImpl {
         let output = proper_outputs.next();
         let too_many_outputs = proper_outputs.next();
         if too_many_outputs.is_some() {
-            return Err(GenerateError::RustUnsupported(format!(
-                "multiple normal returns (should this be a tuple?)"
-            )));
+            return Err(GenerateError::RustUnsupported(
+                "multiple normal returns (should this be a tuple?)".to_owned(),
+            ));
         }
         if let Some(output) = output {
             write!(f, "let {} = ", output.name)?;
@@ -284,7 +284,7 @@ impl RustcAbiImpl {
 
         for &func in &state.desired_funcs {
             // Generate the individual function definitions
-            self.generate_callee_body(f, &state, func)?;
+            self.generate_callee_body(f, state, func)?;
         }
         Ok(())
     }
@@ -299,7 +299,7 @@ impl RustcAbiImpl {
         let convention_decl = self.convention_decl(state.options.convention)?;
         writeln!(f, "#[no_mangle]")?;
         write!(f, "pub unsafe extern \"{convention_decl}\" ")?;
-        self.generate_signature(f, &state, func)?;
+        self.generate_signature(f, state, func)?;
         writeln!(f, " {{")?;
         f.add_indent(1);
         writeln!(f, "unsafe {{")?;
@@ -357,7 +357,7 @@ impl RustcAbiImpl {
         f: &mut Fivemat,
         state: &mut TestImpl,
     ) -> Result<(), GenerateError> {
-        self.write_harness_prefix(f, &state)?;
+        self.write_harness_prefix(f, state)?;
 
         for def in state.defs.definitions(state.desired_funcs.iter().copied()) {
             match def {
@@ -367,7 +367,7 @@ impl RustcAbiImpl {
                 kdl_script::Definition::DefineTy(ty) => {
                     self.generate_tydef(f, state, ty)?;
                 }
-                kdl_script::Definition::DefineFunc(func) => {
+                kdl_script::Definition::DefineFunc(_) => {
                     // we'd buffer these up to generate them all at the end,
                     // but we've already got them buffered, so... do nothing.
                 }
@@ -405,18 +405,18 @@ impl RustcAbiImpl {
                     PrimitiveTy::F64 => "f64",
                     PrimitiveTy::Bool => "bool",
                     PrimitiveTy::Ptr => "*mut ()",
-                    PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(format!(
-                        "rust doesn't have i256"
-                    )))?,
-                    PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(format!(
-                        "rust doesn't have u256"
-                    )))?,
-                    PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(format!(
-                        "rust doesn't have f16"
-                    )))?,
-                    PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(format!(
-                        "rust doesn't have f128"
-                    )))?,
+                    PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(
+                        "rust doesn't have i256".to_owned(),
+                    ))?,
+                    PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(
+                        "rust doesn't have u256".to_owned(),
+                    ))?,
+                    PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(
+                        "rust doesn't have f16".to_owned(),
+                    ))?,
+                    PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(
+                        "rust doesn't have f128".to_owned(),
+                    ))?,
                 };
                 (name.to_owned(), None)
             }
@@ -475,7 +475,7 @@ impl RustcAbiImpl {
             Ty::Alias(AliasTy { name, real, attrs }) => {
                 let borrowed_tyname = state
                     .borrowed_tynames
-                    .get(&real)
+                    .get(real)
                     .map(|name| format!("{name}<'a>"));
                 ((**name).clone(), borrowed_tyname)
             }
@@ -640,7 +640,7 @@ impl RustcAbiImpl {
                 );
 
                 // Emit an actual type alias decl
-                if let Some(real_tyname) = state.borrowed_tynames.get(&real) {
+                if let Some(real_tyname) = state.borrowed_tynames.get(real) {
                     writeln!(f, "type {name}<'a> = {real_tyname};\n")?;
                 } else {
                     let real_tyname = &state.tynames[&real];
@@ -697,7 +697,7 @@ impl RustcAbiImpl {
         ref_temp_name: &str,
         extra_decls: &mut Vec<String>,
     ) -> Result<(), GenerateError> {
-        let names = match state.types.realize_ty(ty) {
+        match state.types.realize_ty(ty) {
             // Primitives are the only "real" values with actual bytes that advance val_idx
             Ty::Primitive(prim) => {
                 match prim {
@@ -730,7 +730,7 @@ impl RustcAbiImpl {
                         "f64::from_bits({:#X}u64)",
                         graffiti_primitive::<u64>(*val_idx)
                     )?,
-                    PrimitiveTy::Bool => write!(f, "{}", true)?,
+                    PrimitiveTy::Bool => write!(f, "true")?,
                     PrimitiveTy::Ptr => {
                         if true {
                             write!(f, "{:#X} as *mut ()", graffiti_primitive::<u64>(*val_idx))?
@@ -738,18 +738,18 @@ impl RustcAbiImpl {
                             write!(f, "{:#X} as *mut ()", graffiti_primitive::<u32>(*val_idx))?
                         }
                     }
-                    PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(format!(
-                        "rust doesn't have i256"
-                    )))?,
-                    PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(format!(
-                        "rust doesn't have u256"
-                    )))?,
-                    PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(format!(
-                        "rust doesn't have f16"
-                    )))?,
-                    PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(format!(
-                        "rust doesn't have f128"
-                    )))?,
+                    PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(
+                        "rust doesn't have i256".to_owned(),
+                    ))?,
+                    PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(
+                        "rust doesn't have u256".to_owned(),
+                    ))?,
+                    PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(
+                        "rust doesn't have f16".to_owned(),
+                    ))?,
+                    PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(
+                        "rust doesn't have f128".to_owned(),
+                    ))?,
                 };
                 *val_idx += 1;
             }
@@ -825,7 +825,8 @@ impl RustcAbiImpl {
                 let name = alias.unwrap_or(&union_ty.name);
                 write!(f, "{name} {{ ")?;
                 // FIXME(variant_select):have a way to pick the variant!
-                if let Some(field) = union_ty.fields.get(0) {
+                let idx = 0;
+                if let Some(field) = union_ty.fields.get(idx) {
                     let field_name = &field.ident;
                     write!(f, "{field_name}: ")?;
                     let ref_temp_name = format!("{ref_temp_name}{field_name}_");
@@ -844,7 +845,8 @@ impl RustcAbiImpl {
             Ty::Enum(enum_ty) => {
                 let name = alias.unwrap_or(&enum_ty.name);
                 // FIXME(variant_select):have a way to pick the variant!
-                if let Some(variant) = enum_ty.variants.get(0) {
+                let idx = 0;
+                if let Some(variant) = enum_ty.variants.get(idx) {
                     let variant_name = &variant.name;
                     write!(f, "{name}::{variant_name}")?;
                 }
@@ -852,7 +854,8 @@ impl RustcAbiImpl {
             Ty::Tagged(tagged_ty) => {
                 let name = alias.unwrap_or(&tagged_ty.name);
                 // FIXME(variant_select): have a way to pick the variant!
-                if let Some(variant) = tagged_ty.variants.get(0) {
+                let idx = 0;
+                if let Some(variant) = tagged_ty.variants.get(idx) {
                     let variant_name = &variant.name;
                     write!(f, "{name}::{variant_name}")?;
                     if let Some(fields) = &variant.fields {
@@ -898,7 +901,7 @@ impl RustcAbiImpl {
             }
         };
 
-        Ok(names)
+        Ok(())
     }
 
     fn convention_decl(
@@ -953,7 +956,7 @@ impl RustcAbiImpl {
         write!(f, "fn {}(", function.name)?;
         let mut multiarg = false;
         // Add inputs
-        for (_idx, arg) in function.inputs.iter().enumerate() {
+        for arg in &function.inputs {
             if multiarg {
                 write!(f, ", ")?;
             }
@@ -963,7 +966,7 @@ impl RustcAbiImpl {
             write!(f, "{}: {}", arg_name, arg_ty)?;
         }
         // Add outparams
-        for (_idx, arg) in function.outputs.iter().enumerate() {
+        for arg in &function.outputs {
             let is_outparam = state.borrowed_tynames.contains_key(&arg.ty);
             if !is_outparam {
                 // Handled in next loop
@@ -981,16 +984,16 @@ impl RustcAbiImpl {
         }
         // Add normal returns
         let mut has_normal_return = false;
-        for (_idx, arg) in function.outputs.iter().enumerate() {
+        for arg in &function.outputs {
             let is_outparam = state.borrowed_tynames.contains_key(&arg.ty);
             if is_outparam {
                 // Already handled
                 continue;
             }
             if has_normal_return {
-                return Err(GenerateError::RustUnsupported(format!(
-                    "multiple normal returns (should this be a tuple?)"
-                )));
+                return Err(GenerateError::RustUnsupported(
+                    "multiple normal returns (should this be a tuple?)".to_owned(),
+                ));
             }
             has_normal_return = true;
             let arg_ty = &state.tynames[&arg.ty];
@@ -1149,7 +1152,8 @@ impl RustcAbiImpl {
             }
             Ty::Union(union_ty) => {
                 // FIXME(variant_select): hardcoded to access field 0 for now
-                if let Some(field) = union_ty.fields.get(0) {
+                let idx = 0;
+                if let Some(field) = union_ty.fields.get(idx) {
                     let field_name = &field.ident;
                     let base = format!("{from}.{field_name}");
                     self.write_fields(f, state, to, &base, field.ty)?;

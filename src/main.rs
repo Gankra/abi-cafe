@@ -238,7 +238,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         abis::CcAbiImpl::new(&cfg, ABI_IMPL_MSVC),
     );
     */
-    for &(ref name, ref path) in &cfg.rustc_codegen_backends {
+    for (name, path) in &cfg.rustc_codegen_backends {
         harness.add_abi_impl(
             name.to_owned(),
             abis::RustcAbiImpl::new(&cfg, Some(path.to_owned())),
@@ -290,7 +290,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 caller: caller_id.to_owned(),
                                 callee: callee_id.to_owned(),
                                 options: TestOptions {
-                                    convention: convention.clone(),
+                                    convention: *convention,
                                     functions: FunctionSelector::All,
                                     val_writer: WriteImpl::HarnessCallback,
                                 },

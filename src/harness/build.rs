@@ -120,6 +120,7 @@ fn link_dynamic_lib(
     dynamic_lib_name: &str,
 ) -> Result<LinkOutput, LinkError> {
     let src = PathBuf::from("harness/harness.rs");
+    let output = out_dir.join(dynamic_lib_name);
     let mut cmd = Command::new("rustc");
     cmd.arg("-v")
         .arg("-L")
@@ -136,7 +137,7 @@ fn link_dynamic_lib(
         // .arg("--out-dir")
         // .arg("target/temp/")
         .arg("-o")
-        .arg(&dynamic_lib_name)
+        .arg(&output)
         .arg(&src);
 
     eprintln!("running: {:?}", cmd);
@@ -145,8 +146,6 @@ fn link_dynamic_lib(
     if !out.status.success() {
         Err(LinkError::RustLink(out))
     } else {
-        Ok(LinkOutput {
-            test_bin: Utf8PathBuf::from(dynamic_lib_name),
-        })
+        Ok(LinkOutput { test_bin: output })
     }
 }

@@ -37,6 +37,7 @@ impl TestHarness {
                 TestOptions {
                     convention,
                     functions,
+                    val_writer,
                 },
             caller,
             callee,
@@ -75,6 +76,19 @@ impl TestHarness {
             Some(CallSide::Callee) => {
                 output.push_str(callee);
                 output.push_str("_callee");
+            }
+        }
+        match val_writer {
+            crate::WriteImpl::HarnessCallback => {
+                // Do nothing, implicit default
+            }
+            crate::WriteImpl::Print => {
+                output.push_str(separator);
+                output.push_str("print");
+            }
+            crate::WriteImpl::Noop => {
+                output.push_str(separator);
+                output.push_str("noop");
             }
         }
         output

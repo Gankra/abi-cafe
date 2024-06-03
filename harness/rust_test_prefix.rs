@@ -18,35 +18,6 @@ extern {
     pub static mut FINISHED_FUNC: Option<FinishedFuncCallback>;
 }
 
-#[repr(C, align(16))]
-pub struct FfiI128 {
-    low: i64,
-    high: i64,
-}
-#[repr(C, align(16))]
-pub struct FfiU128 {
-    low: u64,
-    high: u64,
-}
-
-impl FfiI128 {
-    fn new(val: i128) -> Self {
-        Self {
-            low: val as u64 as i64,
-            high: (val as u128 >> 64) as u64 as i64,
-        }
-    }
-}
-
-impl FfiU128 {
-    fn new(val: u128) -> Self {
-        Self {
-            low: val as u64,
-            high: (val as u128 >> 64) as u64,
-        }
-    }
-}
-
 unsafe fn write_field<T>(buffer: WriteBuffer, field: &T) {
     WRITE_FIELD.unwrap()(
         buffer,

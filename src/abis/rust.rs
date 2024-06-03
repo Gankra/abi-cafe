@@ -44,8 +44,13 @@ impl AbiImpl for RustcAbiImpl {
             lang: "rust".to_string(),
         })
     }
-    fn supports_options(&self, options: &TestOptions) -> bool {
-        let TestOptions { convention } = options;
+    fn supports_options(
+        &self,
+        TestOptions {
+            convention,
+            functions,
+        }: &TestOptions,
+    ) -> bool {
         // NOTE: Rustc spits out:
         //
         // Rust, C, C-unwind, cdecl, stdcall, stdcall-unwind, fastcall,

@@ -8,31 +8,15 @@ use tokio::sync::OnceCell;
 use crate::abis::*;
 use crate::error::*;
 use crate::*;
+
 const GENERATED_SRC_DIR: &str = "generated_impls";
 const HANDWRITTEN_SRC_DIR: &str = "handwritten_impls";
 
-impl TestRunner {
+impl TestHarness {
     pub async fn generate_test(&self, key: &TestKey) -> Result<GenerateOutput, GenerateError> {
-        let full_test_name = full_test_name(key);
-        eprintln!("generating  {full_test_name}");
-
         // FIXME: these two could be done concurrently
-        let caller_src = self
-            .generate_src(
-                key.test.clone(),
-                key.caller.clone(),
-                CallSide::Caller,
-                key.options.clone(),
-            )
-            .await?;
-        let callee_src = self
-            .generate_src(
-                key.test.clone(),
-                key.callee.clone(),
-                CallSide::Callee,
-                key.options.clone(),
-            )
-            .await?;
+        let caller_src = self.generate_src(key, CallSide::Caller).await?;
+        let callee_src = self.generate_src(key, CallSide::Callee).await?;
 
         Ok(GenerateOutput {
             caller_src,
@@ -42,15 +26,14 @@ impl TestRunner {
 
     async fn generate_src(
         &self,
-        test_id: TestId,
-        abi_id: AbiImplId,
+        key: &TestKey,
         call_side: CallSide,
-        options: TestOptions,
     ) -> Result<Utf8PathBuf, GenerateError> {
-        let abi_impl = self.abi_impls[&abi_id].clone();
-        let src_path = src_path(&test_id, &abi_id, &*abi_impl, call_side, &options);
-        let test = self.tests[&test_id].clone();
+        let test = self.tests[&key.test].clone();
+        let abi_id = key.abi_id(call_side).to_owned();
         let test_with_abi = self.test_with_abi_impl(&test, abi_id).await?;
+        let src_path = self.src_path(key, call_side);
+
         // Briefly lock this map to insert/acquire a OnceCell and then release the lock
         let once = self
             .sources
@@ -62,32 +45,29 @@ impl TestRunner {
         // Either acquire the cached result, or make it
         let _ = once
             .get_or_try_init(|| {
+                let abi_impl = self.abi_by_test_key(key, call_side);
+                let options = key.options.clone();
+                eprintln!("generating  {}", &src_path);
                 generate_src(&src_path, abi_impl, test_with_abi, call_side, options)
             })
             .await?;
         Ok(src_path)
     }
-}
 
-fn src_path(
-    test_id: &TestId,
-    abi_id: &AbiImplId,
-    abi: &dyn AbiImpl,
-    call_side: CallSide,
-    options: &TestOptions,
-) -> Utf8PathBuf {
-    let src_ext = abi.src_ext();
-    let convention_name = options.convention.name();
-    let call_side = call_side.name();
-    let src_dir = if options.convention == CallingConvention::Handwritten {
-        Utf8PathBuf::from(HANDWRITTEN_SRC_DIR)
-    } else {
-        Utf8PathBuf::from(GENERATED_SRC_DIR)
-    };
+    fn src_path(&self, key: &TestKey, call_side: CallSide) -> Utf8PathBuf {
+        let src_dir = if key.options.convention == CallingConvention::Handwritten {
+            Utf8PathBuf::from(HANDWRITTEN_SRC_DIR)
+        } else {
+            Utf8PathBuf::from(GENERATED_SRC_DIR)
+        };
 
-    src_dir.join(abi_id).join(format!(
-        "{test_id}_{convention_name}_{abi_id}_{call_side}.{src_ext}"
-    ))
+        let abi_id = key.abi_id(call_side);
+        let abi = self.abi_by_test_key(key, call_side);
+        let mut output = self.base_id(key, Some(call_side), "_");
+        output.push_str(".");
+        output.push_str(abi.src_ext());
+        src_dir.join(abi_id).join(output)
+    }
 }
 
 /// Delete and recreate the generated src dir

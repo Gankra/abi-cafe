@@ -73,7 +73,7 @@ pub fn make_app() -> Config {
         .map(|(a, b)| (String::from(a), String::from(b)))
         .collect();
 
-    for &(ref name, ref _path) in &rustc_codegen_backends {
+    for (name, _path) in &rustc_codegen_backends {
         if !run_pairs.iter().any(|(a, b)| a == name || b == name) {
             eprintln!("Warning: Rustc codegen backend `{name}` is not tested.");
             eprintln!(
@@ -84,13 +84,13 @@ pub fn make_app() -> Config {
     }
 
     let output_format = config.output_format;
-    let _ = TermLogger::init(
+    TermLogger::init(
         LevelFilter::Info,
         simplelog::Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
     )
-    .unwrap();
+    .expect("failed to initialize logger");
 
     Config {
         output_format,

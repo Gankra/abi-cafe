@@ -52,7 +52,7 @@ impl TestHarness {
         let real_lib_name = once
             .get_or_try_init(|| {
                 eprintln!("compiling  {lib_name}");
-                build_static_lib(&src_path, abi_impl, call_side, out_dir, &lib_name)
+                build_static_lib(src_path, abi_impl, call_side, out_dir, &lib_name)
             })
             .await?
             .clone();

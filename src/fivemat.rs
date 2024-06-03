@@ -44,7 +44,7 @@ impl<'a> Fivemat<'a> {
     }
     pub fn newline(&mut self) -> std::fmt::Result {
         self.indent_pending = true;
-        write!(&mut self.out, "\n")
+        writeln!(&mut self.out)
     }
 }
 
@@ -57,7 +57,7 @@ impl<'a> std::fmt::Write for Fivemat<'a> {
                 self.newline()?;
             }
             multiline = true;
-            if line.len() > 0 {
+            if !line.is_empty() {
                 self.ensure_indent()?;
                 write!(&mut self.out, "{}", line)?;
             }

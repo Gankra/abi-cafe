@@ -64,7 +64,7 @@ impl TestHarness {
         let abi_id = key.abi_id(call_side);
         let abi = self.abi_by_test_key(key, call_side);
         let mut output = self.base_id(key, Some(call_side), "_");
-        output.push_str(".");
+        output.push('.');
         output.push_str(abi.src_ext());
         src_dir.join(abi_id).join(output)
     }

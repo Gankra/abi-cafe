@@ -285,9 +285,8 @@ impl TestForAbi {
     pub fn with_options(&self, options: TestOptions) -> Result<TestImpl, GenerateError> {
         let desired_funcs = match &options.functions {
             FunctionSelector::All => self.types.all_funcs().collect(),
-            FunctionSelector::One { idx, args } => vec![*idx],
+            FunctionSelector::One { idx, args: _ } => vec![*idx],
         };
-        let write_impl = WriteImpl::HarnessCallback;
         Ok(TestImpl {
             inner: self.clone(),
             options,

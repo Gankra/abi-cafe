@@ -78,7 +78,7 @@ pub fn init_generate_dir() -> Result<(), GenerateError> {
     Ok(())
 }
 
-pub async fn generate_src(
+async fn generate_src(
     src_path: &Utf8Path,
     abi: Arc<dyn AbiImpl + Send + Sync>,
     test_with_abi: Arc<TestForAbi>,
@@ -93,9 +93,7 @@ pub async fn generate_src(
         }
     }
     let mut output_string = String::new();
-    let query = test_with_abi.types.all_funcs();
-    let write_impl = WriteImpl::HarnessCallback;
-    let test = test_with_abi.with_options(options, query, write_impl)?;
+    let test = test_with_abi.with_options(options)?;
     match call_side {
         CallSide::Callee => abi.generate_callee(&mut output_string, test)?,
         CallSide::Caller => abi.generate_caller(&mut output_string, test)?,

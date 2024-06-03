@@ -21,8 +21,6 @@ const VAR_CALLEE_INPUTS: &str = "CALLEE_INPUTS";
 const VAR_CALLEE_OUTPUTS: &str = "CALLEE_OUTPUTS";
 const INDENT: &str = "    ";
 
-static STRUCT_128: bool = false; // cfg!(target_arch="x86_64");
-
 #[allow(dead_code)]
 pub struct RustcAbiImpl {
     is_nightly: bool,
@@ -49,6 +47,7 @@ impl AbiImpl for RustcAbiImpl {
         TestOptions {
             convention,
             functions,
+            val_writer,
         }: &TestOptions,
     ) -> bool {
         // NOTE: Rustc spits out:
@@ -59,7 +58,7 @@ impl AbiImpl for RustcAbiImpl {
         // efiapi, avr-interrupt, avr-non-blocking-interrupt, C-cmse-nonsecure-call,
         // wasm, system, system-unwind, rust-intrinsic, rust-call,
         // platform-intrinsic, unadjusted
-        match convention {
+        let supports_convention = match convention {
             CallingConvention::All => unreachable!(),
             CallingConvention::Handwritten => true,
             CallingConvention::C => true,
@@ -71,7 +70,21 @@ impl AbiImpl for RustcAbiImpl {
             CallingConvention::Stdcall => true,
             CallingConvention::Fastcall => true,
             CallingConvention::Vectorcall => false, // too experimental even for nightly use?
-        }
+        };
+        let supports_writer = match val_writer {
+            WriteImpl::HarnessCallback => true,
+            WriteImpl::Print => true,
+            WriteImpl::Noop => true,
+        };
+        let supports_query = match functions {
+            FunctionSelector::All => true,
+            FunctionSelector::One { idx: _, args } => match args {
+                ArgSelector::All => true,
+                ArgSelector::One { idx: _ } => true,
+            },
+        };
+
+        supports_convention && supports_writer && supports_query
     }
 
     fn compile_callee(
@@ -101,6 +114,7 @@ impl AbiImpl for RustcAbiImpl {
             Ok(String::from(lib_name))
         }
     }
+
     fn compile_caller(
         &self,
         src_path: &Utf8Path,
@@ -174,10 +188,20 @@ impl RustcAbiImpl {
         let mut val_idx = 0;
 
         // Create vars for all the inputs
+        let mut arg_idx = 0;
         for arg in function.inputs.iter() {
             // Create and report the input
             self.create_var(f, state, &arg.name, arg.ty, &mut val_idx)?;
-            self.write_var(f, state, &arg.name, arg.ty, VAR_CALLER_INPUTS)?;
+            self.write_var(
+                f,
+                state,
+                func,
+                arg_idx,
+                &arg.name,
+                arg.ty,
+                VAR_CALLER_INPUTS,
+            )?;
+            arg_idx += 1;
         }
 
         // Call the function
@@ -186,7 +210,16 @@ impl RustcAbiImpl {
         // Report all the outputs
         for arg in function.outputs.iter() {
             let arg_name = &arg.name;
-            self.write_var(f, state, arg_name, arg.ty, VAR_CALLER_OUTPUTS)?;
+            self.write_var(
+                f,
+                state,
+                func,
+                arg_idx,
+                arg_name,
+                arg.ty,
+                VAR_CALLER_OUTPUTS,
+            )?;
+            arg_idx += 1;
         }
 
         // Report the function is complete
@@ -272,9 +305,11 @@ impl RustcAbiImpl {
         writeln!(f, "unsafe {{")?;
         f.add_indent(1);
         // Report the inputs
+        let mut arg_idx = 0;
         for arg in function.inputs.iter() {
             let arg_name = &arg.name;
-            self.write_var(f, state, arg_name, arg.ty, VAR_CALLEE_INPUTS)?;
+            self.write_var(f, state, func, arg_idx, arg_name, arg.ty, VAR_CALLEE_INPUTS)?;
+            arg_idx += 1;
         }
 
         // Create outputs and report them
@@ -282,7 +317,16 @@ impl RustcAbiImpl {
         for arg in function.outputs.iter() {
             // Create and report the input
             self.create_var(f, state, &arg.name, arg.ty, &mut val_idx)?;
-            self.write_var(f, state, &arg.name, arg.ty, VAR_CALLEE_OUTPUTS)?;
+            self.write_var(
+                f,
+                state,
+                func,
+                arg_idx,
+                &arg.name,
+                arg.ty,
+                VAR_CALLEE_OUTPUTS,
+            )?;
+            arg_idx += 1;
         }
 
         // Report the function is complete
@@ -884,6 +928,10 @@ impl RustcAbiImpl {
     /// Every test should start by loading in the harness' "header"
     /// and forward-declaring any structs that will be used.
     fn write_harness_prefix(&self, f: &mut Fivemat, state: &TestImpl) -> Result<(), GenerateError> {
+        // No extra harness gunk if not needed
+        if state.options.val_writer != WriteImpl::HarnessCallback {
+            return Ok(());
+        }
         if state.options.convention == CallingConvention::Vectorcall {
             writeln!(f, "#![feature(abi_vectorcall)]")?;
         }
@@ -996,18 +1044,24 @@ impl RustcAbiImpl {
         &self,
         f: &mut Fivemat,
         state: &TestImpl,
+        func_idx: usize,
+        arg_idx: usize,
         var_name: &str,
         var_ty: TyIdx,
         to: &str,
     ) -> Result<(), GenerateError> {
+        // If we're generating a minimized test, skip this
+        if !state.options.should_write_arg(func_idx, arg_idx) {
+            return Ok(());
+        }
         // If noop, don't bother doing anything (avoids tagged union matches being generated)
-        if let WriteImpl::Noop = state.val_writer {
+        if let WriteImpl::Noop = state.options.val_writer {
             return Ok(());
         };
         self.write_fields(f, state, to, var_name, var_ty)?;
 
         // If doing full harness callbacks, signal we wrote all the fields of a variable
-        if let WriteImpl::HarnessCallback = state.val_writer {
+        if let WriteImpl::HarnessCallback = state.options.val_writer {
             writeln!(f, "finished_val({to});")?;
             writeln!(f)?;
         }
@@ -1113,12 +1167,12 @@ impl RustcAbiImpl {
         to: &str,
         path: &str,
     ) -> Result<(), GenerateError> {
-        match state.val_writer {
+        match state.options.val_writer {
             WriteImpl::HarnessCallback => {
                 writeln!(f, "write_field({to}, &{path});")?;
             }
             WriteImpl::Print => {
-                writeln!(f, "println!(\"{{}}\", {path});")?;
+                writeln!(f, "println!(\"{{:?}}\", {path});")?;
             }
             WriteImpl::Noop => {
                 // Noop, do nothing
@@ -1134,7 +1188,7 @@ impl RustcAbiImpl {
         inputs: &str,
         outputs: &str,
     ) -> Result<(), GenerateError> {
-        match state.val_writer {
+        match state.options.val_writer {
             WriteImpl::HarnessCallback => {
                 writeln!(f, "finished_func({inputs}, {outputs});")?;
             }
@@ -1164,7 +1218,7 @@ impl RustcAbiImpl {
         var_ty: TyIdx,
     ) -> Result<(), GenerateError> {
         // TODO: implement outparam returns
-        write!(f, "{var_name}")?;
+        writeln!(f, "{var_name}")?;
         Ok(())
     }
 }

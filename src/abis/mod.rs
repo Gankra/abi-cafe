@@ -124,6 +124,24 @@ pub struct TestOptions {
     /// The calling convention
     pub convention: CallingConvention,
     pub functions: FunctionSelector,
+    pub val_writer: WriteImpl,
+}
+impl TestOptions {
+    fn should_write_arg(&self, func_idx: usize, arg_idx: usize) -> bool {
+        match &self.functions {
+            FunctionSelector::All => true,
+            FunctionSelector::One { idx, args } => {
+                if func_idx != *idx {
+                    false
+                } else {
+                    match args {
+                        ArgSelector::All => true,
+                        ArgSelector::One { idx } => arg_idx == *idx,
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -200,10 +218,9 @@ impl std::ops::Deref for TestForAbi {
 pub struct TestImpl {
     pub inner: TestForAbi,
     pub options: TestOptions,
-    pub desired_funcs: Vec<FuncIdx>,
-    pub val_writer: WriteImpl,
 
     // interning state
+    pub desired_funcs: Vec<FuncIdx>,
     pub tynames: HashMap<TyIdx, String>,
     pub borrowed_tynames: HashMap<TyIdx, String>,
 }
@@ -214,7 +231,7 @@ impl std::ops::Deref for TestImpl {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub enum WriteImpl {
     HarnessCallback,
     Print,
@@ -265,18 +282,16 @@ impl Test {
 }
 
 impl TestForAbi {
-    pub fn with_options(
-        &self,
-        options: TestOptions,
-        query: impl Iterator<Item = FuncIdx>,
-        val_writer: WriteImpl,
-    ) -> Result<TestImpl, GenerateError> {
+    pub fn with_options(&self, options: TestOptions) -> Result<TestImpl, GenerateError> {
+        let desired_funcs = match &options.functions {
+            FunctionSelector::All => self.types.all_funcs().collect(),
+            FunctionSelector::One { idx, args } => vec![*idx],
+        };
+        let write_impl = WriteImpl::HarnessCallback;
         Ok(TestImpl {
             inner: self.clone(),
             options,
-            desired_funcs: query.collect(),
-            val_writer,
-
+            desired_funcs,
             tynames: Default::default(),
             borrowed_tynames: Default::default(),
         })

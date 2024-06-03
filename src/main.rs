@@ -292,6 +292,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 options: TestOptions {
                                     convention: convention.clone(),
                                     functions: FunctionSelector::All,
+                                    val_writer: WriteImpl::HarnessCallback,
                                 },
                             };
                             let rules = harness.get_test_rules(&test_key);

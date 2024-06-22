@@ -5,7 +5,7 @@ use std::sync::Arc;
 use camino::Utf8Path;
 use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use kdl_script::PunEnv;
-use vals::{ValIter, ValueGenerator};
+use vals::{ArgValuesIter, Value};
 
 use self::error::GenerateError;
 
@@ -82,7 +82,10 @@ impl AbiImpl for RustcAbiImpl {
             FunctionSelector::All => true,
             FunctionSelector::One { idx: _, args } => match args {
                 ArgSelector::All => true,
-                ArgSelector::One { idx: _ } => true,
+                ArgSelector::One { idx: _, vals } => match vals {
+                    ValSelector::All => true,
+                    ValSelector::One { idx: _ } => true,
+                },
             },
         };
 
@@ -189,22 +192,12 @@ impl RustcAbiImpl {
         let function = state.types.realize_func(func);
 
         // Create vars for all the inputs
-        let mut arg_idx = 0;
+        let mut func_vals = state.vals.at_func(func);
         for arg in &function.inputs {
-            let vals = &state.vals.funcs[func].args[arg_idx].vals;
+            let arg_vals: ArgValuesIter = func_vals.next_arg();
             // Create and report the input
-            self.create_var(f, state, &arg.name, arg.ty, vals)?;
-            self.write_var(
-                f,
-                state,
-                func,
-                arg_idx,
-                &arg.name,
-                arg.ty,
-                vals,
-                VAR_CALLER_INPUTS,
-            )?;
-            arg_idx += 1;
+            self.create_var(f, state, &arg.name, arg.ty, arg_vals.clone())?;
+            self.write_var(f, state, &arg.name, arg.ty, arg_vals, VAR_CALLER_INPUTS)?;
         }
 
         // Call the function
@@ -212,18 +205,9 @@ impl RustcAbiImpl {
 
         // Report all the outputs
         for arg in &function.outputs {
-            let vals = &state.vals.funcs[func].args[arg_idx].vals;
-            self.write_var(
-                f,
-                state,
-                func,
-                arg_idx,
-                &arg.name,
-                arg.ty,
-                vals,
-                VAR_CALLER_OUTPUTS,
-            )?;
-            arg_idx += 1;
+            let arg_vals: ArgValuesIter = func_vals.next_arg();
+
+            self.write_var(f, state, &arg.name, arg.ty, arg_vals, VAR_CALLER_OUTPUTS)?;
         }
 
         // Report the function is complete
@@ -309,38 +293,18 @@ impl RustcAbiImpl {
         writeln!(f, "unsafe {{")?;
         f.add_indent(1);
         // Report the inputs
-        let mut arg_idx = 0;
+        let mut func_vals = state.vals.at_func(func);
         for arg in &function.inputs {
-            let vals = &state.vals.funcs[func].args[arg_idx].vals;
+            let arg_vals = func_vals.next_arg();
             let arg_name = &arg.name;
-            self.write_var(
-                f,
-                state,
-                func,
-                arg_idx,
-                arg_name,
-                arg.ty,
-                vals,
-                VAR_CALLEE_INPUTS,
-            )?;
-            arg_idx += 1;
+            self.write_var(f, state, arg_name, arg.ty, arg_vals, VAR_CALLEE_INPUTS)?;
         }
 
         // Create outputs and report them
         for arg in &function.outputs {
-            let vals = &state.vals.funcs[func].args[arg_idx].vals;
-            self.create_var(f, state, &arg.name, arg.ty, vals)?;
-            self.write_var(
-                f,
-                state,
-                func,
-                arg_idx,
-                &arg.name,
-                arg.ty,
-                vals,
-                VAR_CALLEE_OUTPUTS,
-            )?;
-            arg_idx += 1;
+            let arg_vals = func_vals.next_arg();
+            self.create_var(f, state, &arg.name, arg.ty, arg_vals.clone())?;
+            self.write_var(f, state, &arg.name, arg.ty, arg_vals, VAR_CALLEE_OUTPUTS)?;
         }
 
         // Report the function is complete
@@ -710,7 +674,7 @@ impl RustcAbiImpl {
         f: &mut Fivemat,
         state: &TestImpl,
         ty: TyIdx,
-        vals: &mut ValIter,
+        vals: &mut ArgValuesIter,
         alias: Option<&str>,
         ref_temp_name: &str,
         extra_decls: &mut Vec<String>,
@@ -718,7 +682,7 @@ impl RustcAbiImpl {
         match state.types.realize_ty(ty) {
             // Primitives are the only "real" values with actual bytes that advance val_idx
             Ty::Primitive(prim) => {
-                let val = vals.next().expect("internal error: ran out of values!?");
+                let val = vals.next_val();
                 match prim {
                     PrimitiveTy::I8 => write!(f, "{:#X}u8 as i8", val.generate_u8())?,
                     PrimitiveTy::I16 => write!(f, "{:#X}u16 as i16", val.generate_u16())?,
@@ -826,7 +790,7 @@ impl RustcAbiImpl {
             Ty::Union(union_ty) => {
                 let name = alias.unwrap_or(&union_ty.name);
                 write!(f, "{name} {{ ")?;
-                let tag_val = vals.next().expect("internal error: ran out of values!?");
+                let tag_val = vals.next_val();
                 if let Some(field) = tag_val.select_val(&union_ty.fields) {
                     let field_name = &field.ident;
                     write!(f, "{field_name}: ")?;
@@ -845,7 +809,7 @@ impl RustcAbiImpl {
             }
             Ty::Enum(enum_ty) => {
                 let name = alias.unwrap_or(&enum_ty.name);
-                let tag_val = vals.next().expect("internal error: ran out of values!?");
+                let tag_val = vals.next_val();
                 if let Some(variant) = tag_val.select_val(&enum_ty.variants) {
                     let variant_name = &variant.name;
                     write!(f, "{name}::{variant_name}")?;
@@ -853,7 +817,7 @@ impl RustcAbiImpl {
             }
             Ty::Tagged(tagged_ty) => {
                 let name = alias.unwrap_or(&tagged_ty.name);
-                let tag_val = vals.next().expect("internal error: ran out of values!?");
+                let tag_val = vals.next_val();
                 if let Some(variant) = tag_val.select_val(&tagged_ty.variants) {
                     let variant_name = &variant.name;
                     write!(f, "{name}::{variant_name}")?;
@@ -1002,7 +966,7 @@ impl RustcAbiImpl {
         state: &TestImpl,
         var_name: &str,
         var_ty: TyIdx,
-        vals: &[ValueGenerator],
+        mut vals: ArgValuesIter,
     ) -> Result<(), GenerateError> {
         // Generate the input
         let ty_name = &state.tynames[&var_ty];
@@ -1017,7 +981,7 @@ impl RustcAbiImpl {
             &mut real_var_decl_f,
             state,
             var_ty,
-            &mut vals.iter(),
+            &mut vals,
             None,
             &ref_temp_name,
             &mut extra_decls,
@@ -1038,22 +1002,20 @@ impl RustcAbiImpl {
         &self,
         f: &mut Fivemat,
         state: &TestImpl,
-        func_idx: usize,
-        arg_idx: usize,
         var_name: &str,
         var_ty: TyIdx,
-        vals: &[ValueGenerator],
+        mut vals: ArgValuesIter,
         to: &str,
     ) -> Result<(), GenerateError> {
         // If we're generating a minimized test, skip this
-        if !state.options.should_write_arg(func_idx, arg_idx) {
+        if !vals.should_write_arg(&state.options) {
             return Ok(());
         }
         // If noop, don't bother doing anything (avoids tagged union matches being generated)
         if let WriteImpl::Noop = state.options.val_writer {
             return Ok(());
         };
-        self.write_fields(f, state, to, var_name, var_ty, &mut vals.iter())?;
+        self.write_fields(f, state, to, var_name, var_ty, &mut vals)?;
 
         // If doing full harness callbacks, signal we wrote all the fields of a variable
         if let WriteImpl::HarnessCallback = state.options.val_writer {
@@ -1072,13 +1034,15 @@ impl RustcAbiImpl {
         to: &str,
         from: &str,
         var_ty: TyIdx,
-        vals: &mut ValIter,
+        vals: &mut ArgValuesIter,
     ) -> Result<(), GenerateError> {
         match state.types.realize_ty(var_ty) {
             Ty::Primitive(_) | Ty::Enum(_) => {
                 // Hey an actual leaf, report it (and burn a value)
-                vals.next().expect("internal error: ran out of values!?");
-                self.write_leaf_field(f, state, to, from)?;
+                let val = vals.next_val();
+                if val.should_write_val(&state.options) {
+                    self.write_leaf_field(f, state, to, from)?;
+                }
             }
             Ty::Empty => {
                 // nothing worth producing
@@ -1109,7 +1073,7 @@ impl RustcAbiImpl {
             }
             Ty::Tagged(tagged_ty) => {
                 // Process the implicit "tag" value
-                let tag_generator = vals.next().expect("internal error: ran out of values!?");
+                let tag_generator = vals.next_val();
                 if let Some(variant) = tag_generator.select_val(&tagged_ty.variants) {
                     let tagged_name = &tagged_ty.name;
                     let variant_name = &variant.name;
@@ -1130,22 +1094,24 @@ impl RustcAbiImpl {
                     };
                     // Generate an if-let
                     writeln!(f, "if let {pat} = &{from} {{")?;
+                    f.add_indent(1);
+                    if tag_generator.should_write_val(&state.options) {
+                        self.write_tag_field(f, state, to, &tag_generator)?;
+                    }
                     if let Some(fields) = &variant.fields {
-                        f.add_indent(1);
                         for field in fields {
                             // Do the ugly deref thing to deal with pattern autoref
                             let base = format!("(*{})", field.ident);
                             self.write_fields(f, state, to, &base, field.ty, vals)?;
                         }
-                        f.sub_indent(1);
                     }
+                    f.sub_indent(1);
                     // Add an else case to complain that the variant is wrong
                     writeln!(f, "}} else {{")?;
                     f.add_indent(1);
-                    writeln!(
-                        f,
-                        r#"unreachable!("expected {tagged_name}::{variant_name} for {from}")"#
-                    )?;
+                    if tag_generator.should_write_val(&state.options) {
+                        self.error_tag_field(f, state, to, &tag_generator)?;
+                    }
                     f.sub_indent(1);
                     writeln!(f, "}}")?;
                 }
@@ -1157,7 +1123,7 @@ impl RustcAbiImpl {
             }
             Ty::Union(union_ty) => {
                 // Process the implicit "tag" value
-                let tag_generator = vals.next().expect("internal error: ran out of values!?");
+                let tag_generator = vals.next_val();
                 if let Some(field) = tag_generator.select_val(&union_ty.fields) {
                     let field_name = &field.ident;
                     let base = format!("{from}.{field_name}");
@@ -1182,6 +1148,52 @@ impl RustcAbiImpl {
             }
             WriteImpl::Print => {
                 writeln!(f, "println!(\"{{:?}}\", {path});")?;
+            }
+            WriteImpl::Noop => {
+                // Noop, do nothing
+            }
+        }
+        Ok(())
+    }
+
+    fn write_tag_field(
+        &self,
+        f: &mut Fivemat,
+        state: &TestImpl,
+        to: &str,
+        val: &Value,
+    ) -> Result<(), GenerateError> {
+        match state.options.val_writer {
+            WriteImpl::HarnessCallback => {
+                writeln!(f, "write_field({to}, &{}u32);", val.generate_u32())?;
+            }
+            WriteImpl::Print => {
+                // Noop, do nothing
+            }
+            WriteImpl::Noop => {
+                // Noop, do nothing
+            }
+        }
+        Ok(())
+    }
+
+    fn error_tag_field(
+        &self,
+        f: &mut Fivemat,
+        state: &TestImpl,
+        to: &str,
+        val: &Value,
+    ) -> Result<(), GenerateError> {
+        match state.options.val_writer {
+            WriteImpl::HarnessCallback => {
+                writeln!(
+                    f,
+                    "write_field({to}, &{}u32);",
+                    val.generate_u32().wrapping_add(1)
+                )?;
+            }
+            WriteImpl::Print => {
+                unreachable!("enum had unexpected variant!?");
             }
             WriteImpl::Noop => {
                 // Noop, do nothing

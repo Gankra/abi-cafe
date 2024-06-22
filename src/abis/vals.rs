@@ -3,7 +3,8 @@ use rand::Rng;
 use rand_core::{RngCore, SeedableRng};
 use serde::Serialize;
 
-pub type ValIter<'a> = std::slice::Iter<'a, ValueGenerator>;
+use crate::TestOptions;
+
 type RngImpl = rand_pcg::Pcg64;
 
 #[derive(Debug, Clone)]
@@ -20,6 +21,29 @@ pub struct FuncValues {
 #[derive(Debug, Clone)]
 pub struct ArgValues {
     pub vals: Vec<ValueGenerator>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FuncValuesIter<'a> {
+    tree: &'a ValueTree,
+    func_idx: usize,
+    arg_idx: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ArgValuesIter<'a> {
+    tree: &'a ValueTree,
+    func_idx: usize,
+    arg_idx: usize,
+    val_idx: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct Value<'a> {
+    tree: &'a ValueTree,
+    func_idx: usize,
+    arg_idx: usize,
+    val_idx: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +91,84 @@ impl ValueTree {
             generator_kind,
             funcs,
         }
+    }
+
+    #[track_caller]
+    pub fn at_func(&self, func_idx: usize) -> FuncValuesIter {
+        assert!(
+            func_idx < self.funcs.len(),
+            "internal error: ValueTree func_idx exceeded"
+        );
+        FuncValuesIter {
+            tree: self,
+            func_idx,
+            arg_idx: 0,
+        }
+    }
+}
+
+impl<'a> FuncValuesIter<'a> {
+    #[track_caller]
+    pub fn next_arg(&mut self) -> ArgValuesIter<'a> {
+        let Self {
+            tree,
+            func_idx,
+            arg_idx,
+        } = *self;
+        assert!(
+            arg_idx < tree.funcs[func_idx].args.len(),
+            "internal error: ValueTree arg_idx exceeded"
+        );
+        self.arg_idx += 1;
+        ArgValuesIter {
+            tree,
+            func_idx,
+            arg_idx,
+            val_idx: 0,
+        }
+    }
+}
+
+impl<'a> ArgValuesIter<'a> {
+    #[track_caller]
+    pub fn next_val(&mut self) -> Value<'a> {
+        let Self {
+            tree,
+            func_idx,
+            arg_idx,
+            val_idx,
+        } = *self;
+        assert!(
+            val_idx < tree.funcs[func_idx].args[arg_idx].vals.len(),
+            "internal error: ValueTree val_idx exceeded"
+        );
+        self.val_idx += 1;
+        Value {
+            tree,
+            func_idx,
+            arg_idx,
+            val_idx,
+        }
+    }
+
+    pub fn should_write_arg(&self, options: &TestOptions) -> bool {
+        options
+            .functions
+            .should_write_arg(self.func_idx, self.arg_idx)
+    }
+}
+
+impl<'a> Value<'a> {
+    pub fn should_write_val(&self, options: &TestOptions) -> bool {
+        options
+            .functions
+            .should_write_val(self.func_idx, self.arg_idx, self.val_idx)
+    }
+}
+impl<'a> std::ops::Deref for Value<'a> {
+    type Target = ValueGenerator;
+    fn deref(&self) -> &Self::Target {
+        &self.tree.funcs[self.func_idx].args[self.arg_idx].vals[self.val_idx]
     }
 }
 

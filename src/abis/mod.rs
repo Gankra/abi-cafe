@@ -129,9 +129,9 @@ pub struct TestOptions {
     pub val_writer: WriteImpl,
     pub val_generator: ValueGeneratorKind,
 }
-impl TestOptions {
-    fn should_write_arg(&self, func_idx: usize, arg_idx: usize) -> bool {
-        match &self.functions {
+impl FunctionSelector {
+    pub fn should_write_arg(&self, func_idx: usize, arg_idx: usize) -> bool {
+        match &self {
             FunctionSelector::All => true,
             FunctionSelector::One { idx, args } => {
                 if func_idx != *idx {
@@ -139,7 +139,31 @@ impl TestOptions {
                 } else {
                     match args {
                         ArgSelector::All => true,
-                        ArgSelector::One { idx } => arg_idx == *idx,
+                        ArgSelector::One { idx, vals: _ } => arg_idx == *idx,
+                    }
+                }
+            }
+        }
+    }
+    pub fn should_write_val(&self, func_idx: usize, arg_idx: usize, val_idx: usize) -> bool {
+        match &self {
+            FunctionSelector::All => true,
+            FunctionSelector::One { idx, args } => {
+                if func_idx != *idx {
+                    false
+                } else {
+                    match args {
+                        ArgSelector::All => true,
+                        ArgSelector::One { idx, vals } => {
+                            if arg_idx != *idx {
+                                false
+                            } else {
+                                match vals {
+                                    ValSelector::All => true,
+                                    ValSelector::One { idx } => val_idx == *idx,
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -155,6 +179,12 @@ pub enum FunctionSelector {
 
 #[derive(Clone, Debug, Serialize)]
 pub enum ArgSelector {
+    All,
+    One { idx: usize, vals: ValSelector },
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub enum ValSelector {
     All,
     One { idx: usize },
 }

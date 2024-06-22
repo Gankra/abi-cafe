@@ -10,7 +10,7 @@ use std::error::Error;
 
 use crate::{
     vals::ValueGeneratorKind, ArgSelector, CallSide, FunctionSelector, TestHarness, TestKey,
-    TestOptions, WriteImpl,
+    TestOptions, ValSelector, WriteImpl,
 };
 
 mod build;
@@ -55,7 +55,7 @@ impl TestHarness {
             let func = test.types.realize_func(*idx);
             output.push_str(separator);
             output.push_str(&func.name);
-            if let ArgSelector::One { idx } = args {
+            if let ArgSelector::One { idx, vals } = args {
                 let arg = func
                     .inputs
                     .iter()
@@ -64,6 +64,10 @@ impl TestHarness {
                     .expect("argument index out of bounds");
                 output.push_str(separator);
                 output.push_str(&arg.name);
+                if let ValSelector::One { idx } = vals {
+                    output.push_str(separator);
+                    output.push_str(&format!("val{idx}"));
+                }
             }
         }
         output.push_str(separator);

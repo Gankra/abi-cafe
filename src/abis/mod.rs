@@ -1,5 +1,6 @@
 pub mod c;
 pub mod rust;
+pub mod vals;
 
 use std::{collections::HashMap, fmt::Write, sync::Arc};
 
@@ -11,6 +12,7 @@ use kdl_script::{
 };
 pub use rust::RustcAbiImpl;
 use serde::Serialize;
+use vals::{ValueGeneratorKind, ValueTree};
 
 use crate::error::{BuildError, GenerateError};
 
@@ -125,6 +127,7 @@ pub struct TestOptions {
     pub convention: CallingConvention,
     pub functions: FunctionSelector,
     pub val_writer: WriteImpl,
+    pub val_generator: ValueGeneratorKind,
 }
 impl TestOptions {
     fn should_write_arg(&self, func_idx: usize, arg_idx: usize) -> bool {
@@ -223,6 +226,7 @@ pub struct TestImpl {
     pub desired_funcs: Vec<FuncIdx>,
     pub tynames: HashMap<TyIdx, String>,
     pub borrowed_tynames: HashMap<TyIdx, String>,
+    pub vals: ValueTree,
 }
 impl std::ops::Deref for TestImpl {
     type Target = TestForAbi;
@@ -287,12 +291,14 @@ impl TestForAbi {
             FunctionSelector::All => self.types.all_funcs().collect(),
             FunctionSelector::One { idx, args: _ } => vec![*idx],
         };
+        let vals = ValueTree::new(&self.types, options.val_generator.clone());
         Ok(TestImpl {
             inner: self.clone(),
             options,
             desired_funcs,
             tynames: Default::default(),
             borrowed_tynames: Default::default(),
+            vals,
         })
     }
 }

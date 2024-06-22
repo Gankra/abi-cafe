@@ -5,6 +5,7 @@ use std::sync::Arc;
 use camino::Utf8Path;
 use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use kdl_script::PunEnv;
+use vals::{ValIter, ValueGenerator};
 
 use self::error::GenerateError;
 
@@ -48,6 +49,7 @@ impl AbiImpl for RustcAbiImpl {
             convention,
             functions,
             val_writer,
+            val_generator: _,
         }: &TestOptions,
     ) -> bool {
         // NOTE: Rustc spits out:
@@ -185,13 +187,13 @@ impl RustcAbiImpl {
         writeln!(f, "unsafe {{")?;
         f.add_indent(1);
         let function = state.types.realize_func(func);
-        let mut val_idx = 0;
 
         // Create vars for all the inputs
         let mut arg_idx = 0;
-        for arg in function.inputs.iter() {
+        for arg in &function.inputs {
+            let vals = &state.vals.funcs[func].args[arg_idx].vals;
             // Create and report the input
-            self.create_var(f, state, &arg.name, arg.ty, &mut val_idx)?;
+            self.create_var(f, state, &arg.name, arg.ty, vals)?;
             self.write_var(
                 f,
                 state,
@@ -199,6 +201,7 @@ impl RustcAbiImpl {
                 arg_idx,
                 &arg.name,
                 arg.ty,
+                vals,
                 VAR_CALLER_INPUTS,
             )?;
             arg_idx += 1;
@@ -208,15 +211,16 @@ impl RustcAbiImpl {
         self.call_function(f, state, function)?;
 
         // Report all the outputs
-        for arg in function.outputs.iter() {
-            let arg_name = &arg.name;
+        for arg in &function.outputs {
+            let vals = &state.vals.funcs[func].args[arg_idx].vals;
             self.write_var(
                 f,
                 state,
                 func,
                 arg_idx,
-                arg_name,
+                &arg.name,
                 arg.ty,
+                vals,
                 VAR_CALLER_OUTPUTS,
             )?;
             arg_idx += 1;
@@ -306,17 +310,26 @@ impl RustcAbiImpl {
         f.add_indent(1);
         // Report the inputs
         let mut arg_idx = 0;
-        for arg in function.inputs.iter() {
+        for arg in &function.inputs {
+            let vals = &state.vals.funcs[func].args[arg_idx].vals;
             let arg_name = &arg.name;
-            self.write_var(f, state, func, arg_idx, arg_name, arg.ty, VAR_CALLEE_INPUTS)?;
+            self.write_var(
+                f,
+                state,
+                func,
+                arg_idx,
+                arg_name,
+                arg.ty,
+                vals,
+                VAR_CALLEE_INPUTS,
+            )?;
             arg_idx += 1;
         }
 
         // Create outputs and report them
-        let mut val_idx = 0;
-        for arg in function.outputs.iter() {
-            // Create and report the input
-            self.create_var(f, state, &arg.name, arg.ty, &mut val_idx)?;
+        for arg in &function.outputs {
+            let vals = &state.vals.funcs[func].args[arg_idx].vals;
+            self.create_var(f, state, &arg.name, arg.ty, vals)?;
             self.write_var(
                 f,
                 state,
@@ -324,6 +337,7 @@ impl RustcAbiImpl {
                 arg_idx,
                 &arg.name,
                 arg.ty,
+                vals,
                 VAR_CALLEE_OUTPUTS,
             )?;
             arg_idx += 1;
@@ -525,6 +539,7 @@ impl RustcAbiImpl {
                 if has_borrows {
                     writeln!(f, "struct {}<'a> {{", struct_ty.name)?;
                 } else {
+                    writeln!(f, "#[derive(Copy, Clone)]")?;
                     writeln!(f, "struct {} {{", struct_ty.name)?;
                 }
                 f.add_indent(1);
@@ -555,6 +570,7 @@ impl RustcAbiImpl {
                 if has_borrows {
                     writeln!(f, "union {}<'a> {{", union_ty.name)?;
                 } else {
+                    writeln!(f, "#[derive(Copy, Clone)]")?;
                     writeln!(f, "union {} {{", union_ty.name)?;
                 }
                 f.add_indent(1);
@@ -577,6 +593,7 @@ impl RustcAbiImpl {
 
                 // Emit an actual enum decl
                 writeln!(f, "#[repr(C)]")?;
+                writeln!(f, "#[derive(Copy, Clone)]")?;
                 writeln!(f, "enum {} {{", enum_ty.name)?;
                 f.add_indent(1);
                 for variant in &enum_ty.variants {
@@ -608,6 +625,7 @@ impl RustcAbiImpl {
                 if has_borrows {
                     writeln!(f, "enum {}<'a> {{", tagged_ty.name)?;
                 } else {
+                    writeln!(f, "#[derive(Copy, Clone)]")?;
                     writeln!(f, "enum {} {{", tagged_ty.name)?;
                 }
                 f.add_indent(1);
@@ -692,7 +710,7 @@ impl RustcAbiImpl {
         f: &mut Fivemat,
         state: &TestImpl,
         ty: TyIdx,
-        val_idx: &mut usize,
+        vals: &mut ValIter,
         alias: Option<&str>,
         ref_temp_name: &str,
         extra_decls: &mut Vec<String>,
@@ -700,42 +718,27 @@ impl RustcAbiImpl {
         match state.types.realize_ty(ty) {
             // Primitives are the only "real" values with actual bytes that advance val_idx
             Ty::Primitive(prim) => {
+                let val = vals.next().expect("internal error: ran out of values!?");
                 match prim {
-                    PrimitiveTy::I8 => {
-                        write!(f, "{:#X}u8 as i8", graffiti_primitive::<i8>(*val_idx))?
-                    }
-                    PrimitiveTy::I16 => {
-                        write!(f, "{:#X}u16 as i16", graffiti_primitive::<i16>(*val_idx))?
-                    }
-                    PrimitiveTy::I32 => {
-                        write!(f, "{:#X}u32 as i32", graffiti_primitive::<i32>(*val_idx))?
-                    }
-                    PrimitiveTy::I64 => {
-                        write!(f, "{:#X}u64 as i64", graffiti_primitive::<i64>(*val_idx))?
-                    }
-                    PrimitiveTy::I128 => write!(f, "{:#X}", graffiti_primitive::<i128>(*val_idx))?,
-                    PrimitiveTy::U8 => write!(f, "{:#X}", graffiti_primitive::<u8>(*val_idx))?,
-                    PrimitiveTy::U16 => write!(f, "{:#X}", graffiti_primitive::<u16>(*val_idx))?,
-                    PrimitiveTy::U32 => write!(f, "{:#X}", graffiti_primitive::<u32>(*val_idx))?,
-                    PrimitiveTy::U64 => write!(f, "{:#X}", graffiti_primitive::<u64>(*val_idx))?,
-                    PrimitiveTy::U128 => write!(f, "{:#X}", graffiti_primitive::<u128>(*val_idx))?,
+                    PrimitiveTy::I8 => write!(f, "{:#X}u8 as i8", val.generate_u8())?,
+                    PrimitiveTy::I16 => write!(f, "{:#X}u16 as i16", val.generate_u16())?,
+                    PrimitiveTy::I32 => write!(f, "{:#X}u32 as i32", val.generate_u32())?,
+                    PrimitiveTy::I64 => write!(f, "{:#X}u64 as i64", val.generate_u64())?,
+                    PrimitiveTy::I128 => write!(f, "{:#X}", val.generate_u128())?,
+                    PrimitiveTy::U8 => write!(f, "{:#X}", val.generate_u8())?,
+                    PrimitiveTy::U16 => write!(f, "{:#X}", val.generate_u16())?,
+                    PrimitiveTy::U32 => write!(f, "{:#X}", val.generate_u32())?,
+                    PrimitiveTy::U64 => write!(f, "{:#X}", val.generate_u64())?,
+                    PrimitiveTy::U128 => write!(f, "{:#X}", val.generate_u128())?,
 
-                    PrimitiveTy::F32 => write!(
-                        f,
-                        "f32::from_bits({:#X}u32)",
-                        graffiti_primitive::<u32>(*val_idx)
-                    )?,
-                    PrimitiveTy::F64 => write!(
-                        f,
-                        "f64::from_bits({:#X}u64)",
-                        graffiti_primitive::<u64>(*val_idx)
-                    )?,
+                    PrimitiveTy::F32 => write!(f, "f32::from_bits({:#X})", val.generate_u32())?,
+                    PrimitiveTy::F64 => write!(f, "f64::from_bits({:#X})", val.generate_u64())?,
                     PrimitiveTy::Bool => write!(f, "true")?,
                     PrimitiveTy::Ptr => {
                         if true {
-                            write!(f, "{:#X} as *mut ()", graffiti_primitive::<u64>(*val_idx))?
+                            write!(f, "{:#X} as *mut ()", val.generate_u64())?
                         } else {
-                            write!(f, "{:#X} as *mut ()", graffiti_primitive::<u32>(*val_idx))?
+                            write!(f, "{:#X} as *mut ()", val.generate_u32())?
                         }
                     }
                     PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(
@@ -751,7 +754,6 @@ impl RustcAbiImpl {
                         "rust doesn't have f128".to_owned(),
                     ))?,
                 };
-                *val_idx += 1;
             }
             Ty::Empty => {
                 write!(f, "()")?;
@@ -771,7 +773,7 @@ impl RustcAbiImpl {
                     &mut ref_temp_f,
                     state,
                     *pointee_ty,
-                    val_idx,
+                    vals,
                     alias,
                     &ref_temp_name,
                     extra_decls,
@@ -790,7 +792,7 @@ impl RustcAbiImpl {
                         f,
                         state,
                         *elem_ty,
-                        val_idx,
+                        vals,
                         alias,
                         &ref_temp_name,
                         extra_decls,
@@ -813,7 +815,7 @@ impl RustcAbiImpl {
                         f,
                         state,
                         field.ty,
-                        val_idx,
+                        vals,
                         alias,
                         &ref_temp_name,
                         extra_decls,
@@ -824,9 +826,8 @@ impl RustcAbiImpl {
             Ty::Union(union_ty) => {
                 let name = alias.unwrap_or(&union_ty.name);
                 write!(f, "{name} {{ ")?;
-                // FIXME(variant_select):have a way to pick the variant!
-                let idx = 0;
-                if let Some(field) = union_ty.fields.get(idx) {
+                let tag_val = vals.next().expect("internal error: ran out of values!?");
+                if let Some(field) = tag_val.select_val(&union_ty.fields) {
                     let field_name = &field.ident;
                     write!(f, "{field_name}: ")?;
                     let ref_temp_name = format!("{ref_temp_name}{field_name}_");
@@ -834,7 +835,7 @@ impl RustcAbiImpl {
                         f,
                         state,
                         field.ty,
-                        val_idx,
+                        vals,
                         alias,
                         &ref_temp_name,
                         extra_decls,
@@ -844,18 +845,16 @@ impl RustcAbiImpl {
             }
             Ty::Enum(enum_ty) => {
                 let name = alias.unwrap_or(&enum_ty.name);
-                // FIXME(variant_select):have a way to pick the variant!
-                let idx = 0;
-                if let Some(variant) = enum_ty.variants.get(idx) {
+                let tag_val = vals.next().expect("internal error: ran out of values!?");
+                if let Some(variant) = tag_val.select_val(&enum_ty.variants) {
                     let variant_name = &variant.name;
                     write!(f, "{name}::{variant_name}")?;
                 }
             }
             Ty::Tagged(tagged_ty) => {
                 let name = alias.unwrap_or(&tagged_ty.name);
-                // FIXME(variant_select): have a way to pick the variant!
-                let idx = 0;
-                if let Some(variant) = tagged_ty.variants.get(idx) {
+                let tag_val = vals.next().expect("internal error: ran out of values!?");
+                if let Some(variant) = tag_val.select_val(&tagged_ty.variants) {
                     let variant_name = &variant.name;
                     write!(f, "{name}::{variant_name}")?;
                     if let Some(fields) = &variant.fields {
@@ -871,7 +870,7 @@ impl RustcAbiImpl {
                                 f,
                                 state,
                                 field.ty,
-                                val_idx,
+                                vals,
                                 alias,
                                 &ref_temp_name,
                                 extra_decls,
@@ -883,21 +882,13 @@ impl RustcAbiImpl {
             }
             Ty::Alias(AliasTy { real, name, .. }) => {
                 let alias = alias.or_else(|| Some(name));
-                self.generate_value(f, state, *real, val_idx, alias, ref_temp_name, extra_decls)?;
+                self.generate_value(f, state, *real, vals, alias, ref_temp_name, extra_decls)?;
             }
 
             // Puns should be evaporated
             Ty::Pun(pun) => {
                 let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();
-                self.generate_value(
-                    f,
-                    state,
-                    real_ty,
-                    val_idx,
-                    alias,
-                    ref_temp_name,
-                    extra_decls,
-                )?;
+                self.generate_value(f, state, real_ty, vals, alias, ref_temp_name, extra_decls)?;
             }
         };
 
@@ -1011,7 +1002,7 @@ impl RustcAbiImpl {
         state: &TestImpl,
         var_name: &str,
         var_ty: TyIdx,
-        val_idx: &mut usize,
+        vals: &[ValueGenerator],
     ) -> Result<(), GenerateError> {
         // Generate the input
         let ty_name = &state.tynames[&var_ty];
@@ -1026,7 +1017,7 @@ impl RustcAbiImpl {
             &mut real_var_decl_f,
             state,
             var_ty,
-            val_idx,
+            &mut vals.iter(),
             None,
             &ref_temp_name,
             &mut extra_decls,
@@ -1051,6 +1042,7 @@ impl RustcAbiImpl {
         arg_idx: usize,
         var_name: &str,
         var_ty: TyIdx,
+        vals: &[ValueGenerator],
         to: &str,
     ) -> Result<(), GenerateError> {
         // If we're generating a minimized test, skip this
@@ -1061,7 +1053,7 @@ impl RustcAbiImpl {
         if let WriteImpl::Noop = state.options.val_writer {
             return Ok(());
         };
-        self.write_fields(f, state, to, var_name, var_ty)?;
+        self.write_fields(f, state, to, var_name, var_ty, &mut vals.iter())?;
 
         // If doing full harness callbacks, signal we wrote all the fields of a variable
         if let WriteImpl::HarnessCallback = state.options.val_writer {
@@ -1080,10 +1072,12 @@ impl RustcAbiImpl {
         to: &str,
         from: &str,
         var_ty: TyIdx,
+        vals: &mut ValIter,
     ) -> Result<(), GenerateError> {
         match state.types.realize_ty(var_ty) {
             Ty::Primitive(_) | Ty::Enum(_) => {
-                // Hey an actual leaf, report it
+                // Hey an actual leaf, report it (and burn a value)
+                vals.next().expect("internal error: ran out of values!?");
                 self.write_leaf_field(f, state, to, from)?;
             }
             Ty::Empty => {
@@ -1091,18 +1085,18 @@ impl RustcAbiImpl {
             }
             Ty::Alias(alias_ty) => {
                 // keep going but with the type changed
-                self.write_fields(f, state, to, from, alias_ty.real)?;
+                self.write_fields(f, state, to, from, alias_ty.real, vals)?;
             }
             Ty::Pun(pun) => {
                 // keep going but with the type changed
                 let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();
-                self.write_fields(f, state, to, from, real_ty)?
+                self.write_fields(f, state, to, from, real_ty, vals)?
             }
             Ty::Array(array_ty) => {
                 // recurse into each array index
                 for i in 0..array_ty.len {
                     let base = format!("{from}[{i}]");
-                    self.write_fields(f, state, to, &base, array_ty.elem_ty)?;
+                    self.write_fields(f, state, to, &base, array_ty.elem_ty, vals)?;
                 }
             }
             Ty::Struct(struct_ty) => {
@@ -1110,17 +1104,16 @@ impl RustcAbiImpl {
                 for field in &struct_ty.fields {
                     let field_name = &field.ident;
                     let base = format!("{from}.{field_name}");
-                    self.write_fields(f, state, to, &base, field.ty)?;
+                    self.write_fields(f, state, to, &base, field.ty, vals)?;
                 }
             }
             Ty::Tagged(tagged_ty) => {
-                // generate a wrapper match, then recurse into each field of each variant
-                writeln!(f, "match &{from} {{")?;
-                f.add_indent(1);
-                let tagged_name = &tagged_ty.name;
-                for variant in &tagged_ty.variants {
+                // Process the implicit "tag" value
+                let tag_generator = vals.next().expect("internal error: ran out of values!?");
+                if let Some(variant) = tag_generator.select_val(&tagged_ty.variants) {
+                    let tagged_name = &tagged_ty.name;
                     let variant_name = &variant.name;
-                    match &variant.fields {
+                    let pat = match &variant.fields {
                         Some(fields) => {
                             // Variant with fields, recurse into them
                             let field_list = fields
@@ -1128,35 +1121,47 @@ impl RustcAbiImpl {
                                 .map(|f| f.ident.to_string())
                                 .collect::<Vec<_>>()
                                 .join(", ");
-                            writeln!(f, "{tagged_name}::{variant_name} {{ {field_list} }} => {{")?;
-                            f.add_indent(1);
-                            for field in fields {
-                                self.write_fields(f, state, to, &field.ident, field.ty)?;
-                            }
-                            f.sub_indent(1);
-                            writeln!(f, "}}")?;
+                            format!("{tagged_name}::{variant_name} {{ {field_list} }}")
                         }
                         None => {
-                            // Variant without fields, need to include branch for exhaustiveness
-                            writeln!(f, "{tagged_name}::{variant_name} => {{ }}")?;
+                            // Variant without fields, still need the pattern to check the tag
+                            format!("{tagged_name}::{variant_name}")
                         }
+                    };
+                    // Generate an if-let
+                    writeln!(f, "if let {pat} = &{from} {{")?;
+                    if let Some(fields) = &variant.fields {
+                        f.add_indent(1);
+                        for field in fields {
+                            // Do the ugly deref thing to deal with pattern autoref
+                            let base = format!("(*{})", field.ident);
+                            self.write_fields(f, state, to, &base, field.ty, vals)?;
+                        }
+                        f.sub_indent(1);
                     }
+                    // Add an else case to complain that the variant is wrong
+                    writeln!(f, "}} else {{")?;
+                    f.add_indent(1);
+                    writeln!(
+                        f,
+                        r#"unreachable!("expected {tagged_name}::{variant_name} for {from}")"#
+                    )?;
+                    f.sub_indent(1);
+                    writeln!(f, "}}")?;
                 }
-                f.sub_indent(1);
-                writeln!(f, "}}")?;
             }
             Ty::Ref(ref_ty) => {
                 // Add a deref, and recurse into the pointee
                 let base = format!("(*{from})");
-                self.write_fields(f, state, to, &base, ref_ty.pointee_ty)?
+                self.write_fields(f, state, to, &base, ref_ty.pointee_ty, vals)?
             }
             Ty::Union(union_ty) => {
-                // FIXME(variant_select): hardcoded to access field 0 for now
-                let idx = 0;
-                if let Some(field) = union_ty.fields.get(idx) {
+                // Process the implicit "tag" value
+                let tag_generator = vals.next().expect("internal error: ran out of values!?");
+                if let Some(field) = tag_generator.select_val(&union_ty.fields) {
                     let field_name = &field.ident;
                     let base = format!("{from}.{field_name}");
-                    self.write_fields(f, state, to, &base, field.ty)?;
+                    self.write_fields(f, state, to, &base, field.ty, vals)?;
                 }
             }
         };
@@ -1206,9 +1211,9 @@ impl RustcAbiImpl {
     fn pass_var(
         &self,
         f: &mut dyn Write,
-        state: &TestImpl,
+        _state: &TestImpl,
         var_name: &str,
-        var_ty: TyIdx,
+        _var_ty: TyIdx,
     ) -> Result<(), GenerateError> {
         write!(f, "{var_name}")?;
         Ok(())
@@ -1217,9 +1222,9 @@ impl RustcAbiImpl {
     fn return_var(
         &self,
         f: &mut dyn Write,
-        state: &TestImpl,
+        _state: &TestImpl,
         var_name: &str,
-        var_ty: TyIdx,
+        _var_ty: TyIdx,
     ) -> Result<(), GenerateError> {
         // TODO: implement outparam returns
         writeln!(f, "{var_name}")?;
@@ -1227,23 +1232,40 @@ impl RustcAbiImpl {
     }
 }
 
-/// For a given primitive type, generate an instance
-/// where all the high nybbles of each byte is val_idx
-/// and all the low nybbles are the number byte.
-///
-/// This lets us look at a random byte a function read
-/// and go "hey this was SUPPOSED to be the 3rd byte of the 7th arg",
-/// which is useful for figuring out how an argument got fucked up
-/// (how much it was misaligned, or passed in the wrong slot).
-fn graffiti_primitive<T: Copy>(val_idx: usize) -> T {
-    const MAX_SIZE: usize = 32;
-    const MAX_HEX: usize = 16;
-    assert!(
-        std::mem::size_of::<T>() <= MAX_SIZE,
-        "only primitives as big as u256 are supported!"
-    );
+/*
+old impl for emitting a full match, which is now replaced with if-let.
+Maybe we'll want this again?
 
-    let bytes: [u8; MAX_SIZE] =
-        std::array::from_fn(|i| (0x10 * (val_idx % MAX_HEX) as u8) | ((i % MAX_HEX) as u8));
-    unsafe { std::mem::transmute_copy(&bytes) }
+// generate a wrapper match, then recurse into each field of each variant
+writeln!(f, "match &{from} {{")?;
+f.add_indent(1);
+let tagged_name = &tagged_ty.name;
+// Process the implicit "tag" value
+let tag_val = vals.next().expect("internal error: ran out of values!?");
+for variant in &tagged_ty.variants {
+    let variant_name = &variant.name;
+    match &variant.fields {
+        Some(fields) => {
+            // Variant with fields, recurse into them
+            let field_list = fields
+                .iter()
+                .map(|f| f.ident.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            writeln!(f, "{tagged_name}::{variant_name} {{ {field_list} }} => {{")?;
+            f.add_indent(1);
+            for field in fields {
+                self.write_fields(f, state, to, &field.ident, field.ty, vals)?;
+            }
+            f.sub_indent(1);
+            writeln!(f, "}}")?;
+        }
+        None => {
+            // Variant without fields, need to include branch for exhaustiveness
+            writeln!(f, "{tagged_name}::{variant_name} => {{ }}")?;
+        }
+    }
 }
+f.sub_indent(1);
+writeln!(f, "}}")?;
+*/

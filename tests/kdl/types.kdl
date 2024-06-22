@@ -37,8 +37,9 @@ tagged "MyDeepResult" {
 }
 
 union "Life" {
-   simple "Simple2"
-   complex "Complex"
+   simple "Simple"
+   complex "OptionI32"
+   empty "()"
 }
 
 struct "ContainsRefs" {
@@ -83,6 +84,14 @@ fn "enumtime" {
         a "OptionI32"
         b "MyResult"
         c "MyDeepResult"
+    }
+}
+
+fn "uniontime" {
+    inputs {
+        a "Life"
+        b "[Life; 3]"
+        c "&Life"
     }
 }
 

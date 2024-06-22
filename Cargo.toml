@@ -23,6 +23,9 @@ libloading = "0.7.3"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }
 log = "0.4.14"
 miette = { version = "5.3.0", features = ["fancy"] }
+rand = "0.8.5"
+rand_core = "0.6.4"
+rand_pcg = "0.3.1"
 rayon = { version = "1.5.3", optional = true }
 ron = "0.7.0"
 serde = { version = "1.0.136", features = ["derive"] }

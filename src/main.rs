@@ -16,6 +16,7 @@ use std::error::Error;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::sync::OnceCell;
+use vals::ValueGeneratorKind;
 
 pub type SortedMap<K, V> = std::collections::BTreeMap<K, V>;
 
@@ -293,6 +294,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     convention: *convention,
                                     functions: FunctionSelector::All,
                                     val_writer: WriteImpl::HarnessCallback,
+                                    val_generator: ValueGeneratorKind::Graffiti,
                                 },
                             };
                             let rules = harness.get_test_rules(&test_key);

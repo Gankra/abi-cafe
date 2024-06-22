@@ -1,4 +1,3 @@
-use crate::abis::*;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -20,356 +19,172 @@ pub fn procgen_tests(regenerate: bool) {
     std::fs::remove_dir_all(&proc_gen_root).unwrap();
     std::fs::create_dir_all(&proc_gen_root).unwrap();
 
-    let tests: &[(&str, &[Val])] = &[
-        // Just run basic primitives that everyone should support through their paces.
-        // This is chunked out a bit to avoid stressing the compilers/linkers too much,
-        // in case some work scales non-linearly. It also keeps the test suite
-        // a bit more "responsive" instead of just stalling one enormous supertest.
-        ("i64", &[Val::Int(IntVal::c_int64_t(0x1a2b_3c4d_23ea_f142))]),
-        ("i32", &[Val::Int(IntVal::c_int32_t(0x1a2b3c4d))]),
-        ("i16", &[Val::Int(IntVal::c_int16_t(0x1a2b))]),
-        ("i8", &[Val::Int(IntVal::c_int8_t(0x1a))]),
-        (
-            "u64",
-            &[Val::Int(IntVal::c_uint64_t(0x1a2b_3c4d_23ea_f142))],
-        ),
-        ("u32", &[Val::Int(IntVal::c_uint32_t(0x1a2b3c4d))]),
-        ("u16", &[Val::Int(IntVal::c_uint16_t(0x1a2b))]),
-        ("u8", &[Val::Int(IntVal::c_uint8_t(0x1a))]),
-        ("ptr", &[Val::Ptr(0x1a2b_3c4d_23ea_f142)]),
-        ("bool", &[Val::Bool(true)]),
-        ("f64", &[Val::Float(FloatVal::c_double(809239021.392))]),
-        ("f32", &[Val::Float(FloatVal::c_float(-4921.3527))]),
-        // These are split out because they are the buggy mess that inspired this whole enterprise!
-        // These types are a GCC exenstion. Windows is a huge dumpster fire where no one agrees on
-        // it (MSVC doesn't even define __(u)int128_t afaict, but has some equivalent extension).
-        //
-        // On linux-based platforms where this is a more established thing, current versions of
-        // rustc underalign the value (as if it's emulated, like u64 on x86). This isn't a problem
-        // in-and-of-itself because rustc accurately says "this isn't usable for FFI".
-        // Unfortunately platforms like aarch64 (arm64) use this type in their definitions for
-        // saving/restoring float registers, so it's very much so part of the platform ABI,
-        // and Rust should just *fix this*.
-        (
-            "ui128",
-            &[
-                Val::Int(IntVal::c__int128(0x1a2b_3c4d_23ea_f142_7a32_0c01_e012_0a82)),
-                Val::Int(IntVal::c__uint128(
-                    0x1a2b_3c4d_23ea_f142_7a32_0c01_e012_0a82,
-                )),
-            ],
-        ),
+    let tests = &[
+        "i128", "i64", "i32", "i16", "i8", "u128", "u64", "u32", "u16", "u8", "ptr", "bool", "f64",
+        "f32",
     ];
 
-    for (test_name, vals) in tests {
-        let mut test = Test {
-            name: test_name.to_string(),
-            funcs: Vec::new(),
-        };
+    for test_name in tests {
+        let mut test_body = String::new();
 
-        let mut perturb_float = 0.0f32;
-        let mut perturb_byte = 0u8;
+        procgen_test_for_ty(&mut test_body, test_name, None).unwrap();
 
-        for val in vals.iter() {
-            let new_val = |i| -> Val {
-                let mut new_val = val.clone();
-                let mut cur_val = Some(&mut new_val);
-                while let Some(temp) = cur_val.take() {
-                    match temp {
-                        Val::Ref(pointee) => {
-                            cur_val = Some(&mut **pointee);
-                            continue;
-                        }
-                        Val::Struct(_, _) => unimplemented!(),
-                        Val::Array(_) => unimplemented!(),
-                        Val::Ptr(out) => graffiti_primitive(out, i),
-                        Val::Int(int_val) => match int_val {
-                            IntVal::c__int128(out) => graffiti_primitive(out, i),
-                            IntVal::c_int64_t(out) => graffiti_primitive(out, i),
-                            IntVal::c_int32_t(out) => graffiti_primitive(out, i),
-                            IntVal::c_int16_t(out) => graffiti_primitive(out, i),
-                            IntVal::c_int8_t(out) => graffiti_primitive(out, i),
-                            IntVal::c__uint128(out) => graffiti_primitive(out, i),
-                            IntVal::c_uint64_t(out) => graffiti_primitive(out, i),
-                            IntVal::c_uint32_t(out) => graffiti_primitive(out, i),
-                            IntVal::c_uint16_t(out) => graffiti_primitive(out, i),
-                            IntVal::c_uint8_t(out) => graffiti_primitive(out, i),
-                        },
-                        Val::Float(float_val) => match float_val {
-                            FloatVal::c_double(out) => graffiti_primitive(out, i),
-                            FloatVal::c_float(out) => graffiti_primitive(out, i),
-                        },
-                        Val::Bool(out) => *out = true,
-                    }
-                }
-
-                new_val
-            };
-
-            let val_name = arg_ty(val);
-
-            // Start gentle with basic one value in/out tests
-            test.funcs.push(Func {
-                name: format!("{val_name}_val_in"),
-                conventions: vec![CallingConvention::All],
-                inputs: vec![new_val(0)],
-                output: None,
-            });
-
-            test.funcs.push(Func {
-                name: format!("{val_name}_val_out"),
-                conventions: vec![CallingConvention::All],
-                inputs: vec![],
-                output: Some(new_val(0)),
-            });
-
-            test.funcs.push(Func {
-                name: format!("{val_name}_val_in_out"),
-                conventions: vec![CallingConvention::All],
-                inputs: vec![new_val(0)],
-                output: Some(new_val(1)),
-            });
-
-            // Start gentle with basic one value in/out tests
-            test.funcs.push(Func {
-                name: format!("{val_name}_ref_in"),
-                conventions: vec![CallingConvention::All],
-                inputs: vec![Val::Ref(Box::new(new_val(0)))],
-                output: None,
-            });
-
-            test.funcs.push(Func {
-                name: format!("{val_name}_ref_out"),
-                conventions: vec![CallingConvention::All],
-                inputs: vec![],
-                output: Some(Val::Ref(Box::new(new_val(0)))),
-            });
-
-            test.funcs.push(Func {
-                name: format!("{val_name}_ref_in_out"),
-                conventions: vec![CallingConvention::All],
-                inputs: vec![Val::Ref(Box::new(new_val(0)))],
-                output: Some(Val::Ref(Box::new(new_val(1)))),
-            });
-
-            // Stress out the calling convention and try lots of different
-            // input counts. For many types this will result in register
-            // exhaustion and get some things passed on the stack.
-            for len in 2..=16 {
-                test.funcs.push(Func {
-                    name: format!("{val_name}_val_in_{len}"),
-                    conventions: vec![CallingConvention::All],
-                    inputs: (0..len).map(new_val).collect(),
-                    output: None,
-                });
-            }
-
-            // Stress out the calling convention with a struct full of values.
-            // Some conventions will just shove this in a pointer/stack,
-            // others will try to scalarize this into registers anyway.
-            for len in 1..=16 {
-                test.funcs.push(Func {
-                    name: format!("{val_name}_struct_in_{len}"),
-                    conventions: vec![CallingConvention::All],
-                    inputs: vec![Val::Struct(
-                        format!("{val_name}_{len}"),
-                        (0..len).map(new_val).collect(),
-                    )],
-                    output: None,
-                });
-            }
-            // Check that by-ref works, for good measure
-            for len in 1..=16 {
-                test.funcs.push(Func {
-                    name: format!("{val_name}_ref_struct_in_{len}"),
-                    conventions: vec![CallingConvention::All],
-                    inputs: vec![Val::Ref(Box::new(Val::Struct(
-                        format!("{val_name}_{len}"),
-                        (0..len).map(new_val).collect(),
-                    )))],
-                    output: None,
-                });
-            }
-
-            // Now perturb the arguments by including a byte and a float in
-            // the argument list. This will mess with alignment and also mix
-            // up the "type classes" (float vs int) and trigger more corner
-            // cases in the ABIs as things get distributed to different classes
-            // of register.
-
-            // We do small and big versions to check the cases where everything
-            // should fit in registers vs not.
-            let small_count = 4;
-            let big_count = 16;
-
-            for idx in 0..small_count {
-                let mut inputs = (0..small_count).map(new_val).collect::<Vec<_>>();
-
-                let byte_idx = idx;
-                let float_idx = small_count - 1 - idx;
-                graffiti_primitive(&mut perturb_byte, byte_idx);
-                graffiti_primitive(&mut perturb_float, float_idx);
-                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
-                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
-
-                test.funcs.push(Func {
-                    name: format!("{val_name}_val_in_{idx}_perturbed_small"),
-                    conventions: vec![CallingConvention::All],
-                    inputs,
-                    output: None,
-                });
-            }
-            for idx in 0..big_count {
-                let mut inputs = (0..big_count).map(new_val).collect::<Vec<_>>();
-
-                let byte_idx = idx;
-                let float_idx = big_count - 1 - idx;
-                graffiti_primitive(&mut perturb_byte, byte_idx);
-                graffiti_primitive(&mut perturb_float, float_idx);
-                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
-                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
-
-                test.funcs.push(Func {
-                    name: format!("{val_name}_val_in_{idx}_perturbed_big"),
-                    conventions: vec![CallingConvention::All],
-                    inputs,
-                    output: None,
-                });
-            }
-
-            for idx in 0..small_count {
-                let mut inputs = (0..small_count).map(new_val).collect::<Vec<_>>();
-
-                let byte_idx = idx;
-                let float_idx = small_count - 1 - idx;
-                graffiti_primitive(&mut perturb_byte, byte_idx);
-                graffiti_primitive(&mut perturb_float, float_idx);
-                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
-                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
-
-                test.funcs.push(Func {
-                    name: format!("{val_name}_struct_in_{idx}_perturbed_small"),
-                    conventions: vec![CallingConvention::All],
-                    inputs: vec![Val::Struct(
-                        format!("{val_name}_{idx}_perturbed_small"),
-                        inputs,
-                    )],
-                    output: None,
-                });
-            }
-            for idx in 0..big_count {
-                let mut inputs = (0..big_count).map(new_val).collect::<Vec<_>>();
-
-                let byte_idx = idx;
-                let float_idx = big_count - 1 - idx;
-                graffiti_primitive(&mut perturb_byte, byte_idx);
-                graffiti_primitive(&mut perturb_float, float_idx);
-                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
-                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
-
-                test.funcs.push(Func {
-                    name: format!("{val_name}_struct_in_{idx}_perturbed_big"),
-                    conventions: vec![CallingConvention::All],
-                    inputs: vec![Val::Struct(
-                        format!("{val_name}_{idx}_perturbed_big"),
-                        inputs,
-                    )],
-                    output: None,
-                });
-            }
-
-            // Should be an exact copy-paste of the above but with Ref's added
-            for idx in 0..small_count {
-                let mut inputs = (0..small_count).map(new_val).collect::<Vec<_>>();
-
-                let byte_idx = idx;
-                let float_idx = small_count - 1 - idx;
-                graffiti_primitive(&mut perturb_byte, byte_idx);
-                graffiti_primitive(&mut perturb_float, float_idx);
-                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
-                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
-
-                test.funcs.push(Func {
-                    name: format!("{val_name}_ref_struct_in_{idx}_perturbed_small"),
-                    conventions: vec![CallingConvention::All],
-                    inputs: vec![Val::Ref(Box::new(Val::Struct(
-                        format!("{val_name}_{idx}_perturbed_small"),
-                        inputs,
-                    )))],
-                    output: None,
-                });
-            }
-            for idx in 0..big_count {
-                let mut inputs = (0..big_count).map(new_val).collect::<Vec<_>>();
-
-                let byte_idx = idx;
-                let float_idx = big_count - 1 - idx;
-                graffiti_primitive(&mut perturb_byte, byte_idx);
-                graffiti_primitive(&mut perturb_float, float_idx);
-                inputs[byte_idx] = Val::Int(IntVal::c_uint8_t(perturb_byte));
-                inputs[float_idx] = Val::Float(FloatVal::c_float(perturb_float));
-
-                test.funcs.push(Func {
-                    name: format!("{val_name}_ref_struct_in_{idx}_perturbed_big"),
-                    conventions: vec![CallingConvention::All],
-                    inputs: vec![Val::Ref(Box::new(Val::Struct(
-                        format!("{val_name}_{idx}_perturbed_big"),
-                        inputs,
-                    )))],
-                    output: None,
-                });
-            }
-        }
         let mut file =
-            std::fs::File::create(proc_gen_root.join(format!("{test_name}.ron"))).unwrap();
-        let output = ron::to_string(&test).unwrap();
-        file.write_all(output.as_bytes()).unwrap();
+            std::fs::File::create(proc_gen_root.join(format!("{test_name}.kdl"))).unwrap();
+        file.write_all(test_body.as_bytes()).unwrap();
     }
 }
 
-/// The type name to use for this value when it is stored in args/vars.
-pub fn arg_ty(val: &Val) -> String {
-    use IntVal::*;
-    use Val::*;
-    match val {
-        Ref(x) => format!("ref_{}", arg_ty(x)),
-        Ptr(_) => "ptr".to_string(),
-        Bool(_) => "bool".to_string(),
-        Array(vals) => format!(
-            "arr_{}_{}",
-            vals.len(),
-            arg_ty(vals.get(0).expect("arrays must have length > 0")),
-        ),
-        Struct(name, _) => format!("struct_{name}"),
-        Float(FloatVal::c_double(_)) => "f64".to_string(),
-        Float(FloatVal::c_float(_)) => "f32".to_string(),
-        Int(int_val) => match int_val {
-            c__int128(_) => "i128".to_string(),
-            c_int64_t(_) => "i64".to_string(),
-            c_int32_t(_) => "i32".to_string(),
-            c_int16_t(_) => "i16".to_string(),
-            c_int8_t(_) => "i8".to_string(),
-            c__uint128(_) => "u128".to_string(),
-            c_uint64_t(_) => "u64".to_string(),
-            c_uint32_t(_) => "u32".to_string(),
-            c_uint16_t(_) => "u16".to_string(),
-            c_uint8_t(_) => "u8".to_string(),
-        },
+fn procgen_test_for_ty(
+    out: &mut dyn std::fmt::Write,
+    ty_name: &str,
+    ty_def: Option<&str>,
+) -> std::fmt::Result {
+    let ty = ty_name;
+    let ty_ref = format!("&{ty_name}");
+    if let Some(ty_def) = ty_def {
+        writeln!(out, "{}", ty_def)?;
     }
+
+    // Start gentle with basic one value in/out tests
+    add_func(out, &format!("{ty_name}_val_in"), &[ty], &[])?;
+    add_func(out, &format!("{ty_name}_val_out"), &[], &[ty])?;
+    add_func(out, &format!("{ty_name}_val_in_out"), &[ty], &[ty])?;
+    add_func(out, &format!("{ty_name}_ref_in"), &[&ty_ref], &[])?;
+    // add_func(out, &format!("{ty_name}_ref_out"), &[], &[&ty_ref])?;
+    // add_func(out, &format!("{ty_name}_ref_in_out"), &[&ty_ref], &[&ty_ref])?;
+
+    // Stress out the calling convention and try lots of different
+    // input counts. For many types this will result in register
+    // exhaustion and get some things passed on the stack.
+    for len in 2..=16 {
+        add_func(out, &format!("{ty_name}_val_in_{len}"), &vec![ty; len], &[])?;
+    }
+
+    // Stress out the calling convention with a struct full of values.
+    // Some conventions will just shove this in a pointer/stack,
+    // others will try to scalarize this into registers anyway.
+    add_structs(out, ty)?;
+
+    // Now perturb the arguments by including a byte and a float in
+    // the argument list. This will mess with alignment and also mix
+    // up the "type classes" (float vs int) and trigger more corner
+    // cases in the ABIs as things get distributed to different classes
+    // of register.
+
+    // We do small and big versions to check the cases where everything
+    // should fit in registers vs not.
+    let small_count = 4;
+    let big_count = 16;
+
+    add_perturbs(out, ty, small_count, "small")?;
+    add_perturbs(out, ty, big_count, "big")?;
+    add_perturbs_struct(out, ty, small_count, "small")?;
+    add_perturbs_struct(out, ty, big_count, "big")?;
+    Ok(())
 }
 
-fn graffiti_primitive<T>(output: &mut T, idx: usize) {
-    let mut input = [
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
-        0x0F,
-    ];
-    for byte in &mut input {
-        *byte |= 0x10 * idx as u8;
+fn add_structs(out: &mut dyn std::fmt::Write, ty: &str) -> std::fmt::Result {
+    for len in 1..=16 {
+        // Establish type names
+        let struct_ty = format!("Many{len}");
+        let struct_ty_ref = format!("&{struct_ty}");
+
+        // Emit struct defs
+        writeln!(out, r#"struct "{struct_ty}" {{"#)?;
+        for field_idx in 0..len {
+            writeln!(out, r#"    f{field_idx} "{ty}""#)?;
+        }
+        writeln!(out, r#"}}"#)?;
+
+        // Check that by-val works
+        add_func(out, &format!("{ty}_struct_in_{len}"), &[&struct_ty], &[])?;
+        // Check that by-ref works, for good measure
+        add_func(
+            out,
+            &format!("{ty}_ref_struct_in_{len}"),
+            &[&struct_ty_ref],
+            &[],
+        )?;
     }
-    unsafe {
-        let out_size = std::mem::size_of::<T>();
-        assert!(out_size <= input.len());
-        let raw_out = output as *mut T as *mut u8;
-        raw_out.copy_from(input.as_ptr(), out_size)
+    Ok(())
+}
+
+fn add_perturbs(
+    out: &mut dyn std::fmt::Write,
+    ty: &str,
+    count: usize,
+    label: &str,
+) -> std::fmt::Result {
+    for idx in 0..count {
+        let inputs = perturb_list(ty, count, idx);
+        add_func(
+            out,
+            &format!("{ty}_val_in_{idx}_perturbed_{label}"),
+            &inputs,
+            &[],
+        )?;
     }
+    Ok(())
+}
+
+fn add_perturbs_struct(
+    out: &mut dyn std::fmt::Write,
+    ty: &str,
+    count: usize,
+    label: &str,
+) -> std::fmt::Result {
+    for idx in 0..count {
+        let inputs = perturb_list(ty, count, idx);
+
+        // Establish type names
+        let struct_ty = format!("Perturbed{label}{idx}");
+
+        // Emit struct defs
+        writeln!(out, r#"struct "{struct_ty}" {{"#)?;
+        for (field_idx, field_ty) in inputs.iter().enumerate() {
+            writeln!(out, r#"    f{field_idx} "{field_ty}""#)?;
+        }
+        writeln!(out, r#"}}"#)?;
+
+        // Add the function
+        add_func(
+            out,
+            &format!("{ty}_val_in_{idx}_perturbed_{label}"),
+            &[&struct_ty],
+            &[],
+        )?;
+    }
+    Ok(())
+}
+
+fn perturb_list(ty: &str, count: usize, idx: usize) -> Vec<&str> {
+    let mut inputs = vec![ty; count];
+
+    let byte_idx = idx;
+    let float_idx = count - 1 - idx;
+    inputs[byte_idx] = "u8";
+    inputs[float_idx] = "f32";
+    inputs
+}
+
+fn add_func(
+    out: &mut dyn std::fmt::Write,
+    func_name: &str,
+    inputs: &[&str],
+    outputs: &[&str],
+) -> std::fmt::Result {
+    writeln!(out, r#"fn "{func_name}" {{"#)?;
+    writeln!(out, r#"    inputs {{"#)?;
+    for (idx, arg_ty) in inputs.iter().enumerate() {
+        writeln!(out, r#"        arg{idx} "{arg_ty}""#)?;
+    }
+    writeln!(out, r#"    }}"#)?;
+    writeln!(out, r#"    outputs {{"#)?;
+    for (idx, arg_ty) in outputs.iter().enumerate() {
+        writeln!(out, r#"        arg{idx} "{arg_ty}""#)?;
+    }
+    writeln!(out, r#"    }}"#)?;
+    writeln!(out, r#"}}"#)?;
+    Ok(())
 }

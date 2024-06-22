@@ -724,7 +724,7 @@ impl RustcAbiImpl {
                     PrimitiveTy::I16 => write!(f, "{:#X}u16 as i16", val.generate_u16())?,
                     PrimitiveTy::I32 => write!(f, "{:#X}u32 as i32", val.generate_u32())?,
                     PrimitiveTy::I64 => write!(f, "{:#X}u64 as i64", val.generate_u64())?,
-                    PrimitiveTy::I128 => write!(f, "{:#X}", val.generate_u128())?,
+                    PrimitiveTy::I128 => write!(f, "{:#X}u128 as i128", val.generate_u128())?,
                     PrimitiveTy::U8 => write!(f, "{:#X}", val.generate_u8())?,
                     PrimitiveTy::U16 => write!(f, "{:#X}", val.generate_u16())?,
                     PrimitiveTy::U32 => write!(f, "{:#X}", val.generate_u32())?,

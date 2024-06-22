@@ -8,7 +8,10 @@
 
 use std::error::Error;
 
-use crate::{ArgSelector, CallSide, FunctionSelector, TestHarness, TestKey, TestOptions};
+use crate::{
+    vals::ValueGeneratorKind, ArgSelector, CallSide, FunctionSelector, TestHarness, TestKey,
+    TestOptions, WriteImpl,
+};
 
 mod build;
 mod check;
@@ -38,6 +41,7 @@ impl TestHarness {
                     convention,
                     functions,
                     val_writer,
+                    val_generator,
                 },
             caller,
             callee,
@@ -79,16 +83,25 @@ impl TestHarness {
             }
         }
         match val_writer {
-            crate::WriteImpl::HarnessCallback => {
+            WriteImpl::HarnessCallback => {
                 // Do nothing, implicit default
             }
-            crate::WriteImpl::Print => {
+            WriteImpl::Print => {
                 output.push_str(separator);
                 output.push_str("print");
             }
-            crate::WriteImpl::Noop => {
+            WriteImpl::Noop => {
                 output.push_str(separator);
                 output.push_str("noop");
+            }
+        }
+        match val_generator {
+            ValueGeneratorKind::Graffiti => {
+                // Do nothing, implicit default
+            }
+            ValueGeneratorKind::Random { seed } => {
+                output.push_str(separator);
+                output.push_str(&format!("random{seed}"));
             }
         }
         output

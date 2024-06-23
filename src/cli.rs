@@ -2,6 +2,7 @@ use crate::{abis::*, Config, OutputFormat};
 use clap::Parser;
 use log::LevelFilter;
 use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use vals::ValueGeneratorKind;
 
 #[derive(Parser)]
 struct Cli {
@@ -83,6 +84,8 @@ pub fn make_app() -> Config {
         }
     }
 
+    let value_generator = ValueGeneratorKind::Graffiti;
+
     let output_format = config.output_format;
     TermLogger::init(
         LevelFilter::Info,
@@ -100,5 +103,6 @@ pub fn make_app() -> Config {
         run_tests,
         run_pairs,
         rustc_codegen_backends,
+        val_generator: value_generator,
     }
 }

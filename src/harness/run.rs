@@ -1,10 +1,6 @@
 //! The runtime actual types and functions that are injected into
 //! compiled tests.
 
-use std::sync::Arc;
-
-use kdl_script::types::{Ty, TyIdx};
-use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
 
 use crate::error::*;
@@ -17,17 +13,8 @@ impl TestHarness {
         key: &TestKey,
         test_dylib: &LinkOutput,
     ) -> Result<RunOutput, RunError> {
-        let test = self.tests[&key.test].clone();
         let full_test_name = self.full_test_name(key);
-        let caller_impl = self
-            .test_with_abi_impl(&test, key.caller.clone())
-            .await
-            .unwrap();
-        let callee_impl = self
-            .test_with_abi_impl(&test, key.callee.clone())
-            .await
-            .unwrap();
-        run_dynamic_test(caller_impl, callee_impl, test_dylib, &full_test_name)
+        run_dynamic_test(test_dylib, &full_test_name)
     }
 }
 
@@ -117,12 +104,7 @@ pub unsafe extern "C" fn finished_func(output1: &mut WriteBuffer, output2: &mut 
 /// Run the test!
 ///
 /// See the README for a high-level description of this design.
-fn run_dynamic_test(
-    caller_impl: Arc<TestForAbi>,
-    callee_impl: Arc<TestForAbi>,
-    test_dylib: &LinkOutput,
-    full_test_name: &str,
-) -> Result<RunOutput, RunError> {
+fn run_dynamic_test(test_dylib: &LinkOutput, full_test_name: &str) -> Result<RunOutput, RunError> {
     // Initialize all the buffers the tests will write to
     let mut caller_inputs = WriteBuffer::new();
     let mut caller_outputs = WriteBuffer::new();
@@ -154,228 +136,10 @@ fn run_dynamic_test(
         callee_outputs.finish_tests();
     }
 
-    digest_test_run(
-        caller_impl,
-        callee_impl,
-        caller_inputs,
-        caller_outputs,
-        callee_inputs,
-        callee_outputs,
-    )
-}
-
-fn digest_test_run(
-    caller_impl: Arc<TestForAbi>,
-    callee_impl: Arc<TestForAbi>,
-    caller_inputs: WriteBuffer,
-    caller_outputs: WriteBuffer,
-    callee_inputs: WriteBuffer,
-    callee_outputs: WriteBuffer,
-) -> Result<RunOutput, RunError> {
-    let mut callee = Functions::new();
-    let mut caller = Functions::new();
-
-    // As a basic sanity-check, make sure everything agrees on how
-    // many tests actually executed. If this fails, then something
-    // is very fundamentally broken and needs to be fixed.
-    let all_func_ids = caller_impl.types.all_funcs().collect::<Vec<_>>();
-    let expected_test_count = all_func_ids.len();
-    if caller_inputs.funcs.len() != expected_test_count
-        || caller_outputs.funcs.len() != expected_test_count
-        || callee_inputs.funcs.len() != expected_test_count
-        || callee_outputs.funcs.len() != expected_test_count
-    {
-        return Err(RunError::TestCountMismatch(
-            expected_test_count,
-            caller_inputs.funcs.len(),
-            caller_outputs.funcs.len(),
-            callee_inputs.funcs.len(),
-            callee_outputs.funcs.len(),
-        ));
-    }
-
-    let empty_func = Vec::new();
-    let empty_arg = Vec::new();
-    for (func_idx, func_id) in all_func_ids.into_iter().enumerate() {
-        let func = caller_impl.types.realize_func(func_id);
-        let caller_func = caller.entry(func.name.clone()).or_default();
-        let callee_func = callee.entry(func.name.clone()).or_default();
-        for (arg_idx, arg) in func.inputs.iter().enumerate() {
-            let caller_arg = caller_func.entry(arg.name.clone()).or_default();
-            let callee_arg = callee_func.entry(arg.name.clone()).or_default();
-
-            let caller_arg_bytes = caller_inputs
-                .funcs
-                .get(func_idx)
-                .unwrap_or(&empty_func)
-                .get(arg_idx)
-                .unwrap_or(&empty_arg);
-            let callee_arg_bytes = callee_inputs
-                .funcs
-                .get(func_idx)
-                .unwrap_or(&empty_func)
-                .get(arg_idx)
-                .unwrap_or(&empty_arg);
-
-            add_field(
-                &callee_impl,
-                caller_arg_bytes,
-                caller_arg,
-                &mut 0,
-                String::new(),
-                arg.ty,
-            );
-            add_field(
-                &callee_impl,
-                callee_arg_bytes,
-                callee_arg,
-                &mut 0,
-                String::new(),
-                arg.ty,
-            );
-        }
-
-        for (arg_idx, arg) in func.outputs.iter().enumerate() {
-            let caller_arg = caller_func.entry(arg.name.clone()).or_default();
-            let callee_arg = callee_func.entry(arg.name.clone()).or_default();
-
-            let caller_output_bytes = caller_outputs
-                .funcs
-                .get(func_idx)
-                .unwrap_or(&empty_func)
-                .get(arg_idx)
-                .unwrap_or(&empty_arg);
-            let callee_output_bytes = callee_outputs
-                .funcs
-                .get(func_idx)
-                .unwrap_or(&empty_func)
-                .get(arg_idx)
-                .unwrap_or(&empty_arg);
-
-            add_field(
-                &caller_impl,
-                caller_output_bytes,
-                caller_arg,
-                &mut 0,
-                String::new(),
-                arg.ty,
-            );
-            add_field(
-                &callee_impl,
-                callee_output_bytes,
-                callee_arg,
-                &mut 0,
-                String::new(),
-                arg.ty,
-            );
-        }
-    }
-
     Ok(RunOutput {
-        callee,
-        caller,
         caller_inputs,
         caller_outputs,
         callee_inputs,
         callee_outputs,
     })
-}
-
-fn format_bytes(input: &[Vec<u8>], cur_idx: &mut usize) -> String {
-    use std::fmt::Write;
-
-    let bytes = input.get(*cur_idx).map(|v| &v[..]).unwrap_or(&[]);
-    let mut output = String::new();
-    let mut looped = false;
-    for byte in bytes {
-        if looped {
-            write!(&mut output, " ").unwrap();
-        }
-        write!(&mut output, "{:02x}", byte).unwrap();
-        looped = true;
-    }
-    *cur_idx += 1;
-    output
-}
-
-/// Recursive subroutine of write_var, which builds up rvalue paths and generates
-/// appropriate match statements. Actual WRITE calls are done by write_leaf_field.
-fn add_field(
-    test_impl @ TestForAbi {
-        inner: Test { types: program, .. },
-        env,
-        ..
-    }: &TestForAbi,
-    input: &[Vec<u8>],
-    output: &mut LinkedHashMap<String, String>,
-    cur_idx: &mut usize,
-    cur_path: String,
-    var_ty: TyIdx,
-) {
-    match program.realize_ty(var_ty) {
-        Ty::Primitive(_) | Ty::Enum(_) => {
-            // Hey an actual leaf, report it
-            output.insert(cur_path, format_bytes(input, cur_idx));
-            *cur_idx += 1;
-        }
-        Ty::Empty => {
-            // nothing worth producing
-        }
-        Ty::Alias(alias_ty) => {
-            // keep going but with the type changed
-            add_field(test_impl, input, output, cur_idx, cur_path, alias_ty.real);
-        }
-        Ty::Pun(pun) => {
-            // keep going but with the type changed
-            let real_ty = program.resolve_pun(pun, env).unwrap();
-            add_field(test_impl, input, output, cur_idx, cur_path, real_ty);
-        }
-        Ty::Array(array_ty) => {
-            // recurse into each array index
-            for i in 0..array_ty.len {
-                let base = format!("{cur_path}[{i}]");
-                add_field(test_impl, input, output, cur_idx, base, array_ty.elem_ty);
-            }
-        }
-        Ty::Struct(struct_ty) => {
-            // recurse into each field
-            for field in &struct_ty.fields {
-                let field_name = &field.ident;
-                let base = format!("{cur_path}.{field_name}");
-                add_field(test_impl, input, output, cur_idx, base, field.ty);
-            }
-        }
-        Ty::Tagged(tagged_ty) => {
-            // FIXME(variant_select): hardcoded to access variant 0 for now
-            let idx = 0;
-            if let Some(variant) = tagged_ty.variants.get(idx) {
-                if let Some(fields) = &variant.fields {
-                    for field in fields {
-                        add_field(
-                            test_impl,
-                            input,
-                            output,
-                            cur_idx,
-                            field.ident.to_string(),
-                            field.ty,
-                        );
-                    }
-                }
-            }
-        }
-        Ty::Ref(ref_ty) => {
-            // Add a deref, and recurse into the pointee
-            let base = format!("(*{cur_path})");
-            add_field(test_impl, input, output, cur_idx, base, ref_ty.pointee_ty);
-        }
-        Ty::Union(union_ty) => {
-            // FIXME(variant_select): hardcoded to access field 0 for now
-            let idx = 0;
-            if let Some(field) = union_ty.fields.get(idx) {
-                let field_name = &field.ident;
-                let base = format!("{cur_path}.{field_name}");
-                add_field(test_impl, input, output, cur_idx, base, field.ty);
-            }
-        }
-    }
 }

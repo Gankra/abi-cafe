@@ -5,7 +5,7 @@ use std::sync::Arc;
 use camino::Utf8Path;
 use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use kdl_script::PunEnv;
-use vals::{ArgValuesIter, Value};
+use vals::ArgValuesIter;
 
 use self::error::GenerateError;
 
@@ -1074,7 +1074,8 @@ impl RustcAbiImpl {
             Ty::Tagged(tagged_ty) => {
                 // Process the implicit "tag" value
                 let tag_generator = vals.next_val();
-                if let Some(variant) = tag_generator.select_val(&tagged_ty.variants) {
+                let tag_idx = tag_generator.generate_idx(tagged_ty.variants.len());
+                if let Some(variant) = tagged_ty.variants.get(tag_idx) {
                     let tagged_name = &tagged_ty.name;
                     let variant_name = &variant.name;
                     let pat = match &variant.fields {
@@ -1096,7 +1097,7 @@ impl RustcAbiImpl {
                     writeln!(f, "if let {pat} = &{from} {{")?;
                     f.add_indent(1);
                     if tag_generator.should_write_val(&state.options) {
-                        self.write_tag_field(f, state, to, &tag_generator)?;
+                        self.write_tag_field(f, state, to, tag_idx)?;
                     }
                     if let Some(fields) = &variant.fields {
                         for field in fields {
@@ -1110,7 +1111,7 @@ impl RustcAbiImpl {
                     writeln!(f, "}} else {{")?;
                     f.add_indent(1);
                     if tag_generator.should_write_val(&state.options) {
-                        self.error_tag_field(f, state, to, &tag_generator)?;
+                        self.error_tag_field(f, state, to)?;
                     }
                     f.sub_indent(1);
                     writeln!(f, "}}")?;
@@ -1124,7 +1125,11 @@ impl RustcAbiImpl {
             Ty::Union(union_ty) => {
                 // Process the implicit "tag" value
                 let tag_generator = vals.next_val();
-                if let Some(field) = tag_generator.select_val(&union_ty.fields) {
+                let tag_idx = tag_generator.generate_idx(union_ty.fields.len());
+                if tag_generator.should_write_val(&state.options) {
+                    self.write_tag_field(f, state, to, tag_idx)?;
+                }
+                if let Some(field) = union_ty.fields.get(tag_idx) {
                     let field_name = &field.ident;
                     let base = format!("{from}.{field_name}");
                     self.write_fields(f, state, to, &base, field.ty, vals)?;
@@ -1161,11 +1166,11 @@ impl RustcAbiImpl {
         f: &mut Fivemat,
         state: &TestImpl,
         to: &str,
-        val: &Value,
+        variant_idx: usize,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "write_field({to}, &{}u32);", val.generate_u32())?;
+                writeln!(f, "write_field({to}, &{}u32);", variant_idx)?;
             }
             WriteImpl::Print => {
                 // Noop, do nothing
@@ -1182,15 +1187,10 @@ impl RustcAbiImpl {
         f: &mut Fivemat,
         state: &TestImpl,
         to: &str,
-        val: &Value,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(
-                    f,
-                    "write_field({to}, &{}u32);",
-                    val.generate_u32().wrapping_add(1)
-                )?;
+                writeln!(f, "write_field({to}, &{}u32);", u32::MAX)?;
             }
             WriteImpl::Print => {
                 unreachable!("enum had unexpected variant!?");

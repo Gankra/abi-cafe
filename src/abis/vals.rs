@@ -15,12 +15,16 @@ pub struct ValueTree {
 
 #[derive(Debug, Clone)]
 pub struct FuncValues {
+    pub func_name: String,
     pub args: Vec<ArgValues>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ArgValues {
-    pub vals: Vec<ValueGenerator>,
+    pub arg_name: String,
+    pub ty: TyIdx,
+    pub is_input: bool,
+    pub vals: Vec<Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,16 +38,23 @@ pub struct FuncValuesIter<'a> {
 pub struct ArgValuesIter<'a> {
     tree: &'a ValueTree,
     func_idx: usize,
+    pub arg_idx: usize,
+    val_idx: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ValueRef<'a> {
+    tree: &'a ValueTree,
+    func_idx: usize,
     arg_idx: usize,
     val_idx: usize,
 }
 
 #[derive(Debug, Clone)]
-pub struct Value<'a> {
-    tree: &'a ValueTree,
-    func_idx: usize,
-    arg_idx: usize,
-    val_idx: usize,
+pub struct Value {
+    pub val: ValueGenerator,
+    pub ty: TyIdx,
+    pub path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -58,7 +69,7 @@ enum ValueGeneratorBuilder {
     Random { rng: RngImpl },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Copy, Clone, Serialize)]
 pub enum ValueGeneratorKind {
     Graffiti,
     Random { seed: u64 },
@@ -73,17 +84,25 @@ impl ValueTree {
             .all_funcs()
             .map(|func_idx| {
                 let func = types.realize_func(func_idx);
+                let func_name = func.name.to_string();
                 let args = func
                     .inputs
                     .iter()
-                    .chain(&func.outputs)
-                    .map(|arg| {
+                    .map(|arg| (true, arg))
+                    .chain(func.outputs.iter().map(|arg| (false, arg)))
+                    .map(|(is_input, arg)| {
                         let mut vals = vec![];
-                        generators.build_values(types, arg.ty, &mut vals);
-                        ArgValues { vals }
+                        let arg_name = arg.name.to_string();
+                        generators.build_values(types, arg.ty, &mut vals, arg_name.clone());
+                        ArgValues {
+                            ty: arg.ty,
+                            arg_name,
+                            is_input,
+                            vals,
+                        }
                     })
                     .collect();
-                FuncValues { args }
+                FuncValues { func_name, args }
             })
             .collect();
 
@@ -131,7 +150,7 @@ impl<'a> FuncValuesIter<'a> {
 
 impl<'a> ArgValuesIter<'a> {
     #[track_caller]
-    pub fn next_val(&mut self) -> Value<'a> {
+    pub fn next_val(&mut self) -> ValueRef<'a> {
         let Self {
             tree,
             func_idx,
@@ -143,7 +162,7 @@ impl<'a> ArgValuesIter<'a> {
             "internal error: ValueTree val_idx exceeded"
         );
         self.val_idx += 1;
-        Value {
+        ValueRef {
             tree,
             func_idx,
             arg_idx,
@@ -156,19 +175,29 @@ impl<'a> ArgValuesIter<'a> {
             .functions
             .should_write_arg(self.func_idx, self.arg_idx)
     }
+
+    pub fn arg(&self) -> &'a ArgValues {
+        &self.tree.funcs[self.func_idx].args[self.arg_idx]
+    }
 }
 
-impl<'a> Value<'a> {
+impl<'a> ValueRef<'a> {
     pub fn should_write_val(&self, options: &TestOptions) -> bool {
         options
             .functions
             .should_write_val(self.func_idx, self.arg_idx, self.val_idx)
     }
 }
-impl<'a> std::ops::Deref for Value<'a> {
-    type Target = ValueGenerator;
+impl<'a> std::ops::Deref for ValueRef<'a> {
+    type Target = Value;
     fn deref(&self) -> &Self::Target {
         &self.tree.funcs[self.func_idx].args[self.arg_idx].vals[self.val_idx]
+    }
+}
+impl<'a> std::ops::Deref for Value {
+    type Target = ValueGenerator;
+    fn deref(&self) -> &Self::Target {
+        &self.val
     }
 }
 
@@ -188,8 +217,8 @@ impl ValueGeneratorKind {
 }
 
 impl ValueGeneratorBuilder {
-    fn next(&mut self) -> ValueGenerator {
-        match self {
+    fn next(&mut self, ty: TyIdx, path: String) -> Value {
+        let val = match self {
             ValueGeneratorBuilder::Graffiti { idx } => {
                 let res = ValueGenerator::Graffiti { idx: *idx };
                 *idx += 1;
@@ -198,55 +227,65 @@ impl ValueGeneratorBuilder {
             ValueGeneratorBuilder::Random { rng } => ValueGenerator::Random {
                 seed: rng.next_u64(),
             },
-        }
+        };
+        Value { val, ty, path }
     }
 
     fn build_values(
         &mut self,
         types: &TypedProgram,
         ty_idx: TyIdx,
-        vals: &mut Vec<ValueGenerator>,
+        vals: &mut Vec<Value>,
+        path: String,
     ) {
         let ty = types.realize_ty(ty_idx);
         match ty {
             // Primitives and enums just have the one value
-            Ty::Primitive(_) => vals.push(self.next()),
-            Ty::Enum(_) => vals.push(self.next()),
+            Ty::Primitive(_) => vals.push(self.next(ty_idx, path)),
+            Ty::Enum(_) => vals.push(self.next(ty_idx, path)),
 
             // Empty has no values
             Ty::Empty => {}
 
             // Alias and ref are just wrappers
-            Ty::Alias(ty) => self.build_values(types, ty.real, vals),
-            Ty::Ref(ty) => self.build_values(types, ty.pointee_ty, vals),
+            Ty::Alias(ty) => self.build_values(types, ty.real, vals, path),
+            Ty::Ref(ty) => {
+                let new_path = format!("{path}.*");
+                self.build_values(types, ty.pointee_ty, vals, new_path)
+            }
 
             // Struct and array are just all of their fields combined
             Ty::Struct(ty) => {
                 for field in &ty.fields {
-                    self.build_values(types, field.ty, vals);
+                    let field_name = &field.ident;
+                    let new_path = format!("{path}.{field_name}");
+                    self.build_values(types, field.ty, vals, new_path);
                 }
             }
             Ty::Array(ty) => {
-                for _ in 0..ty.len {
-                    self.build_values(types, ty.elem_ty, vals);
+                for idx in 0..ty.len {
+                    let new_path = format!("{path}[{idx}]");
+                    self.build_values(types, ty.elem_ty, vals, new_path);
                 }
             }
 
             // Union and Tagged need an implicit "tag" field for selecting the active variant
             Ty::Union(ty) => {
                 // generate the tag value
-                let tag_generator = self.next();
+                let tag_generator = self.next(ty_idx, path.clone());
                 let active_variant_idx = tag_generator.generate_idx(ty.fields.len());
                 vals.push(tag_generator);
 
                 // now visit the active variant
                 if let Some(field) = ty.fields.get(active_variant_idx) {
-                    self.build_values(types, field.ty, vals);
+                    let field_name = &field.ident;
+                    let new_path = format!("{path}.{field_name}");
+                    self.build_values(types, field.ty, vals, new_path);
                 }
             }
             Ty::Tagged(ty) => {
                 // generate the tag value
-                let tag_generator = self.next();
+                let tag_generator = self.next(ty_idx, path.clone());
                 let active_variant_idx = tag_generator.generate_idx(ty.variants.len());
                 vals.push(tag_generator);
 
@@ -255,7 +294,10 @@ impl ValueGeneratorBuilder {
                     if let Some(fields) = &variant.fields {
                         // And all of its fields
                         for field in fields {
-                            self.build_values(types, field.ty, vals);
+                            let variant_name = &variant.name;
+                            let field_name = &field.ident;
+                            let new_path = format!("{path}.{variant_name}.{field_name}");
+                            self.build_values(types, field.ty, vals, new_path);
                         }
                     }
                 }
@@ -274,7 +316,7 @@ impl ValueGeneratorBuilder {
 
                     // Shove values into a temp buffer instead of the main one
                     let mut new_vals = vec![];
-                    self.build_values(types, block.real, &mut new_vals);
+                    self.build_values(types, block.real, &mut new_vals, path.clone());
 
                     // If there are multiple blocks, check that this new one matches
                     // all the other ones in length (making the pun semantically comprehensible)

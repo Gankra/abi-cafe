@@ -1,6 +1,4 @@
 use camino::Utf8PathBuf;
-use kdl_script::spanned::Spanned;
-use linked_hash_map::LinkedHashMap;
 use serde::Serialize;
 use serde_json::json;
 
@@ -115,8 +113,6 @@ impl Serialize for GenerateError {
 
 #[derive(Debug, Serialize)]
 pub struct RunOutput {
-    pub caller: Functions,
-    pub callee: Functions,
     #[serde(skip)]
     pub caller_inputs: WriteBuffer,
     #[serde(skip)]
@@ -312,9 +308,6 @@ pub struct BuildOutput {
 pub struct LinkOutput {
     pub test_bin: Utf8PathBuf,
 }
-
-pub type Functions =
-    LinkedHashMap<Spanned<String>, LinkedHashMap<Spanned<String>, LinkedHashMap<String, String>>>;
 
 #[derive(Debug, Serialize)]
 pub struct CheckOutput {

@@ -1,5 +1,3 @@
-use crate::OUTPUT_NAME;
-
 #[derive(Debug, thiserror::Error)]
 #[allow(dead_code)]
 pub enum GenerateError {
@@ -53,24 +51,74 @@ pub enum BuildError {
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug, thiserror::Error)]
 pub enum CheckFailure {
-    #[error("test {0} {5} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}")]
-    InputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>, String),
+    #[error("  {func_name} {arg_kind} count mismatch (expected: {expected_len}, caller: {}, callee: {})
+    caller: {caller:#02X?}
+    callee: {callee:#02X?}", caller.len(), callee.len())]
+    ArgCountMismatch {
+        func_idx: usize,
+        arg_kind: String,
+        func_name: String,
+        expected_len: usize,
+        caller: Vec<Vec<Vec<u8>>>,
+        callee: Vec<Vec<Vec<u8>>>,
+    },
+    #[error("  {func_name} {arg_kind} {arg_name} value count mismatch (expected: {expected_len}, caller: {}, callee: {})
+    caller: {caller:#02X?}
+    callee: {callee:#02X?}", caller.len(), callee.len())]
+    ValCountMismatch {
+        func_idx: usize,
+        arg_idx: usize,
+        arg_kind: String,
+        func_name: String,
+        arg_name: String,
+        expected_len: usize,
+        caller: Vec<Vec<u8>>,
+        callee: Vec<Vec<u8>>,
+    },
     #[error(
-        "test {0} {} field {2} mismatch \ncaller: {3:02X?} \ncallee: {4:02X?}",
-        OUTPUT_NAME
+        "  {func_name} {arg_kind} differed:
+    {arg_kind:<6}: {arg_name}: {arg_ty_name}
+    field : {val_path}: {val_ty_name}
+    expect: {expected:02X?}
+    caller: {caller:02X?}
+    callee: {callee:02X?}"
     )]
-    OutputFieldMismatch(usize, usize, usize, Vec<u8>, Vec<u8>),
-    #[error("test {0} {4} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}")]
-    InputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>, String),
+    ValMismatch {
+        func_idx: usize,
+        arg_idx: usize,
+        val_idx: usize,
+        func_name: String,
+        arg_name: String,
+        arg_kind: String,
+        arg_ty_name: String,
+        val_path: String,
+        val_ty_name: String,
+        expected: Vec<u8>,
+        caller: Vec<u8>,
+        callee: Vec<u8>,
+    },
     #[error(
-        "test {0} {} field count mismatch \ncaller: {2:#02X?} \ncallee: {3:#02X?}",
-        OUTPUT_NAME
+        "  {func_name} {arg_kind} had unexpected tagged variant:
+    {arg_kind:<6}: {arg_name}: {arg_ty_name}
+    field : {val_path}: {val_ty_name}
+    expect: {expected}
+    caller: {caller}
+    callee: {callee}"
     )]
-    OutputFieldCountMismatch(usize, usize, Vec<Vec<u8>>, Vec<Vec<u8>>),
-    #[error("test {0} input count mismatch \ncaller: {1:#02X?} \ncallee: {2:#02X?}")]
-    InputCountMismatch(usize, Vec<Vec<Vec<u8>>>, Vec<Vec<Vec<u8>>>),
-    #[error("test {0} output count mismatch \ncaller: {1:#02X?} \ncallee: {2:#02X?}")]
-    OutputCountMismatch(usize, Vec<Vec<Vec<u8>>>, Vec<Vec<Vec<u8>>>),
+    TagMismatch {
+        func_idx: usize,
+        arg_idx: usize,
+        val_idx: usize,
+        func_name: String,
+        arg_name: String,
+        arg_kind: String,
+        arg_ty_name: String,
+        val_path: String,
+        val_ty_name: String,
+        expected: String,
+        caller: String,
+        callee: String,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -66,6 +66,7 @@ pub struct Config {
     pub run_pairs: Vec<(String, String)>,
     pub run_tests: Vec<String>,
     pub rustc_codegen_backends: Vec<(String, String)>,
+    pub val_generator: ValueGeneratorKind,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -248,7 +249,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("configured ABIs!");
 
     // Grab all the tests
-    let tests = read_tests()?;
+    let tests = read_tests(cfg.val_generator)?;
     harness.set_tests(tests);
     eprintln!("got tests!");
     let harness = Arc::new(harness);
@@ -294,7 +295,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     convention: *convention,
                                     functions: FunctionSelector::All,
                                     val_writer: WriteImpl::HarnessCallback,
-                                    val_generator: ValueGeneratorKind::Graffiti,
+                                    val_generator: cfg.val_generator,
                                 },
                             };
                             let rules = harness.get_test_rules(&test_key);

@@ -2,11 +2,16 @@ use std::{
     fs::File,
     io::{BufReader, Read},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
-use crate::{error::*, Test};
+use crate::{
+    error::*,
+    vals::{ValueGeneratorKind, ValueTree},
+    Test,
+};
 
-pub fn read_tests() -> Result<Vec<Test>, GenerateError> {
+pub fn read_tests(value_generator: ValueGeneratorKind) -> Result<Vec<Test>, GenerateError> {
     let mut tests = vec![];
     let mut dirs = vec![PathBuf::from("tests")];
     while let Some(dir) = dirs.pop() {
@@ -20,7 +25,7 @@ pub fn read_tests() -> Result<Vec<Test>, GenerateError> {
             }
 
             // Otherwise, assume it's a test and parse it
-            let test = match read_test_manifest(&entry.path()) {
+            let test = match read_test_manifest(&entry.path(), value_generator) {
                 Ok(test) => test,
                 Err(e) => {
                     eprintln!("test {:?}'s file couldn't be parsed {}", entry, e);
@@ -37,7 +42,10 @@ pub fn read_tests() -> Result<Vec<Test>, GenerateError> {
 }
 
 /// Read a test .kdl file
-fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
+fn read_test_manifest(
+    test_file: &Path,
+    value_generator: ValueGeneratorKind,
+) -> Result<Test, GenerateError> {
     let file = File::open(test_file)?;
     let mut reader = BufReader::new(file);
     let mut input = String::new();
@@ -48,6 +56,7 @@ fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
     if ext == "kdl" {
         let mut compiler = kdl_script::Compiler::new();
         let types = compiler.compile_string(&test_file.to_string_lossy(), input)?;
+        let vals = Arc::new(ValueTree::new(&types, value_generator));
         Ok(Test {
             name: test_file
                 .file_stem()
@@ -56,6 +65,7 @@ fn read_test_manifest(test_file: &Path) -> Result<Test, GenerateError> {
                 .expect("test filename wasn't utf8")
                 .to_owned(),
             types,
+            vals,
         })
     } else {
         Err(GenerateError::Skipped)

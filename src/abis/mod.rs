@@ -71,53 +71,8 @@ pub struct Test {
     pub name: String,
     /// Parsed and Typechecked kdl-script program
     pub types: Arc<TypedProgram>,
-    // TODO: add some kind of ValueSelector type here, so that when faced with the
-    // question of "what value is this function argument SUPPOSED to have?",
-    // all implementations of the test (and the checker) can consistently agree.
-    //
-    // This is important for 5 reasons:
-    //
-    // * most fundamentally: AbiImpls are tasked with essentially implementing
-    //   `#[derive(Display)]` for every type we hand it, but we support handing it
-    //   c-like unions, which require you to "just know" which variant is active.
-    //
-    // * still quite importantly: even for tagged unions where we *can* generate
-    //   match statements for them, we need to make some arbitrary decision on which
-    //   variant we should initialize values to. If we need a way to "just know"
-    //   for untagged unions, then we should reuse it for tagged unions.
-    //   (Right now we just always pick the first variant, which is bad for coverage.)
-    //
-    // * usefully: this unlocks the test/harness selecting from a suite of value-selection
-    //   strategies, including the ability for the test to require "specific values",
-    //   the "grafitti values" system we default to, and a (seeded) "random fuzzing" mode.
-    //
-    // * nice to have: this almost certainly unlocks better error reporting
-    //
-    // * nice to have: this theoretically unlocks more extreme test minimization mode,
-    //   where instead of generating full matches when trying to access a value,
-    //   we can generate the equivalent of .unwrap() using if-lets, as the reader
-    //   of a value will "just know" which variant to expect.
-    //
-    // Note however that the concept has a fundamental problem around PunTypes:
-    // if two implementations of the same test can fundamentally disagree on the
-    // "shape" of a type, it becomes extremely difficult to keep them in sync
-    // on what the value should be.
-    //
-    // As in, I imagine the ValueSelector's job is to basically go
-    // "on variable 3, field 1, subfield 8: select variant 5". These kinds of
-    // directions only make sense if every implementation agrees that there's a union
-    // at that rvalue path. If one implementation has `NewtypeTransparentU32(u32)` and
-    // the other has u32, such a path would desync, as there's an extra "layer" for
-    // the NewtypeTransparentU32 user.
-    //
-    // I can imagine solutions for that case, but something like `Option<&T>` vs `*T`
-    // where one has an enum and the other doesn't (and one sometimes doesn't even
-    // have a FIELD) are... Problematic.
-    //
-    // The "good news" is that the increasingly problematic cases are *also* a huge
-    // fucking problem for even validating that the two tests agreed on the value,
-    // so I think a ValueSelector API can pretend this isn't a thing and solve the
-    // easy cases.
+    /// Values that the test should have
+    pub vals: Arc<ValueTree>,
 }
 
 /// Options for a test
@@ -167,6 +122,13 @@ impl FunctionSelector {
                     }
                 }
             }
+        }
+    }
+
+    pub fn active_funcs(&self, types: &TypedProgram) -> Vec<FuncIdx> {
+        match self {
+            FunctionSelector::All => types.all_funcs().collect(),
+            FunctionSelector::One { idx, args: _ } => vec![*idx],
         }
     }
 }
@@ -256,7 +218,6 @@ pub struct TestImpl {
     pub desired_funcs: Vec<FuncIdx>,
     pub tynames: HashMap<TyIdx, String>,
     pub borrowed_tynames: HashMap<TyIdx, String>,
-    pub vals: ValueTree,
 }
 impl std::ops::Deref for TestImpl {
     type Target = TestForAbi;
@@ -317,18 +278,13 @@ impl Test {
 
 impl TestForAbi {
     pub fn with_options(&self, options: TestOptions) -> Result<TestImpl, GenerateError> {
-        let desired_funcs = match &options.functions {
-            FunctionSelector::All => self.types.all_funcs().collect(),
-            FunctionSelector::One { idx, args: _ } => vec![*idx],
-        };
-        let vals = ValueTree::new(&self.types, options.val_generator.clone());
+        let desired_funcs = options.functions.active_funcs(&self.types);
         Ok(TestImpl {
             inner: self.clone(),
             options,
             desired_funcs,
             tynames: Default::default(),
             borrowed_tynames: Default::default(),
-            vals,
         })
     }
 }

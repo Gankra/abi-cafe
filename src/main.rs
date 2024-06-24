@@ -8,7 +8,7 @@ mod procgen;
 mod report;
 
 use abis::*;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use error::*;
 use harness::*;
 use report::*;
@@ -134,6 +134,18 @@ impl TestHarness {
 
         get_test_rules(test_key, &*caller, &*callee)
     }
+
+    pub fn spawn_test(
+        self: Arc<Self>,
+        rt: &tokio::runtime::Runtime,
+        rules: TestRules,
+        test_key: TestKey,
+        out_dir: Utf8PathBuf,
+    ) -> tokio::task::JoinHandle<TestRunResults> {
+        let harness = self.clone();
+        rt.spawn(async move { harness.do_test(test_key, rules, out_dir).await })
+    }
+
     /// Generate, Compile, Link, Load, and Run this test.
     pub async fn do_test(
         &self,
@@ -299,16 +311,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 },
                             };
                             let rules = harness.get_test_rules(&test_key);
+                            let task = harness.clone().spawn_test(
+                                &rt,
+                                rules.clone(),
+                                test_key.clone(),
+                                out_dir.clone(),
+                            );
 
-                            let task = {
-                                let runner = harness.clone();
-                                let rules = rules.clone();
-                                let test_key = test_key.clone();
-                                let out_dir = out_dir.clone();
-                                rt.spawn(
-                                    async move { runner.do_test(test_key, rules, out_dir).await },
-                                )
-                            };
                             // FIXME: we can make everything parallel by immediately returning
                             // and making the following code happen in subsequent pass. For now
                             // let's stay single-threaded to do things one step at a time.
@@ -363,7 +372,73 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if full_report.failed() {
+        do_thing(&harness, &rt, &out_dir, &full_report);
         Err(TestsFailed {})?;
     }
     Ok(())
+}
+
+fn do_thing(
+    harness: &Arc<TestHarness>,
+    rt: &tokio::runtime::Runtime,
+    out_dir: &Utf8Path,
+    reports: &FullReport,
+) {
+    eprintln!("rerunning failures");
+    for report in &reports.tests {
+        let Some(check) = report.results.check.as_ref() else {
+            continue;
+        };
+        for func_result in &check.subtest_checks {
+            let Err(failure) = func_result else {
+                continue;
+            };
+            let functions = match *failure {
+                CheckFailure::ArgCountMismatch { func_idx, .. } => FunctionSelector::One {
+                    idx: func_idx,
+                    args: ArgSelector::All,
+                },
+                CheckFailure::ValCountMismatch {
+                    func_idx, arg_idx, ..
+                } => FunctionSelector::One {
+                    idx: func_idx,
+                    args: ArgSelector::One {
+                        idx: arg_idx,
+                        vals: ValSelector::All,
+                    },
+                },
+                CheckFailure::ValMismatch {
+                    func_idx,
+                    arg_idx,
+                    val_idx,
+                    ..
+                }
+                | CheckFailure::TagMismatch {
+                    func_idx,
+                    arg_idx,
+                    val_idx,
+                    ..
+                } => FunctionSelector::One {
+                    idx: func_idx,
+                    args: ArgSelector::One {
+                        idx: arg_idx,
+                        vals: ValSelector::One { idx: val_idx },
+                    },
+                },
+            };
+
+            let mut test_key = report.key.clone();
+            test_key.options.functions = functions;
+            test_key.options.val_writer = WriteImpl::Print;
+            let rules = report.rules.clone();
+            eprintln!("rerunning {}", harness.base_id(&test_key, None, "::"));
+            let task = harness
+                .clone()
+                .spawn_test(rt, rules, test_key, out_dir.to_owned());
+            let results = rt.block_on(task).expect("failed to join task");
+            let source = results.source.unwrap().unwrap();
+            eprintln!("  caller: {}", source.caller_src);
+            eprintln!("  callee: {}", source.callee_src);
+        }
+    }
 }

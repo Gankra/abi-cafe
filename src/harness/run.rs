@@ -14,7 +14,41 @@ impl TestHarness {
         test_dylib: &LinkOutput,
     ) -> Result<RunOutput, RunError> {
         let full_test_name = self.full_test_name(key);
-        run_dynamic_test(test_dylib, &full_test_name)
+        let output = run_dynamic_test(test_dylib, &full_test_name)?;
+        self.check_ran_all(key, &output)?;
+        Ok(output)
+    }
+
+    fn check_ran_all(
+        &self,
+        key: &TestKey,
+        RunOutput {
+            caller_inputs,
+            caller_outputs,
+            callee_inputs,
+            callee_outputs,
+        }: &RunOutput,
+    ) -> Result<(), RunError> {
+        let test = &self.tests[&key.test];
+        // As a basic sanity-check, make sure everything agrees on how
+        // many tests actually executed. If this fails, then something
+        // is very fundamentally broken and needs to be fixed.
+        let expected_funcs = key.options.functions.active_funcs(&test.types);
+        let expected_test_count = expected_funcs.len();
+        if caller_inputs.funcs.len() != expected_test_count
+            || caller_outputs.funcs.len() != expected_test_count
+            || callee_inputs.funcs.len() != expected_test_count
+            || callee_outputs.funcs.len() != expected_test_count
+        {
+            return Err(RunError::TestCountMismatch(
+                expected_test_count,
+                caller_inputs.funcs.len(),
+                caller_outputs.funcs.len(),
+                callee_inputs.funcs.len(),
+                callee_outputs.funcs.len(),
+            ));
+        }
+        Ok(())
     }
 }
 

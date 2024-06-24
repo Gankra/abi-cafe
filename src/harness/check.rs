@@ -25,25 +25,8 @@ impl TestHarness {
 
         let mut results: Vec<Result<(), CheckFailure>> = Vec::new();
 
-        // As a basic sanity-check, make sure everything agrees on how
-        // many tests actually executed. If this fails, then something
-        // is very fundamentally broken and needs to be fixed.
+        // `Run` already checks that this length is congruent with all the inputs/outputs Vecs
         let expected_funcs = key.options.functions.active_funcs(&test.types);
-        let expected_test_count = expected_funcs.len();
-        if caller_inputs.funcs.len() != expected_test_count
-            || caller_outputs.funcs.len() != expected_test_count
-            || callee_inputs.funcs.len() != expected_test_count
-            || callee_outputs.funcs.len() != expected_test_count
-        {
-            Err::<(), _>(RunError::TestCountMismatch(
-                expected_test_count,
-                caller_inputs.funcs.len(),
-                caller_outputs.funcs.len(),
-                callee_inputs.funcs.len(),
-                callee_outputs.funcs.len(),
-            ))
-            .expect("TODO");
-        }
 
         // Layer 1 is the funcs/subtests. Because we have already checked
         // that they agree on their lengths, we can zip them together
@@ -194,6 +177,7 @@ impl TestHarness {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn check_vals(
         &self,
         key: &TestKey,
@@ -239,6 +223,14 @@ impl TestHarness {
             expected_vals.into_iter().zip(caller_vals).zip(callee_vals)
         {
             if let Ty::Tagged(tagged_ty) = types.realize_ty(expected_val.ty) {
+                // This value is "fake" and is actually the semantic tag of tagged union.
+                // In this case showing the bytes doesn't make sense, so show the Variant name
+                // (although we get bytes here they're the array index into the variant,
+                // a purely magical value that only makes sense to the harness itself!).
+                //
+                // Also we use u32::MAX to represent a poison "i dunno what it is, but it's
+                // definitely not the One variant we statically expected!", so most of the
+                // time we're here to print <other variant> and shrug.
                 let expected_tag = expected_val.generate_idx(tagged_ty.variants.len());
                 let caller_tag =
                     u32::from_ne_bytes(<[u8; 4]>::try_from(&caller_val[..4]).unwrap()) as usize;

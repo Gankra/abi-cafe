@@ -1,5 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
+/*
+const PROCGEN_ROOT: &str = "tests/procgen";
 
 /// For tests that are too tedious to even hand-write the .ron file,
 /// this code generates it programmatically.
@@ -12,7 +14,7 @@ pub fn procgen_tests(regenerate: bool) {
         return;
     }
 
-    let proc_gen_root = PathBuf::from("tests/procgen");
+    let proc_gen_root = PathBuf::from(PROCGEN_ROOT);
 
     // Make sure the path exists, then delete its contents, then recreate the empty dir.
     std::fs::create_dir_all(&proc_gen_root).unwrap();
@@ -25,17 +27,34 @@ pub fn procgen_tests(regenerate: bool) {
     ];
 
     for test_name in tests {
-        let mut test_body = String::new();
-
-        procgen_test_for_ty(&mut test_body, test_name, None).unwrap();
-
-        let mut file =
-            std::fs::File::create(proc_gen_root.join(format!("{test_name}.kdl"))).unwrap();
-        file.write_all(test_body.as_bytes()).unwrap();
+        procgen_test_for_ty_file(test_name, test_name, None);
     }
 }
 
-fn procgen_test_for_ty(
+pub fn procgen_test_for_ty_file(
+    test_name: &str,
+    ty_name: &str,
+    ty_def: Option<&str>,
+) -> PathBuf {
+    let test_body = procgen_test_for_ty_string(ty_name, ty_def);
+    let proc_gen_root = PathBuf::from(PROCGEN_ROOT);
+    let filepath = proc_gen_root.join(format!("{test_name}.kdl"));
+    let mut file = std::fs::File::create(&filepath).unwrap();
+    file.write_all(test_body.as_bytes()).unwrap();
+    filepath
+}
+*/
+
+pub fn procgen_test_for_ty_string(
+    ty_name: &str,
+    ty_def: Option<&str>,
+) -> String {
+    let mut test_body = String::new();
+    procgen_test_for_ty_impl(&mut test_body, ty_name, ty_def).unwrap();
+    test_body
+}
+
+fn procgen_test_for_ty_impl(
     out: &mut dyn std::fmt::Write,
     ty_name: &str,
     ty_def: Option<&str>,
@@ -47,18 +66,18 @@ fn procgen_test_for_ty(
     }
 
     // Start gentle with basic one value in/out tests
-    add_func(out, &format!("{ty_name}_val_in"), &[ty], &[])?;
-    add_func(out, &format!("{ty_name}_val_out"), &[], &[ty])?;
-    add_func(out, &format!("{ty_name}_val_in_out"), &[ty], &[ty])?;
-    add_func(out, &format!("{ty_name}_ref_in"), &[&ty_ref], &[])?;
-    // add_func(out, &format!("{ty_name}_ref_out"), &[], &[&ty_ref])?;
-    // add_func(out, &format!("{ty_name}_ref_in_out"), &[&ty_ref], &[&ty_ref])?;
+    add_func(out, "val_in", &[ty], &[])?;
+    add_func(out, "val_out", &[], &[ty])?;
+    add_func(out, "val_in_out", &[ty], &[ty])?;
+    add_func(out, "ref_in", &[&ty_ref], &[])?;
+    // add_func(out, "ref_out", &[], &[&ty_ref])?;
+    // add_func(out, "ref_in_out", &[&ty_ref], &[&ty_ref])?;
 
     // Stress out the calling convention and try lots of different
     // input counts. For many types this will result in register
     // exhaustion and get some things passed on the stack.
     for len in 2..=16 {
-        add_func(out, &format!("{ty_name}_val_in_{len}"), &vec![ty; len], &[])?;
+        add_func(out, &format!("val_in_{len}"), &vec![ty; len], &[])?;
     }
 
     // Stress out the calling convention with a struct full of values.
@@ -98,11 +117,11 @@ fn add_structs(out: &mut dyn std::fmt::Write, ty: &str) -> std::fmt::Result {
         writeln!(out, r#"}}"#)?;
 
         // Check that by-val works
-        add_func(out, &format!("{ty}_struct_in_{len}"), &[&struct_ty], &[])?;
+        add_func(out, &format!("struct_in_{len}"), &[&struct_ty], &[])?;
         // Check that by-ref works, for good measure
         add_func(
             out,
-            &format!("{ty}_ref_struct_in_{len}"),
+            &format!("ref_struct_in_{len}"),
             &[&struct_ty_ref],
             &[],
         )?;
@@ -120,7 +139,7 @@ fn add_perturbs(
         let inputs = perturb_list(ty, count, idx);
         add_func(
             out,
-            &format!("{ty}_val_in_{idx}_perturbed_{label}"),
+            &format!("val_in_{idx}_perturbed_{label}"),
             &inputs,
             &[],
         )?;
@@ -150,7 +169,7 @@ fn add_perturbs_struct(
         // Add the function
         add_func(
             out,
-            &format!("{ty}_val_in_{idx}_perturbed_{label}"),
+            &format!("val_in_{idx}_perturbed_{label}"),
             &[&struct_ty],
             &[],
         )?;

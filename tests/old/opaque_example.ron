@@ -1,0 +1,15 @@
+Test(
+    name: "opaque_example",
+    funcs: [
+        (
+            name: "i_am_opaque_to_the_test_harness",
+            conventions: [Handwritten],
+            // NOTE: inputs + outputs totally ignored with Handwritten,
+            // test can do whatever the fuck it wants as long as it
+            // consistently uses FINISH_VAL to dynamically
+            // report the inputs/outputs to the harness.
+            inputs: [],
+            output: None,
+        )
+    ]
+)

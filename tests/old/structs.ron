@@ -1,0 +1,139 @@
+Test(
+    name: "structs",
+    funcs: [
+        (
+            name: "pass_one",
+            conventions: [All],
+            inputs: [Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(1234.23))])],
+            output: None,
+        ),
+        (
+            name: "return_one",
+            conventions: [All],
+            inputs: [],
+            output: Some(Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(1234.23))])),
+        ),
+        (
+            name: "both_one",
+            conventions: [All],
+            inputs: [Struct("MyStruct", [Int(c_uint8_t(0x1)), Float(c_double(0.23))])],
+            output: Some(Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(1234.23))])),
+        ),
+        (
+            name: "same_def",
+            conventions: [All],
+            inputs: [
+                Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(1234.23))]), 
+                Struct("MyStruct", [Int(c_uint8_t(0x1)), Float(c_double(0.23))]),
+            ],
+            output: None,
+        ),
+        (
+            name: "diff_def",
+            conventions: [All],
+            inputs: [
+                Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(1234.23))]), 
+                Struct("MyStruct2", [Float(c_float(123.43)), Int(c_uint16_t(0x5678))]),
+            ],
+            output: None,
+        ),
+        (
+            name: "nested",
+            conventions: [All],
+            inputs: [
+                Struct("MyComplex", [
+                    Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(1234.23))]), 
+                    Struct("MyStruct2", [Float(c_float(2312.123)), Int(c_uint16_t(0x5678))]),
+                ])
+            ],
+            output: Some(
+                Struct("MyComplex", [
+                    Struct("MyStruct", [Int(c_uint8_t(0xe3)), Float(c_double(5789.16))]), 
+                    Struct("MyStruct2", [Float(c_float(12.01)), Int(c_uint16_t(0x3e2f))]),
+                ])
+            ),
+        ),
+        (
+            name: "arrayed",
+            conventions: [All],
+            inputs: [Struct("MyArray", [Array([
+                Int(c_uint32_t(0xe13e_362f)),
+                Int(c_uint32_t(0xaf34_5e1a)),
+                Int(c_uint32_t(0xb230_e178)),
+                Int(c_uint32_t(0xa2e4_16ef)),
+                Int(c_uint32_t(0x1401_540e)),
+                Int(c_uint32_t(0x3912_7423)),
+                Int(c_uint32_t(0xf131_3972)),
+            ])])],
+            output: Some(
+                Struct("MyArray2", [Array([
+                    Int(c_uint8_t(0xae)),
+                    Int(c_uint8_t(0xbc)),
+                    Int(c_uint8_t(0x21)),
+                    Int(c_uint8_t(0x3f)),
+                    Int(c_uint8_t(0x00)),
+                    Int(c_uint8_t(0x12)),
+                    Int(c_uint8_t(0xfe)),
+                ])])
+            ),
+        ),
+        (
+            name: "multi_dimensional_arrayed",
+            conventions: [All],
+            inputs: [Struct("MyArray3", [Array([
+                Array([Int(c_uint32_t(0xe13e_362f)), Int(c_uint32_t(0xaf34_5e1a))]),
+                Array([Int(c_uint32_t(0xb230_e178)), Int(c_uint32_t(0xa2e4_16ef))]),
+                Array([Int(c_uint32_t(0x1401_540e)), Int(c_uint32_t(0x3912_7423))]),
+            ])])],
+            output: Some(
+                Struct("MyArray4", [Array([
+                    Array([Int(c_uint8_t(0xae)), Int(c_uint8_t(0xbc))]),
+                    Array([Int(c_uint8_t(0x21)), Int(c_uint8_t(0x3f))]),
+                    Array([Int(c_uint8_t(0x00)), Int(c_uint8_t(0x12))]),
+                ])])
+            ),
+        ),
+        (
+            name: "complex_arrayed",
+            conventions: [All],
+            inputs: [Struct("MyComplexArrayed", [
+                Int(c_uint8_t(0xaf)),
+                Array([
+                    Struct("MyComplex", [
+                        Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(1234.23))]), 
+                        Struct("MyStruct2", [Float(c_float(81344789.12)), Int(c_uint16_t(0x5678))]),
+                    ]),
+                    Struct("MyComplex", [
+                        Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(91.00001))]), 
+                        Struct("MyStruct2", [Float(c_float(3.245)), Int(c_uint16_t(0x1234))]),
+                    ]),
+                    Struct("MyComplex", [
+                        Struct("MyStruct", [Int(c_uint8_t(0xf1)), Float(c_double(23.459))]), 
+                        Struct("MyStruct2", [Float(c_float(0.1234)), Int(c_uint16_t(0xaef3))]),
+                    ]),
+                ]),
+                Int(c_uint64_t(0x3ae1_2345_2a01_318b)),
+            ])],
+            output: Some(
+                Struct("MyComplexArrayed", [
+                    Int(c_uint8_t(0x13)),
+                    Array([
+                        Struct("MyComplex", [
+                            Struct("MyStruct", [Int(c_uint8_t(0xa2)), Float(c_double(12.83123432))]), 
+                            Struct("MyStruct2", [Float(c_float(81344789.12)), Int(c_uint16_t(0x8672))]),
+                        ]),
+                        Struct("MyComplex", [
+                            Struct("MyStruct", [Int(c_uint8_t(0x1f)), Float(c_double(1234589))]), 
+                            Struct("MyStruct2", [Float(c_float(133.346)), Int(c_uint16_t(0x9224))]),
+                        ]),
+                        Struct("MyComplex", [
+                            Struct("MyStruct", [Int(c_uint8_t(0x49)), Float(c_double(123823.4597))]), 
+                            Struct("MyStruct2", [Float(c_float(0.01338)), Int(c_uint16_t(0x12f4))]),
+                        ]),
+                    ]),
+                    Int(c_uint64_t(0x12e1_4395_7a08_a131)),
+                ])
+            )
+        ),
+    ]
+)

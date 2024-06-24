@@ -685,11 +685,11 @@ impl RustcAbiImpl {
         match state.types.realize_ty(ty) {
             // Primitives are the only "real" values with actual bytes that advance val_idx
             Ty::Primitive(prim) => match prim {
-                PrimitiveTy::I8 => write!(f, "{}i8", val.generate_u8() as i8)?,
-                PrimitiveTy::I16 => write!(f, "{}i16", val.generate_u16() as i16)?,
-                PrimitiveTy::I32 => write!(f, "{}i32", val.generate_u32() as i32)?,
-                PrimitiveTy::I64 => write!(f, "{}i64", val.generate_u64() as i64)?,
-                PrimitiveTy::I128 => write!(f, "{}i128", val.generate_u128() as i128)?,
+                PrimitiveTy::I8 => write!(f, "{}i8", val.generate_i8())?,
+                PrimitiveTy::I16 => write!(f, "{}i16", val.generate_i16())?,
+                PrimitiveTy::I32 => write!(f, "{}i32", val.generate_i32())?,
+                PrimitiveTy::I64 => write!(f, "{}i64", val.generate_i64())?,
+                PrimitiveTy::I128 => write!(f, "{}i128", val.generate_i128())?,
                 PrimitiveTy::U8 => write!(f, "{}u8", val.generate_u8())?,
                 PrimitiveTy::U16 => write!(f, "{}u16", val.generate_u16())?,
                 PrimitiveTy::U32 => write!(f, "{}u32", val.generate_u32())?,
@@ -1304,41 +1304,3 @@ impl RustcAbiImpl {
         Ok(())
     }
 }
-
-/*
-old impl for emitting a full match, which is now replaced with if-let.
-Maybe we'll want this again?
-
-// generate a wrapper match, then recurse into each field of each variant
-writeln!(f, "match &{from} {{")?;
-f.add_indent(1);
-let tagged_name = &tagged_ty.name;
-// Process the implicit "tag" value
-let tag_val = vals.next().expect("internal error: ran out of values!?");
-for variant in &tagged_ty.variants {
-    let variant_name = &variant.name;
-    match &variant.fields {
-        Some(fields) => {
-            // Variant with fields, recurse into them
-            let field_list = fields
-                .iter()
-                .map(|f| f.ident.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            writeln!(f, "{tagged_name}::{variant_name} {{ {field_list} }} => {{")?;
-            f.add_indent(1);
-            for field in fields {
-                self.write_fields(f, state, to, &field.ident, field.ty, vals)?;
-            }
-            f.sub_indent(1);
-            writeln!(f, "}}")?;
-        }
-        None => {
-            // Variant without fields, need to include branch for exhaustiveness
-            writeln!(f, "{tagged_name}::{variant_name} => {{ }}")?;
-        }
-    }
-}
-f.sub_indent(1);
-writeln!(f, "}}")?;
-*/

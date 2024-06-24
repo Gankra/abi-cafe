@@ -404,4 +404,19 @@ impl ValueGenerator {
         self.fill_bytes(&mut buf);
         u128::from_le_bytes(buf)
     }
+    pub fn generate_i8(&self) -> i8 {
+        self.generate_u8() as i8
+    }
+    pub fn generate_i16(&self) -> i16 {
+        self.generate_u16() as i16
+    }
+    pub fn generate_i32(&self) -> i32 {
+        self.generate_u32() as i32
+    }
+    pub fn generate_i64(&self) -> i64 {
+        self.generate_u64() as i64
+    }
+    pub fn generate_i128(&self) -> i128 {
+        self.generate_u128() as i128
+    }
 }

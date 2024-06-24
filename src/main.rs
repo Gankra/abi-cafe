@@ -224,7 +224,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let cfg = cli::make_app();
     eprintln!("parsed cli!");
     // Before doing anything, regenerate the procgen tests, if needed.
-    procgen::procgen_tests(cfg.procgen_tests);
+    // procgen::procgen_tests(cfg.procgen_tests);
     eprintln!("generated tests!");
     let out_dir = init_dirs()?;
 

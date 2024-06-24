@@ -194,7 +194,7 @@ impl<'a> std::ops::Deref for ValueRef<'a> {
         &self.tree.funcs[self.func_idx].args[self.arg_idx].vals[self.val_idx]
     }
 }
-impl<'a> std::ops::Deref for Value {
+impl std::ops::Deref for Value {
     type Target = ValueGenerator;
     fn deref(&self) -> &Self::Target {
         &self.val

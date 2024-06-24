@@ -32,7 +32,7 @@ pub fn init_dirs() -> Result<Utf8PathBuf, Box<dyn Error>> {
 }
 
 impl TestHarness {
-    fn base_id(
+    pub fn base_id(
         &self,
         TestKey {
             test,
@@ -93,6 +93,10 @@ impl TestHarness {
             WriteImpl::Print => {
                 output.push_str(separator);
                 output.push_str("print");
+            }
+            WriteImpl::Assert => {
+                output.push_str(separator);
+                output.push_str("assert");
             }
             WriteImpl::Noop => {
                 output.push_str(separator);

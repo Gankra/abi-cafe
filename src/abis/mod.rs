@@ -39,8 +39,6 @@ pub static ALL_CONVENTIONS: &[CallingConvention] = &[
     // CallingConvention::Aapcs,
 ];
 
-pub static OUTPUT_NAME: &str = "output";
-
 /// A test case, fully abstract.
 ///
 /// An abi-cafe Test is essentially a series of function signatures
@@ -229,6 +227,7 @@ impl std::ops::Deref for TestImpl {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub enum WriteImpl {
     HarnessCallback,
+    Assert,
     Print,
     Noop,
 }
@@ -258,8 +257,7 @@ pub trait AbiImpl {
 }
 
 impl Test {
-    pub fn has_convention(&self, convention: CallingConvention) -> bool {
-        // TODO
+    pub fn has_convention(&self, _convention: CallingConvention) -> bool {
         true
     }
     pub async fn for_abi(

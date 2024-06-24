@@ -5,7 +5,7 @@ use std::sync::Arc;
 use camino::Utf8Path;
 use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use kdl_script::PunEnv;
-use vals::ArgValuesIter;
+use vals::{ArgValuesIter, Value};
 
 use self::error::GenerateError;
 
@@ -76,6 +76,7 @@ impl AbiImpl for RustcAbiImpl {
         let supports_writer = match val_writer {
             WriteImpl::HarnessCallback => true,
             WriteImpl::Print => true,
+            WriteImpl::Assert => true,
             WriteImpl::Noop => true,
         };
         let supports_query = match functions {
@@ -451,6 +452,10 @@ impl RustcAbiImpl {
                 ((*tagged_ty.name).clone(), borrowed_tyname)
             }
             Ty::Alias(AliasTy { name, real, attrs }) => {
+                assert!(
+                    attrs.is_empty(),
+                    "don't yet know how to apply attrs to structs"
+                );
                 let borrowed_tyname = state
                     .borrowed_tynames
                     .get(real)
@@ -557,7 +562,7 @@ impl RustcAbiImpl {
 
                 // Emit an actual enum decl
                 writeln!(f, "#[repr(C)]")?;
-                writeln!(f, "#[derive(Copy, Clone)]")?;
+                writeln!(f, "#[derive(Debug, Copy, Clone, PartialEq)]")?;
                 writeln!(f, "enum {} {{", enum_ty.name)?;
                 f.add_indent(1);
                 for variant in &enum_ty.variants {
@@ -669,6 +674,64 @@ impl RustcAbiImpl {
         Ok(())
     }
 
+    pub fn generate_leaf_value(
+        &self,
+        f: &mut Fivemat,
+        state: &TestImpl,
+        ty: TyIdx,
+        val: &Value,
+        alias: Option<&str>,
+    ) -> Result<(), GenerateError> {
+        match state.types.realize_ty(ty) {
+            // Primitives are the only "real" values with actual bytes that advance val_idx
+            Ty::Primitive(prim) => match prim {
+                PrimitiveTy::I8 => write!(f, "{}i8", val.generate_u8() as i8)?,
+                PrimitiveTy::I16 => write!(f, "{}i16", val.generate_u16() as i16)?,
+                PrimitiveTy::I32 => write!(f, "{}i32", val.generate_u32() as i32)?,
+                PrimitiveTy::I64 => write!(f, "{}i64", val.generate_u64() as i64)?,
+                PrimitiveTy::I128 => write!(f, "{}i128", val.generate_u128() as i128)?,
+                PrimitiveTy::U8 => write!(f, "{}u8", val.generate_u8())?,
+                PrimitiveTy::U16 => write!(f, "{}u16", val.generate_u16())?,
+                PrimitiveTy::U32 => write!(f, "{}u32", val.generate_u32())?,
+                PrimitiveTy::U64 => write!(f, "{}u64", val.generate_u64())?,
+                PrimitiveTy::U128 => write!(f, "{}u128", val.generate_u128())?,
+
+                PrimitiveTy::F32 => write!(f, "f32::from_bits({})", val.generate_u32())?,
+                PrimitiveTy::F64 => write!(f, "f64::from_bits({})", val.generate_u64())?,
+                PrimitiveTy::Bool => write!(f, "true")?,
+                PrimitiveTy::Ptr => {
+                    if true {
+                        write!(f, "{:#X}u64 as *mut ()", val.generate_u64())?
+                    } else {
+                        write!(f, "{:#X}u32 as *mut ()", val.generate_u32())?
+                    }
+                }
+                PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(
+                    "rust doesn't have i256".to_owned(),
+                ))?,
+                PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(
+                    "rust doesn't have u256".to_owned(),
+                ))?,
+                PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(
+                    "rust doesn't have f16".to_owned(),
+                ))?,
+                PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(
+                    "rust doesn't have f128".to_owned(),
+                ))?,
+            },
+            Ty::Enum(enum_ty) => {
+                let name = alias.unwrap_or(&enum_ty.name);
+                if let Some(variant) = val.select_val(&enum_ty.variants) {
+                    let variant_name = &variant.name;
+                    write!(f, "{name}::{variant_name}")?;
+                }
+            }
+            _ => unreachable!("only primitives and enums should be passed to generate_leaf_value"),
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_value(
         &self,
         f: &mut Fivemat,
@@ -680,44 +743,10 @@ impl RustcAbiImpl {
         extra_decls: &mut Vec<String>,
     ) -> Result<(), GenerateError> {
         match state.types.realize_ty(ty) {
-            // Primitives are the only "real" values with actual bytes that advance val_idx
-            Ty::Primitive(prim) => {
+            // Primitives and Enums are the only "real" values with actual bytes
+            Ty::Primitive(_) | Ty::Enum(_) => {
                 let val = vals.next_val();
-                match prim {
-                    PrimitiveTy::I8 => write!(f, "{:#X}u8 as i8", val.generate_u8())?,
-                    PrimitiveTy::I16 => write!(f, "{:#X}u16 as i16", val.generate_u16())?,
-                    PrimitiveTy::I32 => write!(f, "{:#X}u32 as i32", val.generate_u32())?,
-                    PrimitiveTy::I64 => write!(f, "{:#X}u64 as i64", val.generate_u64())?,
-                    PrimitiveTy::I128 => write!(f, "{:#X}u128 as i128", val.generate_u128())?,
-                    PrimitiveTy::U8 => write!(f, "{:#X}", val.generate_u8())?,
-                    PrimitiveTy::U16 => write!(f, "{:#X}", val.generate_u16())?,
-                    PrimitiveTy::U32 => write!(f, "{:#X}", val.generate_u32())?,
-                    PrimitiveTy::U64 => write!(f, "{:#X}", val.generate_u64())?,
-                    PrimitiveTy::U128 => write!(f, "{:#X}", val.generate_u128())?,
-
-                    PrimitiveTy::F32 => write!(f, "f32::from_bits({:#X})", val.generate_u32())?,
-                    PrimitiveTy::F64 => write!(f, "f64::from_bits({:#X})", val.generate_u64())?,
-                    PrimitiveTy::Bool => write!(f, "true")?,
-                    PrimitiveTy::Ptr => {
-                        if true {
-                            write!(f, "{:#X} as *mut ()", val.generate_u64())?
-                        } else {
-                            write!(f, "{:#X} as *mut ()", val.generate_u32())?
-                        }
-                    }
-                    PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(
-                        "rust doesn't have i256".to_owned(),
-                    ))?,
-                    PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(
-                        "rust doesn't have u256".to_owned(),
-                    ))?,
-                    PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(
-                        "rust doesn't have f16".to_owned(),
-                    ))?,
-                    PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(
-                        "rust doesn't have f128".to_owned(),
-                    ))?,
-                };
+                self.generate_leaf_value(f, state, ty, &val, alias)?;
             }
             Ty::Empty => {
                 write!(f, "()")?;
@@ -730,8 +759,7 @@ impl RustcAbiImpl {
                 // Now do the rest of the recursion on constructing the temporary
                 let mut ref_temp = String::new();
                 let mut ref_temp_f = Fivemat::new(&mut ref_temp, INDENT);
-                let ty_name = &state.tynames[pointee_ty];
-                write!(&mut ref_temp_f, "let mut {ref_temp_name}: {ty_name} = ")?;
+                write!(&mut ref_temp_f, "let mut {ref_temp_name} = ")?;
                 let ref_temp_name = format!("{ref_temp_name}_");
                 self.generate_value(
                     &mut ref_temp_f,
@@ -807,14 +835,7 @@ impl RustcAbiImpl {
                 }
                 write!(f, " }}")?;
             }
-            Ty::Enum(enum_ty) => {
-                let name = alias.unwrap_or(&enum_ty.name);
-                let tag_val = vals.next_val();
-                if let Some(variant) = tag_val.select_val(&enum_ty.variants) {
-                    let variant_name = &variant.name;
-                    write!(f, "{name}::{variant_name}")?;
-                }
-            }
+
             Ty::Tagged(tagged_ty) => {
                 let name = alias.unwrap_or(&tagged_ty.name);
                 let tag_val = vals.next_val();
@@ -969,13 +990,12 @@ impl RustcAbiImpl {
         mut vals: ArgValuesIter,
     ) -> Result<(), GenerateError> {
         // Generate the input
-        let ty_name = &state.tynames[&var_ty];
         let needs_mut = false;
         let let_mut = if needs_mut { "let mut" } else { "let" };
         let mut real_var_decl = String::new();
         let mut real_var_decl_f = Fivemat::new(&mut real_var_decl, INDENT);
         let mut extra_decls = Vec::new();
-        write!(&mut real_var_decl_f, "{let_mut} {var_name}: {ty_name} = ")?;
+        write!(&mut real_var_decl_f, "{let_mut} {var_name} = ")?;
         let ref_temp_name = format!("{var_name}_");
         self.generate_value(
             &mut real_var_decl_f,
@@ -1041,7 +1061,7 @@ impl RustcAbiImpl {
                 // Hey an actual leaf, report it (and burn a value)
                 let val = vals.next_val();
                 if val.should_write_val(&state.options) {
-                    self.write_leaf_field(f, state, to, from)?;
+                    self.write_leaf_field(f, state, to, from, &val)?;
                 }
             }
             Ty::Empty => {
@@ -1093,28 +1113,52 @@ impl RustcAbiImpl {
                             format!("{tagged_name}::{variant_name}")
                         }
                     };
-                    // Generate an if-let
-                    writeln!(f, "if let {pat} = &{from} {{")?;
-                    f.add_indent(1);
-                    if tag_generator.should_write_val(&state.options) {
-                        self.write_tag_field(f, state, to, tag_idx)?;
-                    }
-                    if let Some(fields) = &variant.fields {
-                        for field in fields {
-                            // Do the ugly deref thing to deal with pattern autoref
-                            let base = format!("(*{})", field.ident);
-                            self.write_fields(f, state, to, &base, field.ty, vals)?;
+
+                    // We're going to make an if-let for the case we expect, but there might not
+                    // be anything we care about in here (especially with should_write_val) so we
+                    // buffer up if and else branches and then only emit the if-let if one of them
+                    // is non-empty
+                    let if_branch = {
+                        let mut temp_out = String::new();
+                        let f = &mut Fivemat::new(&mut temp_out, INDENT);
+                        f.add_indent(1);
+                        if tag_generator.should_write_val(&state.options) {
+                            self.write_tag_field(f, state, to, tag_idx)?;
                         }
-                    }
-                    f.sub_indent(1);
+                        if let Some(fields) = &variant.fields {
+                            for field in fields {
+                                // Do the ugly deref thing to deal with pattern autoref
+                                let base = format!("(*{})", field.ident);
+                                self.write_fields(f, state, to, &base, field.ty, vals)?;
+                            }
+                        }
+                        f.sub_indent(1);
+                        temp_out
+                    };
                     // Add an else case to complain that the variant is wrong
-                    writeln!(f, "}} else {{")?;
-                    f.add_indent(1);
-                    if tag_generator.should_write_val(&state.options) {
-                        self.error_tag_field(f, state, to)?;
+                    let else_branch = {
+                        let mut temp_out = String::new();
+                        let f = &mut Fivemat::new(&mut temp_out, INDENT);
+                        f.add_indent(1);
+                        if tag_generator.should_write_val(&state.options) {
+                            self.error_tag_field(f, state, to)?;
+                        }
+                        f.sub_indent(1);
+                        temp_out
+                    };
+
+                    let if_has_content = !if_branch.trim().is_empty();
+                    let else_has_content = !else_branch.trim().is_empty();
+                    if if_has_content || else_has_content {
+                        writeln!(f, "if let {pat} = &{from} {{")?;
+                        write!(f, "{}", if_branch)?;
+                        write!(f, "}}")?;
                     }
-                    f.sub_indent(1);
-                    writeln!(f, "}}")?;
+                    if else_has_content {
+                        writeln!(f, " else {{")?;
+                        write!(f, "{}", else_branch)?;
+                        writeln!(f, "}}")?;
+                    }
                 }
             }
             Ty::Ref(ref_ty) => {
@@ -1146,10 +1190,21 @@ impl RustcAbiImpl {
         state: &TestImpl,
         to: &str,
         path: &str,
+        val: &Value,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "write_field({to}, &{path});")?;
+                // Convenience for triggering test failures
+                if path.contains("abicafepoison") && to.contains(VAR_CALLEE_INPUTS) {
+                    writeln!(f, "write_field({to}, &0x12345678u32);")?;
+                } else {
+                    writeln!(f, "write_field({to}, &{path});")?;
+                }
+            }
+            WriteImpl::Assert => {
+                write!(f, "assert_eq!({path}, ")?;
+                self.generate_leaf_value(f, state, val.ty, val, None)?;
+                writeln!(f, ");")?;
             }
             WriteImpl::Print => {
                 writeln!(f, "println!(\"{{:?}}\", {path});")?;
@@ -1172,6 +1227,9 @@ impl RustcAbiImpl {
             WriteImpl::HarnessCallback => {
                 writeln!(f, "write_field({to}, &{}u32);", variant_idx)?;
             }
+            WriteImpl::Assert => {
+                // Noop, do nothing
+            }
             WriteImpl::Print => {
                 // Noop, do nothing
             }
@@ -1191,6 +1249,9 @@ impl RustcAbiImpl {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
                 writeln!(f, "write_field({to}, &{}u32);", u32::MAX)?;
+            }
+            WriteImpl::Assert => {
+                unreachable!("enum had unexpected variant!?");
             }
             WriteImpl::Print => {
                 unreachable!("enum had unexpected variant!?");
@@ -1213,7 +1274,7 @@ impl RustcAbiImpl {
             WriteImpl::HarnessCallback => {
                 writeln!(f, "finished_func({inputs}, {outputs});")?;
             }
-            WriteImpl::Print | WriteImpl::Noop => {
+            WriteImpl::Print | WriteImpl::Noop | WriteImpl::Assert => {
                 // Noop
             }
         }

@@ -5,6 +5,8 @@ use std::{
     sync::Arc,
 };
 
+use tracing::warn;
+
 use crate::{
     error::*,
     vals::{ValueGeneratorKind, ValueTree},
@@ -28,7 +30,7 @@ pub fn read_tests(value_generator: ValueGeneratorKind) -> Result<Vec<Test>, Gene
             let test = match read_test_manifest(entry.path().to_owned(), value_generator) {
                 Ok(test) => test,
                 Err(e) => {
-                    eprintln!("test {:?}'s file couldn't be parsed {}", entry, e);
+                    warn!("test {:?}'s file couldn't be parsed {}", entry, e);
                     continue;
                 }
             };
@@ -46,16 +48,17 @@ fn read_test_manifest(
     test_file: PathBuf,
     value_generator: ValueGeneratorKind,
 ) -> Result<Test, GenerateError> {
-    let (input, test_name) = if let Some(test_name) = filename(&test_file).strip_suffix(".procgen.kdl") {
-        let ty_def = read_file_to_string(&test_file)?;
-        let input = crate::procgen::procgen_test_for_ty_string(test_name, Some(&ty_def));
-        (input, test_name)
-    } else if let Some(test_name) = filename(&test_file).strip_suffix(".kdl") {
-        let input = read_file_to_string(&test_file)?;
-        (input, test_name)
-    } else {
-        return Err(GenerateError::Skipped);
-    };
+    let (input, test_name) =
+        if let Some(test_name) = filename(&test_file).strip_suffix(".procgen.kdl") {
+            let ty_def = read_file_to_string(&test_file)?;
+            let input = crate::procgen::procgen_test_for_ty_string(test_name, Some(&ty_def));
+            (input, test_name)
+        } else if let Some(test_name) = filename(&test_file).strip_suffix(".kdl") {
+            let input = read_file_to_string(&test_file)?;
+            (input, test_name)
+        } else {
+            return Err(GenerateError::Skipped);
+        };
     let mut compiler = kdl_script::Compiler::new();
     let types = compiler.compile_string(&test_file.to_string_lossy(), input)?;
     let vals = Arc::new(ValueTree::new(&types, value_generator));

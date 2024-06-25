@@ -212,7 +212,7 @@ impl AbiImpl for RustcAbiImpl {
         if let Some(codegen_backend) = &self.codegen_backend {
             cmd.arg(format!("-Zcodegen-backend={codegen_backend}"));
         }
-        eprintln!("running: {:?}", cmd);
+        debug!("running: {:?}", cmd);
         let out = cmd.output()?;
 
         if !out.status.success() {

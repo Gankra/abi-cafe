@@ -3,6 +3,7 @@ mod cli;
 mod error;
 mod fivemat;
 mod harness;
+mod log;
 
 mod procgen;
 mod report;
@@ -16,6 +17,7 @@ use std::error::Error;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tokio::sync::OnceCell;
+use tracing::{debug, info, warn};
 use vals::ValueGeneratorKind;
 
 pub type SortedMap<K, V> = std::collections::BTreeMap<K, V>;
@@ -147,6 +149,7 @@ impl TestHarness {
     }
 
     /// Generate, Compile, Link, Load, and Run this test.
+    #[tracing::instrument(name = "test", skip_all, fields(id = self.base_id(&test_key, None, "::")))]
     pub async fn do_test(
         &self,
         test_key: TestKey,
@@ -165,7 +168,7 @@ impl TestHarness {
         let source = match run_results.source.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to generate source: {}", e);
+                warn!("Failed to generate source: {}", e);
                 return run_results;
             }
         };
@@ -178,7 +181,7 @@ impl TestHarness {
         let build = match run_results.build.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to build test: {}", e);
+                warn!("Failed to build test: {}", e);
                 return run_results;
             }
         };
@@ -191,7 +194,7 @@ impl TestHarness {
         let link = match run_results.link.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to link test: {}", e);
+                warn!("Failed to link test: {}", e);
                 return run_results;
             }
         };
@@ -204,7 +207,7 @@ impl TestHarness {
         let run = match run_results.run.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to run test: {}", e);
+                warn!("Failed to run test: {}", e);
                 return run_results;
             }
         };
@@ -220,12 +223,8 @@ impl TestHarness {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    eprintln!("starting!");
     let cfg = cli::make_app();
-    eprintln!("parsed cli!");
-    // Before doing anything, regenerate the procgen tests, if needed.
-    // procgen::procgen_tests(cfg.procgen_tests);
-    eprintln!("generated tests!");
+    debug!("parsed cli!");
     let out_dir = init_dirs()?;
 
     let mut harness = TestHarness::new();
@@ -258,12 +257,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             abis::RustcAbiImpl::new(&cfg, Some(path.to_owned())),
         );
     }
-    eprintln!("configured ABIs!");
+    debug!("configured ABIs!");
 
     // Grab all the tests
     let tests = read_tests(cfg.val_generator)?;
     harness.set_tests(tests);
-    eprintln!("got tests!");
+    debug!("loaded tests!");
     let harness = Arc::new(harness);
     // Run the tests
     use TestConclusion::*;
@@ -318,13 +317,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 out_dir.clone(),
                             );
 
-                            // FIXME: we can make everything parallel by immediately returning
-                            // and making the following code happen in subsequent pass. For now
-                            // let's stay single-threaded to do things one step at a time.
-                            // Some((test_key, rules, task))
-
-                            let results = rt.block_on(task).expect("failed to join task");
-                            Some(report_test(test_key, rules, results))
+                            Some((test_key, rules, task))
                         })
                         .collect()
                 })
@@ -333,7 +326,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Vec<_>>();
 
     // Join on all the tasks, and compute their results
-    let reports = tasks.into_iter().map(|report| report).collect::<Vec<_>>();
+    let reports = tasks
+        .into_iter()
+        .map(|(test_key, rules, task)| {
+            let results = rt.block_on(task).expect("failed to join task");
+            report_test(test_key, rules, results)
+        })
+        .collect::<Vec<_>>();
 
     // Compute the final report
     let mut num_tests = 0;
@@ -384,7 +383,7 @@ fn do_thing(
     out_dir: &Utf8Path,
     reports: &FullReport,
 ) {
-    eprintln!("rerunning failures");
+    info!("rerunning failures");
     for report in &reports.tests {
         let Some(check) = report.results.check.as_ref() else {
             continue;
@@ -431,14 +430,14 @@ fn do_thing(
             test_key.options.functions = functions;
             test_key.options.val_writer = WriteImpl::Print;
             let rules = report.rules.clone();
-            eprintln!("rerunning {}", harness.base_id(&test_key, None, "::"));
+            debug!("rerunning {}", harness.base_id(&test_key, None, "::"));
             let task = harness
                 .clone()
                 .spawn_test(rt, rules, test_key, out_dir.to_owned());
             let results = rt.block_on(task).expect("failed to join task");
             let source = results.source.unwrap().unwrap();
-            eprintln!("  caller: {}", source.caller_src);
-            eprintln!("  callee: {}", source.callee_src);
+            debug!("  caller: {}", source.caller_src);
+            debug!("  callee: {}", source.callee_src);
         }
     }
 }

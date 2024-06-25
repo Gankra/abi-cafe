@@ -2,6 +2,7 @@
 //! compiled tests.
 
 use serde::Serialize;
+use tracing::info;
 
 use crate::error::*;
 use crate::report::*;
@@ -138,7 +139,7 @@ pub unsafe extern "C" fn finished_func(output1: &mut WriteBuffer, output2: &mut 
 /// Run the test!
 ///
 /// See the README for a high-level description of this design.
-fn run_dynamic_test(test_dylib: &LinkOutput, full_test_name: &str) -> Result<RunOutput, RunError> {
+fn run_dynamic_test(test_dylib: &LinkOutput, _full_test_name: &str) -> Result<RunOutput, RunError> {
     // Initialize all the buffers the tests will write to
     let mut caller_inputs = WriteBuffer::new();
     let mut caller_outputs = WriteBuffer::new();
@@ -146,12 +147,12 @@ fn run_dynamic_test(test_dylib: &LinkOutput, full_test_name: &str) -> Result<Run
     let mut callee_outputs = WriteBuffer::new();
 
     unsafe {
+        info!("running     {}", test_dylib.test_bin.file_name().unwrap());
         // Load the dylib of the test, and get its test_start symbol
-        eprintln!("loading: {}", &test_dylib.test_bin);
+        debug!("loading     {}", &test_dylib.test_bin);
         let lib = libloading::Library::new(&test_dylib.test_bin)?;
         let do_test: libloading::Symbol<TestInit> = lib.get(b"test_start")?;
-        eprintln!("running    {full_test_name}");
-
+        debug!("calling harness dynamic function");
         // Actually run the test!
         do_test(
             write_field,

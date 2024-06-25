@@ -1,7 +1,7 @@
 use crate::{abis::*, Config, OutputFormat};
 use clap::Parser;
-use log::LevelFilter;
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use tracing::warn;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use vals::ValueGeneratorKind;
 
 #[derive(Parser)]
@@ -76,25 +76,38 @@ pub fn make_app() -> Config {
 
     for (name, _path) in &rustc_codegen_backends {
         if !run_pairs.iter().any(|(a, b)| a == name || b == name) {
-            eprintln!("Warning: Rustc codegen backend `{name}` is not tested.");
-            eprintln!(
-                "Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`."
+            warn!(
+                "Rustc codegen backend `{name}` is not tested.
+Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
+"
             );
-            eprintln!();
         }
     }
 
     let value_generator = ValueGeneratorKind::Graffiti;
 
     let output_format = config.output_format;
-    TermLogger::init(
-        LevelFilter::Info,
-        simplelog::Config::default(),
-        TerminalMode::Mixed,
-        ColorChoice::Auto,
-    )
-    .expect("failed to initialize logger");
 
+    /*
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .without_time()
+        .with_target(false)
+        .with_writer(std::io::stderr);
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        // .with(forest_layer)
+        .with(fmt_layer)
+        .init();
+     */
+    let filter_layer = EnvFilter::try_from_default_env()
+        .or_else(|_| EnvFilter::try_new("info"))
+        .unwrap();
+
+    let logger = crate::log::MapLogger::new();
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(logger.clone())
+        .init();
     Config {
         output_format,
         procgen_tests,

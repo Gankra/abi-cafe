@@ -1,6 +1,7 @@
+/*
 use std::io::Write;
 use std::path::PathBuf;
-/*
+
 const PROCGEN_ROOT: &str = "tests/procgen";
 
 /// For tests that are too tedious to even hand-write the .ron file,
@@ -45,10 +46,7 @@ pub fn procgen_test_for_ty_file(
 }
 */
 
-pub fn procgen_test_for_ty_string(
-    ty_name: &str,
-    ty_def: Option<&str>,
-) -> String {
+pub fn procgen_test_for_ty_string(ty_name: &str, ty_def: Option<&str>) -> String {
     let mut test_body = String::new();
     procgen_test_for_ty_impl(&mut test_body, ty_name, ty_def).unwrap();
     test_body
@@ -119,12 +117,7 @@ fn add_structs(out: &mut dyn std::fmt::Write, ty: &str) -> std::fmt::Result {
         // Check that by-val works
         add_func(out, &format!("struct_in_{len}"), &[&struct_ty], &[])?;
         // Check that by-ref works, for good measure
-        add_func(
-            out,
-            &format!("ref_struct_in_{len}"),
-            &[&struct_ty_ref],
-            &[],
-        )?;
+        add_func(out, &format!("ref_struct_in_{len}"), &[&struct_ty_ref], &[])?;
     }
     Ok(())
 }

@@ -1,4 +1,6 @@
+use console::Style;
 use kdl_script::types::Ty;
+use tracing::{error, info};
 use vals::ArgValuesIter;
 
 use crate::error::*;
@@ -151,24 +153,25 @@ impl TestHarness {
         let num_passed = results.iter().filter(|r| r.is_ok()).count();
         let all_passed = num_passed == results.len();
 
-        for (subtest_name, result) in names.iter().zip(&results) {
-            match result {
-                Ok(()) => {
-                    eprintln!("Test {subtest_name:width$} passed", width = max_name_len);
-                }
-                Err(e) => {
-                    eprintln!("Test {subtest_name:width$} failed!", width = max_name_len);
-                    eprintln!("{}", e);
+        if !all_passed {
+            for (subtest_name, result) in names.iter().zip(&results) {
+                match result {
+                    Ok(()) => {
+                        info!("Test {subtest_name:width$} passed", width = max_name_len);
+                    }
+                    Err(e) => {
+                        info!("Test {subtest_name:width$} failed!", width = max_name_len);
+                        info!("{}", e);
+                    }
                 }
             }
         }
 
         if all_passed {
-            eprintln!("all tests passed");
+            info!("{}", Style::new().green().apply_to("all tests passed"));
         } else {
-            eprintln!("only {}/{} tests passed!", num_passed, results.len());
+            error!("only {}/{} tests passed!", num_passed, results.len());
         }
-        eprintln!();
 
         CheckOutput {
             all_passed,

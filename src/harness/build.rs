@@ -4,6 +4,7 @@ use std::process::Command;
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use tracing::info;
 
 use crate::error::*;
 use crate::report::*;
@@ -51,7 +52,7 @@ impl TestHarness {
         // Either acquire the cached result, or make it
         let real_lib_name = once
             .get_or_try_init(|| {
-                eprintln!("compiling  {lib_name}");
+                info!("compiling   {lib_name}");
                 build_static_lib(src_path, abi_impl, call_side, out_dir, &lib_name)
             })
             .await?
@@ -65,9 +66,8 @@ impl TestHarness {
         build: &BuildOutput,
         out_dir: &Utf8Path,
     ) -> Result<LinkOutput, LinkError> {
-        let full_test_name = self.full_test_name(key);
         let dynamic_lib_name = self.dynamic_lib_name(key);
-        eprintln!("linking  {full_test_name}");
+        info!("linking     {dynamic_lib_name}");
         link_dynamic_lib(build, out_dir, &dynamic_lib_name)
     }
 
@@ -140,7 +140,7 @@ fn link_dynamic_lib(
         .arg(&output)
         .arg(&src);
 
-    eprintln!("running: {:?}", cmd);
+    debug!("running: {:?}", cmd);
     let out = cmd.output()?;
 
     if !out.status.success() {

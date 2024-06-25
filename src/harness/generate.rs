@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
+use tracing::info;
 
 use crate::abis::*;
 use crate::error::*;
@@ -47,7 +48,7 @@ impl TestHarness {
             .get_or_try_init(|| {
                 let abi_impl = self.abi_by_test_key(key, call_side);
                 let options = key.options.clone();
-                eprintln!("generating  {}", &src_path);
+                info!("generating  {}", &src_path);
                 generate_src(&src_path, abi_impl, test_with_abi, call_side, options)
             })
             .await?;

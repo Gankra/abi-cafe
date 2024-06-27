@@ -90,17 +90,6 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
 
     let output_format = config.output_format;
 
-    /*
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .without_time()
-        .with_target(false)
-        .with_writer(std::io::stderr);
-    tracing_subscriber::registry()
-        .with(filter_layer)
-        // .with(forest_layer)
-        .with(fmt_layer)
-        .init();
-     */
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))
         .unwrap();

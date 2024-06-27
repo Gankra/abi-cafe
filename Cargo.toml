@@ -1,3 +1,6 @@
+[workspace]
+members = ["kdl-script"]
+
 [package]
 name = "abi-cafe"
 description = "Pair your compilers up at The ABI café!"
@@ -17,7 +20,7 @@ cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
 clap = { version = "4.5.4", features = ["cargo", "wrap_help"] }
 console = "0.15.8"
 kdl = "4.6.0"
-kdl-script = "0.3.0"
+kdl-script = { version = "0.3.0", path = "kdl-script" }
 libloading = "0.7.3"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }
 miette = { version = "5.3.0", features = ["fancy"] }

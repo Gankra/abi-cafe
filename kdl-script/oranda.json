@@ -1,0 +1,19 @@
+{
+    "$schema": "https://github.com/axodotdev/oranda/releases/latest/download/oranda-config-schema.json",
+    "styles": {
+        "theme": "axolight"
+    },
+    "build": {
+        "path_prefix": "kdl-script"
+    },
+    "components": {
+        "source": "axodotdev",
+        "artifacts": {
+            "package_managers": {
+                "preferred": {
+                    "cargo": "cargo install kdl-script"
+                }
+            }
+        }
+    }
+}

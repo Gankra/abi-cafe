@@ -1,0 +1,43 @@
+[package]
+name = "kdl-script"
+version = "0.3.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "execute kdl documents!"
+repository = "https://github.com/Gankra/kdl-script"
+exclude = [
+  "book/*",
+  "src/snapshots/*",
+  "src/tests/",
+  "tests/",
+  "examples/",
+]
+
+[[bin]]
+name = "kdl-script"
+required-features = ["cli"]
+
+[features]
+default = ["cli"]
+# CLI interface for the binary
+cli = ["eval", "clap", "tracing-subscriber", "miette/fancy", "serde_json"]
+# The code for evaluating a compiled program (not needed for abi-cafe)
+eval = []
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.1.8", features = ["derive"], optional = true }
+kdl = "4.5.0"
+linked-hash-map = "0.5.6"
+miette = { version = "5.10.0" }
+nom = "7.1.3"
+petgraph = "0.6.4"
+serde = { version = "1.0.154", features = ["derive"] }
+serde_json = { version = "1.0.108", optional = true }
+thiserror = "1.0.39"
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.16", optional = true }
+
+[dev-dependencies]
+insta = "1.34.0"

@@ -40,7 +40,9 @@
 //! get more complex! Also it's just nice to handle backend-agnostic issues once to keep
 //! things simple and correct.
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use miette::{Diagnostic, NamedSource, SourceSpan};
@@ -120,6 +122,23 @@ pub enum Ty {
     Ref(RefTy),
     /// Empty tuple -- `()`
     Empty,
+}
+
+impl Ty {
+    pub fn is_nominal(&self) -> bool {
+        match self {
+            Ty::Primitive(_) => false,
+            Ty::Struct(_) => true,
+            Ty::Union(_) => true,
+            Ty::Enum(_) => true,
+            Ty::Tagged(_) => true,
+            Ty::Alias(_) => true,
+            Ty::Pun(_) => true,
+            Ty::Array(_) => false,
+            Ty::Ref(_) => false,
+            Ty::Empty => false,
+        }
+    }
 }
 
 /// A function
@@ -368,6 +387,8 @@ pub(crate) struct TyCtx {
     /// go in and out of scope.
     ty_map: HashMap<Ty, TyIdx>,
 
+    ty_facts: HashMap<TyIdx, TypeFact>,
+
     /// Scoped type info, reflecting the fact that struct definitions
     /// and variables come in and out of scope.
     ///
@@ -377,6 +398,11 @@ pub(crate) struct TyCtx {
     /// If nothing is found, that type name / variable name is undefined
     /// at this point in the program.
     envs: Vec<CheckEnv>,
+}
+
+#[derive(Debug, Clone)]
+struct TypeFact {
+    contains_ref: bool,
 }
 
 /// Information about types for a specific scope.
@@ -392,6 +418,7 @@ pub fn typeck(comp: &mut Compiler, parsed: &ParsedProgram) -> Result<TypedProgra
         src: comp.source.clone().unwrap(),
         tys: vec![],
         ty_map: HashMap::new(),
+        ty_facts: HashMap::new(),
         envs: vec![],
     };
 
@@ -450,6 +477,9 @@ pub fn typeck(comp: &mut Compiler, parsed: &ParsedProgram) -> Result<TypedProgra
             })
         })
         .collect::<Result<Vec<_>>>()?;
+
+    // Now that everything's added, compute some facts
+    tcx.compute_ty_facts()?;
 
     let builtin_funcs_start = parsed.builtin_funcs_start;
     Ok(TypedProgram {
@@ -740,6 +770,141 @@ impl TyCtx {
         })?
     }
 
+    fn compute_ty_facts(&mut self) -> Result<()> {
+        let mut to_compute = (0..self.tys.len()).collect::<Vec<TyIdx>>();
+        let mut already_visited = HashSet::new();
+
+        fn aggregate_facts(
+            this: &mut TyCtx,
+            to_compute: &mut Vec<TyIdx>,
+            already_visited: &mut HashSet<TyIdx>,
+            cur_ty: TyIdx,
+            child_tys: Vec<TyIdx>,
+        ) -> Result<Option<TypeFact>> {
+            let mut facts = TypeFact {
+                contains_ref: false,
+            };
+            let mut missing_info = vec![];
+            for child_ty in child_tys {
+                let Some(child_fact) = this.ty_facts.get(&child_ty) else {
+                    missing_info.push(child_ty);
+                    continue;
+                };
+                let TypeFact { contains_ref } = child_fact;
+                facts.contains_ref |= contains_ref;
+            }
+
+            // If everything resolved, great, we're done
+            if missing_info.is_empty() {
+                return Ok(Some(facts));
+            }
+
+            // Otherwise, restack ourself and the missing children, hopefully by the time
+            // the children resolve we'll have a definite answer.
+            //
+            // However if we *already* restacked ourselves, at this point assume there's
+            // an infinite type without the proper indirection of a reference!
+            if already_visited.contains(&cur_ty) {
+                return Err(KdlScriptTypeError {
+                    message: format!("This type is infinitely recursive without an indirection!"),
+                    src: this.src.clone(),
+                    span: this.span_for_ty_decl(cur_ty),
+                    help: Some("Add a reference (&) somewhere".to_owned()),
+                })?;
+            }
+            already_visited.insert(cur_ty);
+            to_compute.push(cur_ty);
+            to_compute.extend(missing_info);
+
+            Ok(None)
+        }
+
+        while let Some(ty_idx) = to_compute.pop() {
+            let facts = match self.realize_ty(ty_idx) {
+                Ty::Primitive(_) => Some(TypeFact {
+                    contains_ref: false,
+                }),
+                Ty::Empty => Some(TypeFact {
+                    contains_ref: false,
+                }),
+                Ty::Enum(_) => Some(TypeFact {
+                    contains_ref: false,
+                }),
+                Ty::Ref(_) => Some(TypeFact { contains_ref: true }),
+
+                Ty::Alias(ty) => {
+                    let child_tys = vec![ty.real];
+                    aggregate_facts(
+                        self,
+                        &mut to_compute,
+                        &mut already_visited,
+                        ty_idx,
+                        child_tys,
+                    )?
+                }
+                Ty::Array(ty) => {
+                    let child_tys = vec![ty.elem_ty];
+                    aggregate_facts(
+                        self,
+                        &mut to_compute,
+                        &mut already_visited,
+                        ty_idx,
+                        child_tys,
+                    )?
+                }
+                Ty::Struct(ty) => {
+                    let child_tys = ty.fields.iter().map(|f| f.ty).collect();
+                    aggregate_facts(
+                        self,
+                        &mut to_compute,
+                        &mut already_visited,
+                        ty_idx,
+                        child_tys,
+                    )?
+                }
+                Ty::Union(ty) => {
+                    let child_tys = ty.fields.iter().map(|f| f.ty).collect();
+                    aggregate_facts(
+                        self,
+                        &mut to_compute,
+                        &mut already_visited,
+                        ty_idx,
+                        child_tys,
+                    )?
+                }
+                Ty::Tagged(ty) => {
+                    let child_tys = ty
+                        .variants
+                        .iter()
+                        .flat_map(|v| v.fields.as_deref().unwrap_or_default().iter().map(|f| f.ty))
+                        .collect();
+                    aggregate_facts(
+                        self,
+                        &mut to_compute,
+                        &mut already_visited,
+                        ty_idx,
+                        child_tys,
+                    )?
+                }
+                Ty::Pun(ty) => {
+                    let child_tys = ty.blocks.iter().map(|f| f.real).collect();
+                    aggregate_facts(
+                        self,
+                        &mut to_compute,
+                        &mut already_visited,
+                        ty_idx,
+                        child_tys,
+                    )?
+                }
+            };
+
+            if let Some(facts) = facts {
+                self.ty_facts.insert(ty_idx, facts);
+            }
+        }
+        Ok(())
+    }
+
     /*
     pub fn pointee_ty(&self, ty: TyIdx) -> TyIdx {
         if let Ty::TypedPtr(pointee) = self.realize_ty(ty) {
@@ -749,7 +914,20 @@ impl TyCtx {
         }
     }
      */
-
+    pub fn span_for_ty_decl(&self, ty: TyIdx) -> SourceSpan {
+        match self.realize_ty(ty) {
+            Ty::Primitive(_) => SourceSpan::from(1..1),
+            Ty::Empty => SourceSpan::from(1..1),
+            Ty::Struct(ty) => Spanned::span(&ty.name),
+            Ty::Union(ty) => Spanned::span(&ty.name),
+            Ty::Enum(ty) => Spanned::span(&ty.name),
+            Ty::Tagged(ty) => Spanned::span(&ty.name),
+            Ty::Alias(ty) => Spanned::span(&ty.name),
+            Ty::Pun(ty) => Spanned::span(&ty.name),
+            Ty::Array(ty) => self.span_for_ty_decl(ty.elem_ty),
+            Ty::Ref(ty) => self.span_for_ty_decl(ty.pointee_ty),
+        }
+    }
     /// Stringify a type.
     pub fn format_ty(&self, ty: TyIdx) -> String {
         match self.realize_ty(ty) {
@@ -800,6 +978,10 @@ impl TypedProgram {
     /// Get the Func for this FuncIdx
     pub fn realize_func(&self, func: FuncIdx) -> &Func {
         &self.funcs[func]
+    }
+
+    pub fn ty_contains_ref(&self, ty: TyIdx) -> bool {
+        self.tcx.ty_facts[&ty].contains_ref
     }
 
     pub fn all_funcs(&self) -> impl Iterator<Item = FuncIdx> {
@@ -909,7 +1091,29 @@ impl TypedProgram {
 
         // Now compute the Strongly Connected Components!
         // See the comment in `DefinitionGraph::definitions` for details on what this is!
-        let def_order = petgraph::algo::kosaraju_scc(&graph);
+        let mut def_order = petgraph::algo::kosaraju_scc(&graph);
+
+        // Further refine the SCC order!
+        //
+        // We need all the nominal types to come first.
+        // This is because the *name* `&MyType` still contains `MyType`,
+        // so starting the forward declares with it would still refer to an
+        // undeclared type. Thankfully no such issue exists for starting with
+        // `MyType`, and all cycles always involve a nominal type!
+        for component in &mut def_order {
+            let mut sorted_nodes = std::mem::take(component);
+            sorted_nodes.sort_by(|&lhs, &rhs| match (&graph[lhs], &graph[rhs]) {
+                (DefinitionGraphNode::Func(l), DefinitionGraphNode::Func(r)) => l.cmp(r),
+                (DefinitionGraphNode::Func(_), DefinitionGraphNode::Ty(_)) => Ordering::Less,
+                (DefinitionGraphNode::Ty(_), DefinitionGraphNode::Func(_)) => Ordering::Greater,
+                (DefinitionGraphNode::Ty(l), DefinitionGraphNode::Ty(r)) => {
+                    let lty = self.realize_ty(*l);
+                    let rty = self.realize_ty(*r);
+                    rty.is_nominal().cmp(&lty.is_nominal()).then(l.cmp(&r))
+                }
+            });
+            *component = sorted_nodes;
+        }
 
         Ok(DefinitionGraph {
             graph,
@@ -1007,9 +1211,9 @@ impl DefinitionGraph {
             // Get all the nodes in this SCC, and filter out the ones not reachable from
             // the functions we want to emit. (Filtering lets us emit minimal examples for
             // test failures so it's easy to reproduce/report!)
-            let nodes = component.iter().filter(|n| reachable.contains(*n));
+            let nodes = component.iter().rev().filter(|n| reachable.contains(*n));
 
-            // Emit forward decls for everything but the first node
+            // Emit forward decls for everything but the first (last) node
             // Note that this cutely does The Right thing (no forward decl)
             // for the "happy" case of an SCC of one node (proper DAG).
             for &node_idx in nodes.clone().skip(1) {

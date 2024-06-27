@@ -1,6 +1,6 @@
 # kdl-script
 
-[![crates.io](https://img.shields.io/crates/v/kdl-script.svg)](https://crates.io/crates/kdl-script) [![docs](https://docs.rs/kdl-script/badge.svg)](https://docs.rs/kdl-script) ![Rust CI](https://github.com/Gankra/kdl-script/workflows/Rust%20CI/badge.svg?branch=main)
+[![crates.io](https://img.shields.io/crates/v/kdl-script.svg)](https://crates.io/crates/kdl-script) [![docs](https://docs.rs/kdl-script/badge.svg)](https://docs.rs/kdl-script) ![Rust CI](https://github.com/Gankra/abi-cafe/workflows/Rust%20CI/badge.svg?branch=main)
 
 
 A Compiler for KDLScript, the [KDL][]-based programming language!
@@ -10,16 +10,18 @@ type/function definitions in a language-agnostic way to avoid getting muddled
 in the details of each language when trying to talk about All Languages In Reality.
 It exists to be used by [abi-cafe][].
 
+Basically, KDLScript is a header format we can make as weird as we want for our own usecase.
+
 Ultimately the syntax and concepts are heavily borrowed from Rust, for a few reasons:
 
 * The author is very comfortable with Rust
-* This (and [abi-cafe][]) were originally created to find bugs in rustc 
+* This (and [abi-cafe][]) were originally created to find bugs in rustc
 * Rust is genuinely just a solid language for expressing ABIs! (Better than C/C++)
 
 The ultimate goal of this is to test that languages can properly communicate over
 FFI by declaring the types/interface once and generating the Rust/C/C++/... versions
 of the program (both caller and callee) and then linking them into various combinations
-like "Rust Calls C++" to check that the values are passed correctly. 
+like "Rust Calls C++" to check that the values are passed correctly.
 
 Since C is the lingua-franca of FFI, it's assumed that when lowering definitions
 to the target language that they should be the "C Compatible" equivalent. For instance,
@@ -29,22 +31,22 @@ In Rust this means all type definitions are implicitly `#[repr(C)]` (ideally sho
 opt-outable). Most details about the function are left abstract so that [abi-cafe][]
 can choose how to fill those in.
 
-"C Compatible" gets fuzzier for some things like tagged unions. 
+"C Compatible" gets fuzzier for some things like tagged unions.
 Just uh... don't worry about it (see "Concepts" below for details).
 
 
 
 
-# Usage
+# CLI Usage
 
-kdl-script is both a library and a CLI application.
+kdl-script is both a library and a CLI application. The CLI is just for funsies.
 
 The main entry point to the library is [`Compiler::compile_path`][] or [`Compiler::compile_string`][],
 which will produce a [`TypedProgram`][]. See the [`types`][] module docs for how to use that.
 
 The CLI application can be invoked as `kdl-script path/to/program.kdl` to run a KDLScript program.
 
-TODO: Write some examples! (See the `examples` dir for some.)
+FIXME: Write some examples! (See the `examples` dir for some.)
 
 
 
@@ -56,6 +58,28 @@ A KdlScript program is a single file that has types, functions, and attributes (
 ## Types
 
 The following kinds of types exist in KDLScript.
+
+* nominal types
+    * `struct` - a plain ol' struct
+    * `enum` - a c-style enum
+    * `union` - an untagged union
+    * `tagged` - a tagged union (rust-style enum)
+    * `alias` - a transparent type alias
+    * `pun` - a pun across the FFI boundary, "CSS for ifdefs"
+* structural types
+    * `[T;N]` - an array of T, length N
+    * `&T` - a (mutable) reference to T (the pointee is regarded as the value)
+* builtin primitives
+    * integers (`i8`, `u128`, ...)
+    * floats (`f16`, `f32`, `f64`, `f128`, ...)
+    * `bool`- your old pal the boolean (TriBool support TBD)
+    * `ptr` - an opaque pointer (`void*`), used when you're interested in the value of the pointer and not its pointee (unlike `&T`)
+    * `()` - empty tuple
+
+All of these types can be combined together as you expect, and self-referential
+types
+
+Note that we do not currently support generics
 
 ### Nominal Types
 
@@ -164,13 +188,13 @@ See Pun Types for additional notes on how aliases interact with typeids!
 #### Tagged Types
 
 Tagged is the equivalent of Rust's `enum`, a tagged union where variants have fields, which has no "obvious" C/C++ analog.
-Variant bodies may either be missing (indicating no payload) or have the syntax of a `struct` body. 
+Variant bodies may either be missing (indicating no payload) or have the syntax of a `struct` body.
 
 ```kdl
 tagged "MyOptionU32" {
     None
     Some { _ "u32"; }
-    FileNotFound { 
+    FileNotFound {
         path "[u8; 100]"
         error_code "i64"
     }
@@ -201,7 +225,7 @@ Here is an example that claims that a Rust `repr(transparent)` newtype of a `u32
 
 ```kdl
 pun "MetersU32" {
-    lang "rust" {        
+    lang "rust" {
         @ "#[repr(transparent)]"
         struct "MetersU32" {
             a "u32"
@@ -247,8 +271,8 @@ TODO: figure out how to talk about "language-native types" in much the same way 
 
 A KDLScript user is allowed to use the following kinds of structural types
 
-* `&T` - a transparent reference to T 
-* `[T; N]` - a fixed-length array of T (length N) 
+* `&T` - a transparent reference to T
+* `[T; N]` - a fixed-length array of T (length N)
 * `()` - the empty tuple (I just like adding this cuz it's cute!!!)
 
 TODO: figure out if we want to bake in Rust's `Option` type here, if only for `Option<&T>`.
@@ -318,6 +342,7 @@ There are various builtin primitives, such as:
 * floats (f16, f32, f64, f128, ...)
 * `bool`- your old pal the boolean (TriBool support TBD)
 * `ptr` - an opaque pointer (`void*`), used when you're interested in the value of the pointer and not its pointee (unlike `&T`)
+* `()` - empty tuple
 
 In the future there will probably be language-specific primitives like `c_long`.
 
@@ -384,7 +409,7 @@ fn my_func_caller() {
 
     // Setup outparams
     let mut out1 = ErrorCode::default();
-    
+
     // Do the call
     let out0 = my_func(x, y, &arg2, &mut out1);
 
@@ -476,7 +501,7 @@ fn "main" {
         x 10.0
         y 20.0
     }
-    
+
     let "sum" "add:" "pt1" "pt2"
     print "sum"
 

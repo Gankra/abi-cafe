@@ -11,11 +11,12 @@ This tool helps automate testing that two languages/compilers agree on ABIs for 
 The principle of the tool is as follows:
 
 * Define a function signature that one impl should call the other with
-* Generate (or handwrite) both impls' versions (of both sides) of the interface
+* Generate both impls' versions (of both sides) of the interface
 * Have each side report what it thinks the values are with global callbacks
 * Compile both sides as static libs, and link into a dynamic lib harness
 * Load that dynamic lib in, pass in the callbacks, and run it
 * Check that both sides reported the same values
+* Generate minimized/simplified versions of any found failures
 
 By running this natively on whatever platform you care about, this will tell you what FFI interfaces do and don't currently work. Ideally all you need to do is `cargo run`, but we're dealing with native toolchains so, expect toolchain bugs!
 
@@ -60,7 +61,7 @@ In theory other implementations aren't *too bad* to add. You just need to:
     * Specify how to generate a callee from a signature
     * Specify how to compile a source file to a static lib
 * Register it in the `abi_impls` map in `fn main`
-* (Optional) Register what you want it paired with by default in `DEFAULT_TEST_PAIRS` 
+* (Optional) Register what you want it paired with by default in `DEFAULT_TEST_PAIRS`
     * i.e. (ABI_IMPL_YOU, ABI_IMPL_CC) will have the harness test you calling into C
 
 See the Test Harness section below for details on how to use it.
@@ -74,8 +75,7 @@ We try to generate and test all supported conventions.
 
 Universal Conventions:
 
-* handwritten: run handwritten code (opaque to the framework, lets you do whatever)
-* c: the platform's default C convention (extern "C")
+* c: the platform's default C convention (`extern "C"`)
 
 Windows Conventions:
 
@@ -96,12 +96,19 @@ The test format support for the following types/concepts:
 * float/double
 * bool
 * structs
+* c-like enums
+* c-like untagged unions
+* rust-like tagged unions
 * opaque pointers (void\*)
 * pass-by-ref (still checks the pointee's layout, and not the address)
 * arrays (including multi-dimensional arrays, although C often requires arrays to be wrapped in pass-by-ref)
 
 
 # Adding Tests
+
+There are two kinds of tests: `.kdl` and `.procgen.kdl`
+
+The latter is sugar for the former, where you just define a type with the same name of the file (so `MetersU32.procgen.kdl` is expected to define a type named `MetersU32`), and we generate a battery of types/functions that stress it out.
 
 Tests are specified as [ron](https://github.com/ron-rs/ron) files in the test/ directory, because it's more compact than JSON, has comments, and is more reliable with large integers. Because C is in some sense the "lingua franca" of FFI that everyone has to deal with, we prefer using C types in these definitions.
 
@@ -114,7 +121,7 @@ Example:
 ```rust
 Test(
     // name of this set of tests
-    name: "examples",  
+    name: "examples",
     // generate tests for the following function signatures
     funcs: [
         (
@@ -139,11 +146,11 @@ Test(
                // Struct decls are implicit in usage.
                // All structs with the same name must match!
                Struct("MyStruct", [
-                  Int(c_uint8_t(0xf1)), 
+                  Int(c_uint8_t(0xf1)),
                   Float(c_double(1234.23)),
-               ]), 
+               ]),
                Struct("MyStruct", [
-                  Int(c_uint8_t(0x1)), 
+                  Int(c_uint8_t(0x1)),
                   Float(c_double(0.23)),
                ]),
             ],
@@ -182,7 +189,7 @@ void do_test(void) {
     WRITE(CALLER_INPUTS, (char*)&arg0.field0, (uint32_t)sizeof(arg0.field0));
     WRITE(CALLER_INPUTS, (char*)&arg0.field1, (uint32_t)sizeof(arg0.field1));
     FINISHED_VAL(CALLER_INPUTS);
-    
+
     int32_t arg1 = 5;
     WRITE(CALLER_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLER_INPUTS);
@@ -206,7 +213,7 @@ uint64_t basic_val(struct MyStruct arg0, int32_t arg1) {
     WRITE(CALLEE_INPUTS, (char*)&arg0.field0, (uint32_t)sizeof(arg0.field0));
     WRITE(CALLEE_INPUTS, (char*)&arg0.field1, (uint32_t)sizeof(arg0.field1));
     FINISHED_VAL(CALLEE_INPUTS);
-    
+
     WRITE(CALLEE_INPUTS, (char*)&arg1, (uint32_t)sizeof(arg1));
     FINISHED_VAL(CALLEE_INPUTS);
 

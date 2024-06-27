@@ -1,42 +1,77 @@
-[workspace]
-members = ["kdl-script"]
-
 [package]
 name = "abi-cafe"
 description = "Pair your compilers up at The ABI café!"
-repository = "https://github.com/Gankra/abi-cafe"
-edition = "2021"
-license = "MIT OR Apache-2.0"
-version = "0.1.0"
-exclude = ["generated_impls/", "handwritten_impls/", "tests/"]
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+exclude = ["generated_impls/", "tests/"]
 
 [features]
 default = []
 
-
 [dependencies]
+kdl-script = { version = "0.3.0", path = "kdl-script" }
+
+camino.workspace = true
+cc.workspace = true
+clap.workspace = true
+console.workspace = true
+kdl.workspace = true
+libloading.workspace = true
+linked-hash-map.workspace = true
+miette.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+rand_pcg.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[build-dependencies]
+built.workspace = true
+
+
+
+[lints.clippy]
+result_large_err = "allow"
+
+
+
+[workspace]
+members = ["kdl-script"]
+
+[workspace.package]
+repository = "https://github.com/Gankra/abi-cafe"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+version = "0.3.0"
+
+[workspace.dependencies]
 camino = { version = "1.1.7", features = ["serde1"] }
 cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
-clap = { version = "4.5.4", features = ["cargo", "wrap_help"] }
+clap = { version = "4.5.4", features = ["cargo", "wrap_help", "derive"] }
 console = "0.15.8"
 kdl = "4.6.0"
-kdl-script = { version = "0.3.0", path = "kdl-script" }
 libloading = "0.7.3"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }
+nom = "7.1.3"
 miette = { version = "5.3.0", features = ["fancy"] }
+petgraph = "0.6.4"
 rand = "0.8.5"
 rand_core = "0.6.4"
 rand_pcg = "0.3.1"
-ron = "0.7.0"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.83"
 thiserror = "1.0.30"
 tokio = { version = "1.37.0", features = ["full", "tracing"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-
-[lints.clippy]
-result_large_err = "allow"
-
-[build-dependencies]
+# build
 built = "0.5.1"
+# dev
+insta = "1.34.0"

@@ -30,14 +30,16 @@ impl TestHarness {
         key: &TestKey,
         call_side: CallSide,
     ) -> Result<Utf8PathBuf, GenerateError> {
-        let test = self.tests[&key.test].clone();
+        let test = self
+            .test_with_vals(&key.test, key.options.val_generator)
+            .await?;
         let abi_id = key.abi_id(call_side).to_owned();
-        let test_with_abi = self.test_with_abi_impl(&test, abi_id).await?;
+        let test_with_abi = self.test_with_abi_impl(test, abi_id).await?;
         let src_path = self.src_path(key, call_side);
 
         // Briefly lock this map to insert/acquire a OnceCell and then release the lock
         let once = self
-            .sources
+            .generated_sources
             .lock()
             .unwrap()
             .entry(src_path.clone())
@@ -82,7 +84,7 @@ pub fn init_generate_dir() -> Result<(), GenerateError> {
 async fn generate_src(
     src_path: &Utf8Path,
     abi: Arc<dyn AbiImpl + Send + Sync>,
-    test_with_abi: Arc<TestForAbi>,
+    test_with_abi: Arc<TestWithAbi>,
     call_side: CallSide,
     options: TestOptions,
 ) -> Result<(), GenerateError> {

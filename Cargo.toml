@@ -9,8 +9,6 @@ exclude = ["generated_impls/", "handwritten_impls/", "tests/"]
 
 [features]
 default = []
-# Doesn't actually work yet...
-parallel = ["rayon"]
 
 
 [dependencies]
@@ -18,15 +16,14 @@ camino = { version = "1.1.7", features = ["serde1"] }
 cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
 clap = { version = "4.5.4", features = ["cargo", "wrap_help"] }
 console = "0.15.8"
-kdl = { git = "https://github.com/Gankra/kdl-rs", branch = "spanned" }
-kdl-script = { path = "../kdl-script" }
+kdl = "4.6.0"
+kdl-script = "0.3.0"
 libloading = "0.7.3"
 linked-hash-map = { version = "0.5.6", features = ["serde", "serde_impl"] }
 miette = { version = "5.3.0", features = ["fancy"] }
 rand = "0.8.5"
 rand_core = "0.6.4"
 rand_pcg = "0.3.1"
-rayon = { version = "1.5.3", optional = true }
 ron = "0.7.0"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.83"

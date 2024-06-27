@@ -426,7 +426,7 @@ impl RustcAbiImpl {
                     .iter()
                     .any(|field| state.borrowed_tynames.contains_key(&field.ty));
                 let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", struct_ty.name));
-                ((*struct_ty.name).clone(), borrowed_tyname)
+                (struct_ty.name.to_string(), borrowed_tyname)
             }
             Ty::Union(union_ty) => {
                 let has_borrows = union_ty
@@ -434,9 +434,9 @@ impl RustcAbiImpl {
                     .iter()
                     .any(|field| state.borrowed_tynames.contains_key(&field.ty));
                 let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", union_ty.name));
-                ((*union_ty.name).clone(), borrowed_tyname)
+                (union_ty.name.to_string(), borrowed_tyname)
             }
-            Ty::Enum(enum_ty) => ((*enum_ty.name).clone(), None),
+            Ty::Enum(enum_ty) => ((**enum_ty.name).clone(), None),
             Ty::Tagged(tagged_ty) => {
                 let has_borrows = tagged_ty.variants.iter().any(|v| {
                     v.fields
@@ -449,7 +449,7 @@ impl RustcAbiImpl {
                         .unwrap_or(false)
                 });
                 let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", tagged_ty.name));
-                ((*tagged_ty.name).clone(), borrowed_tyname)
+                (tagged_ty.name.to_string(), borrowed_tyname)
             }
             Ty::Alias(AliasTy { name, real, attrs }) => {
                 assert!(
@@ -460,7 +460,7 @@ impl RustcAbiImpl {
                     .borrowed_tynames
                     .get(real)
                     .map(|name| format!("{name}<'a>"));
-                ((**name).clone(), borrowed_tyname)
+                (name.to_string(), borrowed_tyname)
             }
 
             // Puns should be evaporated

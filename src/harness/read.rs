@@ -1,21 +1,24 @@
 use std::{
     fs::File,
     io::{BufReader, Read},
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
+use camino::{Utf8Path, Utf8PathBuf};
 use tracing::warn;
 
-use crate::{
-    error::*,
-    vals::{ValueGeneratorKind, ValueTree},
-    Test,
-};
+use crate::{error::*, SortedMap, Test, TestId};
 
-pub fn read_tests(value_generator: ValueGeneratorKind) -> Result<Vec<Test>, GenerateError> {
-    let mut tests = vec![];
-    let mut dirs = vec![PathBuf::from("tests")];
+#[derive(Debug, Clone)]
+pub enum TestFile {
+    Kdl(Utf8PathBuf),
+    KdlProcgen(Utf8PathBuf),
+}
+
+pub fn find_tests(start_dir: &Path) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
+    let mut tests = SortedMap::new();
+    let mut dirs = vec![start_dir.to_owned()];
     while let Some(dir) = dirs.pop() {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
@@ -26,54 +29,72 @@ pub fn read_tests(value_generator: ValueGeneratorKind) -> Result<Vec<Test>, Gene
                 continue;
             }
 
-            // Otherwise, assume it's a test and parse it
-            let test = match read_test_manifest(entry.path().to_owned(), value_generator) {
-                Ok(test) => test,
-                Err(e) => {
-                    warn!("test {:?}'s file couldn't be parsed {}", entry, e);
-                    continue;
-                }
+            let path = entry.path();
+            let test_file = Utf8PathBuf::from_path_buf(path).expect("non-utf8 test path");
+            let Some((name, test)) = classify_test(&test_file) else {
+                warn!("test isn't a known test format: {}", test_file);
+                continue;
             };
-            tests.push(test);
+            tests.insert(name, test);
         }
     }
-    tests.sort_by(|t1, t2| t1.name.cmp(&t2.name));
-    // FIXME: assert test names don't collide!
-
     Ok(tests)
 }
 
+pub fn spawn_read_test(
+    rt: &tokio::runtime::Runtime,
+    test: TestId,
+    test_file: TestFile,
+) -> tokio::task::JoinHandle<Result<Arc<Test>, GenerateError>> {
+    rt.spawn(async move { read_test(test, test_file).await })
+}
+
 /// Read a test .kdl file
-fn read_test_manifest(
-    test_file: PathBuf,
-    value_generator: ValueGeneratorKind,
-) -> Result<Test, GenerateError> {
-    let (input, test_name) =
-        if let Some(test_name) = filename(&test_file).strip_suffix(".procgen.kdl") {
-            let ty_def = read_file_to_string(&test_file)?;
-            let input = crate::procgen::procgen_test_for_ty_string(test_name, Some(&ty_def));
-            (input, test_name)
-        } else if let Some(test_name) = filename(&test_file).strip_suffix(".kdl") {
-            let input = read_file_to_string(&test_file)?;
-            (input, test_name)
-        } else {
-            return Err(GenerateError::Skipped);
-        };
-    let mut compiler = kdl_script::Compiler::new();
-    let types = compiler.compile_string(&test_file.to_string_lossy(), input)?;
-    let vals = Arc::new(ValueTree::new(&types, value_generator));
-    Ok(Test {
-        name: test_name.to_owned(),
-        types,
-        vals,
+async fn read_test(test: TestId, test_file: TestFile) -> Result<Arc<Test>, GenerateError> {
+    read_test_inner(&test, test_file).await.map_err(|e| {
+        warn!(
+            "failed to read and parse test {test}, skipping\n{:?}",
+            miette::Report::new(e)
+        );
+        GenerateError::Skipped
     })
 }
 
-fn filename(file: &Path) -> &str {
-    file.file_name().and_then(|s| s.to_str()).unwrap_or("")
+async fn read_test_inner(test: &TestId, test_file: TestFile) -> Result<Arc<Test>, GenerateError> {
+    let (test_file, input) = match test_file {
+        TestFile::KdlProcgen(test_file) => {
+            let ty_def = read_file_to_string(&test_file)?;
+            let input = crate::procgen::procgen_test_for_ty_string(&test, Some(&ty_def));
+            (test_file, input)
+        }
+        TestFile::Kdl(test_file) => {
+            let input = read_file_to_string(&test_file)?;
+            (test_file, input)
+        }
+    };
+    let mut compiler = kdl_script::Compiler::new();
+    let types = compiler.compile_string(test_file.as_str(), input)?;
+    Ok(Arc::new(Test {
+        name: test.to_owned(),
+        types,
+    }))
 }
 
-fn read_file_to_string(file: &Path) -> std::io::Result<String> {
+fn classify_test(test_file: &Utf8Path) -> Option<(String, TestFile)> {
+    let file_name = test_file.file_name().expect("test file had no name!?");
+    if let Some(test_name) = file_name.strip_suffix(".procgen.kdl") {
+        Some((
+            test_name.to_owned(),
+            TestFile::KdlProcgen(test_file.to_owned()),
+        ))
+    } else if let Some(test_name) = file_name.strip_suffix(".kdl") {
+        Some((test_name.to_owned(), TestFile::Kdl(test_file.to_owned())))
+    } else {
+        None
+    }
+}
+
+fn read_file_to_string(file: &Utf8Path) -> std::io::Result<String> {
     let file = File::open(file)?;
     let mut reader = BufReader::new(file);
     let mut input = String::new();

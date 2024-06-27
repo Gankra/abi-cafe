@@ -1,19 +1,16 @@
-#[derive(Debug, thiserror::Error)]
+use miette::Diagnostic;
+
+#[derive(Debug, thiserror::Error, Diagnostic)]
 #[allow(dead_code)]
 pub enum GenerateError {
     #[error("io error\n{0}")]
     Fmt(#[from] std::fmt::Error),
     #[error("io error\n{0}")]
     Io(#[from] std::io::Error),
-    #[error("parse error {0}\n{2}\n{}\n{:width$}^",
-        .1.lines().nth(.2.position.line.saturating_sub(1)).unwrap(),
-        "",
-        width=.2.position.col.saturating_sub(1),
-    )]
-    ParseError(String, String, ron::error::Error),
-    #[error("kdl parse error {}", .2)]
-    KdlParseError(String, String, kdl::KdlError),
-    #[error("kdl-script error {0}")]
+    #[error("kdl parse error")]
+    KdlParseError(String, String, #[source] kdl::KdlError),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
     KdlScriptError(#[from] kdl_script::KdlScriptError),
     #[error("Two structs had the name {name}, but different layout! \nExpected {old_decl} \nGot {new_decl}")]
     InconsistentStructDefinition {

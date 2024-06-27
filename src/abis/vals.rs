@@ -3,7 +3,7 @@ use rand::Rng;
 use rand_core::{RngCore, SeedableRng};
 use serde::Serialize;
 
-use crate::TestOptions;
+use crate::{CliParseError, TestOptions};
 
 type RngImpl = rand_pcg::Pcg64;
 
@@ -73,6 +73,34 @@ enum ValueGeneratorBuilder {
 pub enum ValueGeneratorKind {
     Graffiti,
     Random { seed: u64 },
+}
+impl std::str::FromStr for ValueGeneratorKind {
+    type Err = CliParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some(seed) = s.strip_prefix("random") {
+            let seed: u64 = seed.parse().map_err(|_| {
+                CliParseError::Other(format!(
+                    "{seed} isn't a u64 (parsing random value generator)"
+                ))
+            })?;
+            Ok(ValueGeneratorKind::Random { seed })
+        } else if s == "graffiti" {
+            Ok(ValueGeneratorKind::Graffiti)
+        } else {
+            Err(CliParseError::Other(format!(
+                "{s} is not a value generator"
+            )))
+        }
+    }
+}
+impl std::fmt::Display for ValueGeneratorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Random { seed } => write!(f, "random{seed}"),
+            Self::Graffiti => write!(f, "graffiti"),
+        }
+    }
 }
 
 impl ValueTree {

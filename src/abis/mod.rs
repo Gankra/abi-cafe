@@ -1,10 +1,9 @@
-pub mod c;
+// pub mod c;
 pub mod rust;
 pub mod vals;
 
 use std::{collections::HashMap, fmt::Write, sync::Arc};
 
-pub use c::CcAbiImpl;
 use camino::Utf8Path;
 use kdl_script::{
     types::{FuncIdx, TyIdx},
@@ -14,7 +13,10 @@ pub use rust::RustcAbiImpl;
 use serde::Serialize;
 use vals::{ValueGeneratorKind, ValueTree};
 
-use crate::error::{BuildError, GenerateError};
+use crate::{
+    error::{BuildError, GenerateError},
+    CliParseError,
+};
 
 pub type AbiImplId = String;
 pub type TestId = String;
@@ -235,12 +237,36 @@ impl std::ops::Deref for TestImpl {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, PartialEq, Eq)]
 pub enum WriteImpl {
     HarnessCallback,
     Assert,
     Print,
     Noop,
+}
+impl std::str::FromStr for WriteImpl {
+    type Err = CliParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "harness" => Ok(Self::HarnessCallback),
+            "assert" => Ok(Self::Assert),
+            "print" => Ok(Self::Print),
+            "noop" => Ok(Self::Noop),
+            _ => Err(CliParseError::Other(format!("{s} is not a write impl"))),
+        }
+    }
+}
+impl std::fmt::Display for WriteImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::HarnessCallback => "harness",
+            Self::Assert => "assert",
+            Self::Print => "print",
+            Self::Noop => "noop",
+        };
+        s.fmt(f)
+    }
 }
 
 /// ABI is probably a bad name for this... it's like, a language/compiler impl. idk.

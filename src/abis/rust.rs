@@ -293,9 +293,11 @@ impl RustcAbiImpl {
         for def in state.defs.definitions(state.desired_funcs.iter().copied()) {
             match def {
                 kdl_script::Definition::DeclareTy(ty) => {
+                    debug!("declare ty {}", state.types.format_ty(ty));
                     self.intern_tyname(state, ty)?;
                 }
                 kdl_script::Definition::DefineTy(ty) => {
+                    debug!("generate ty {}", state.types.format_ty(ty));
                     self.generate_tydef(f, state, ty)?;
                 }
                 kdl_script::Definition::DefineFunc(_) => {
@@ -317,6 +319,7 @@ impl RustcAbiImpl {
             return Ok(());
         }
 
+        let has_borrows = state.types.ty_contains_ref(ty);
         let (tyname, borrowed_tyname) = match state.types.realize_ty(ty) {
             // Structural types that don't need definitions but we should
             // intern the name of
@@ -373,48 +376,22 @@ impl RustcAbiImpl {
             Ty::Empty => ("()".to_owned(), None),
             // Nominal types we need to emit a decl for
             Ty::Struct(struct_ty) => {
-                let has_borrows = struct_ty
-                    .fields
-                    .iter()
-                    .any(|field| state.borrowed_tynames.contains_key(&field.ty));
                 let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", struct_ty.name));
                 (struct_ty.name.to_string(), borrowed_tyname)
             }
             Ty::Union(union_ty) => {
-                let has_borrows = union_ty
-                    .fields
-                    .iter()
-                    .any(|field| state.borrowed_tynames.contains_key(&field.ty));
                 let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", union_ty.name));
                 (union_ty.name.to_string(), borrowed_tyname)
             }
             Ty::Enum(enum_ty) => ((**enum_ty.name).clone(), None),
             Ty::Tagged(tagged_ty) => {
-                let has_borrows = tagged_ty.variants.iter().any(|v| {
-                    v.fields
-                        .as_ref()
-                        .map(|fields| {
-                            fields
-                                .iter()
-                                .any(|field| state.borrowed_tynames.contains_key(&field.ty))
-                        })
-                        .unwrap_or(false)
-                });
                 let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", tagged_ty.name));
                 (tagged_ty.name.to_string(), borrowed_tyname)
             }
-            Ty::Alias(AliasTy {
-                name,
-                real,
-                attrs: _,
-            }) => {
-                let borrowed_tyname = state
-                    .borrowed_tynames
-                    .get(real)
-                    .map(|name| format!("{name}<'a>"));
-                (name.to_string(), borrowed_tyname)
+            Ty::Alias(alias_ty) => {
+                let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", alias_ty.name));
+                (alias_ty.name.to_string(), borrowed_tyname)
             }
-
             // Puns should be evaporated
             Ty::Pun(pun) => {
                 let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();

@@ -44,6 +44,7 @@ result_large_err = "allow"
 
 [workspace]
 members = ["kdl-script"]
+resolver = "2"
 
 [workspace.package]
 repository = "https://github.com/Gankra/abi-cafe"

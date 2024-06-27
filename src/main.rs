@@ -180,7 +180,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 out_dir.clone(),
                             );
 
-                            Some((test_key, rules, task))
+                            Some(task)
                         })
                         .collect()
                 })
@@ -191,9 +191,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Join on all the tasks, and compute their results
     let reports = tasks
         .into_iter()
-        .map(|(test_key, rules, task)| {
+        .map(|task| {
             let results = rt.block_on(task).expect("failed to join task");
-            report_test(test_key, rules, results)
+            report_test(results)
         })
         .collect::<Vec<_>>();
 

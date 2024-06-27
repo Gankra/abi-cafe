@@ -3,8 +3,10 @@
 use std::sync::Arc;
 
 use camino::Utf8Path;
+use kdl_script::parse::Attr;
 use kdl_script::types::{AliasTy, ArrayTy, Func, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use kdl_script::PunEnv;
+use tracing::warn;
 use vals::{ArgValuesIter, Value};
 
 use self::error::GenerateError;
@@ -43,56 +45,6 @@ impl AbiImpl for RustcAbiImpl {
             lang: "rust".to_string(),
         })
     }
-    fn supports_options(
-        &self,
-        TestOptions {
-            convention,
-            functions,
-            val_writer,
-            val_generator: _,
-        }: &TestOptions,
-    ) -> bool {
-        // NOTE: Rustc spits out:
-        //
-        // Rust, C, C-unwind, cdecl, stdcall, stdcall-unwind, fastcall,
-        // vectorcall, thiscall, thiscall-unwind, aapcs, win64, sysv64,
-        // ptx-kernel, msp430-interrupt, x86-interrupt, amdgpu-kernel,
-        // efiapi, avr-interrupt, avr-non-blocking-interrupt, C-cmse-nonsecure-call,
-        // wasm, system, system-unwind, rust-intrinsic, rust-call,
-        // platform-intrinsic, unadjusted
-        let supports_convention = match convention {
-            CallingConvention::All => unreachable!(),
-            CallingConvention::Handwritten => true,
-            CallingConvention::C => true,
-            CallingConvention::Cdecl => true,
-            CallingConvention::System => true,
-            CallingConvention::Win64 => true,
-            CallingConvention::Sysv64 => true,
-            CallingConvention::Aapcs => true,
-            CallingConvention::Stdcall => true,
-            CallingConvention::Fastcall => true,
-            CallingConvention::Vectorcall => false, // too experimental even for nightly use?
-        };
-        let supports_writer = match val_writer {
-            WriteImpl::HarnessCallback => true,
-            WriteImpl::Print => true,
-            WriteImpl::Assert => true,
-            WriteImpl::Noop => true,
-        };
-        let supports_query = match functions {
-            FunctionSelector::All => true,
-            FunctionSelector::One { idx: _, args } => match args {
-                ArgSelector::All => true,
-                ArgSelector::One { idx: _, vals } => match vals {
-                    ValSelector::All => true,
-                    ValSelector::One { idx: _ } => true,
-                },
-            },
-        };
-
-        supports_convention && supports_writer && supports_query
-    }
-
     fn compile_callee(
         &self,
         src_path: &Utf8Path,
@@ -234,9 +186,9 @@ impl RustcAbiImpl {
         let output = proper_outputs.next();
         let too_many_outputs = proper_outputs.next();
         if too_many_outputs.is_some() {
-            return Err(GenerateError::RustUnsupported(
+            return Err(UnsupportedError::Other(
                 "multiple normal returns (should this be a tuple?)".to_owned(),
-            ));
+            ))?;
         }
         if let Some(output) = output {
             write!(f, "let {} = ", output.name)?;
@@ -384,18 +336,18 @@ impl RustcAbiImpl {
                     PrimitiveTy::F64 => "f64",
                     PrimitiveTy::Bool => "bool",
                     PrimitiveTy::Ptr => "*mut ()",
-                    PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(
-                        "rust doesn't have i256".to_owned(),
-                    ))?,
-                    PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(
-                        "rust doesn't have u256".to_owned(),
-                    ))?,
-                    PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(
-                        "rust doesn't have f16".to_owned(),
-                    ))?,
-                    PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(
-                        "rust doesn't have f128".to_owned(),
-                    ))?,
+                    PrimitiveTy::I256 => {
+                        Err(UnsupportedError::Other("rust doesn't have i256".to_owned()))?
+                    }
+                    PrimitiveTy::U256 => {
+                        Err(UnsupportedError::Other("rust doesn't have u256".to_owned()))?
+                    }
+                    PrimitiveTy::F16 => {
+                        Err(UnsupportedError::Other("rust doesn't have f16".to_owned()))?
+                    }
+                    PrimitiveTy::F128 => {
+                        Err(UnsupportedError::Other("rust doesn't have f128".to_owned()))?
+                    }
                 };
                 (name.to_owned(), None)
             }
@@ -451,11 +403,11 @@ impl RustcAbiImpl {
                 let borrowed_tyname = has_borrows.then(|| format!("{}<'a>", tagged_ty.name));
                 (tagged_ty.name.to_string(), borrowed_tyname)
             }
-            Ty::Alias(AliasTy { name, real, attrs }) => {
-                assert!(
-                    attrs.is_empty(),
-                    "don't yet know how to apply attrs to structs"
-                );
+            Ty::Alias(AliasTy {
+                name,
+                real,
+                attrs: _,
+            }) => {
                 let borrowed_tyname = state
                     .borrowed_tynames
                     .get(real)
@@ -493,18 +445,13 @@ impl RustcAbiImpl {
         match state.types.realize_ty(ty) {
             // Nominal types we need to emit a decl for
             Ty::Struct(struct_ty) => {
-                assert!(
-                    struct_ty.attrs.is_empty(),
-                    "don't yet know how to apply attrs to structs"
-                );
-
                 let has_borrows = struct_ty
                     .fields
                     .iter()
                     .any(|field| state.borrowed_tynames.contains_key(&field.ty));
 
                 // Emit an actual struct decl
-                writeln!(f, "#[repr(C)]")?;
+                self.repr_attr(f, &struct_ty.attrs, "struct")?;
                 if has_borrows {
                     writeln!(f, "struct {}<'a> {{", struct_ty.name)?;
                 } else {
@@ -524,18 +471,13 @@ impl RustcAbiImpl {
                 writeln!(f, "}}\n")?;
             }
             Ty::Union(union_ty) => {
-                assert!(
-                    union_ty.attrs.is_empty(),
-                    "don't yet know how to apply attrs to unions"
-                );
-
                 let has_borrows = union_ty
                     .fields
                     .iter()
                     .any(|field| state.borrowed_tynames.contains_key(&field.ty));
 
                 // Emit an actual union decl
-                writeln!(f, "#[repr(C)]")?;
+                self.repr_attr(f, &union_ty.attrs, "union")?;
                 if has_borrows {
                     writeln!(f, "union {}<'a> {{", union_ty.name)?;
                 } else {
@@ -555,13 +497,8 @@ impl RustcAbiImpl {
                 writeln!(f, "}}\n")?;
             }
             Ty::Enum(enum_ty) => {
-                assert!(
-                    enum_ty.attrs.is_empty(),
-                    "don't yet know how to apply attrs to enums"
-                );
-
                 // Emit an actual enum decl
-                writeln!(f, "#[repr(C)]")?;
+                self.repr_attr(f, &enum_ty.attrs, "enum")?;
                 writeln!(f, "#[derive(Debug, Copy, Clone, PartialEq)]")?;
                 writeln!(f, "enum {} {{", enum_ty.name)?;
                 f.add_indent(1);
@@ -573,11 +510,6 @@ impl RustcAbiImpl {
                 writeln!(f, "}}\n")?;
             }
             Ty::Tagged(tagged_ty) => {
-                assert!(
-                    tagged_ty.attrs.is_empty(),
-                    "don't yet know how to apply attrs to tagged unions"
-                );
-
                 let has_borrows = tagged_ty.variants.iter().any(|v| {
                     v.fields
                         .as_ref()
@@ -590,7 +522,7 @@ impl RustcAbiImpl {
                 });
 
                 // Emit an actual enum decl
-                writeln!(f, "#[repr(C)]")?;
+                self.repr_attr(f, &tagged_ty.attrs, "tagged")?;
                 if has_borrows {
                     writeln!(f, "enum {}<'a> {{", tagged_ty.name)?;
                 } else {
@@ -621,10 +553,11 @@ impl RustcAbiImpl {
                 writeln!(f, "}}\n")?;
             }
             Ty::Alias(AliasTy { name, real, attrs }) => {
-                assert!(
-                    attrs.is_empty(),
-                    "don't yet know how to apply attrs to type aliases"
-                );
+                if !attrs.is_empty() {
+                    return Err(UnsupportedError::Other(
+                        "don't yet know how to apply attrs to aliases".to_string(),
+                    ))?;
+                }
 
                 // Emit an actual type alias decl
                 if let Some(real_tyname) = state.borrowed_tynames.get(real) {
@@ -674,6 +607,51 @@ impl RustcAbiImpl {
         Ok(())
     }
 
+    fn repr_attr(
+        &self,
+        f: &mut Fivemat,
+        attrs: &[Attr],
+        ty_style: &str,
+    ) -> Result<(), GenerateError> {
+        let mut repr_attrs = vec![];
+        let mut packed = false;
+        for attr in attrs {
+            match attr {
+                Attr::Derive(attr) => {
+                    return Err(UnsupportedError::Other(format!(
+                        "derive attr not supported {attr:?}"
+                    )))?;
+                }
+                Attr::Packed(_) => {
+                    packed = true;
+                }
+                Attr::Passthrough(attr) => {
+                    warn!("found passthrough attr on {ty_style}, assuming repr(transparent)");
+                    repr_attrs.push("transparent");
+                }
+            }
+        }
+        if repr_attrs.is_empty() {
+            repr_attrs.push("C");
+        }
+        if packed {
+            repr_attrs.push("packed");
+        }
+        if !repr_attrs.is_empty() {
+            write!(f, "#[repr(")?;
+            let mut multi = false;
+            for repr in repr_attrs {
+                if multi {
+                    write!(f, ", ")?;
+                }
+                multi = true;
+                write!(f, "{repr}")?;
+            }
+            writeln!(f, ")]")?;
+        }
+        Ok(())
+    }
+
     pub fn generate_leaf_value(
         &self,
         f: &mut Fivemat,
@@ -706,18 +684,18 @@ impl RustcAbiImpl {
                         write!(f, "{:#X}u32 as *mut ()", val.generate_u32())?
                     }
                 }
-                PrimitiveTy::I256 => Err(GenerateError::RustUnsupported(
-                    "rust doesn't have i256".to_owned(),
-                ))?,
-                PrimitiveTy::U256 => Err(GenerateError::RustUnsupported(
-                    "rust doesn't have u256".to_owned(),
-                ))?,
-                PrimitiveTy::F16 => Err(GenerateError::RustUnsupported(
-                    "rust doesn't have f16".to_owned(),
-                ))?,
-                PrimitiveTy::F128 => Err(GenerateError::RustUnsupported(
-                    "rust doesn't have f128".to_owned(),
-                ))?,
+                PrimitiveTy::I256 => {
+                    Err(UnsupportedError::Other("rust doesn't have i256".to_owned()))?
+                }
+                PrimitiveTy::U256 => {
+                    Err(UnsupportedError::Other("rust doesn't have u256".to_owned()))?
+                }
+                PrimitiveTy::F16 => {
+                    Err(UnsupportedError::Other("rust doesn't have f16".to_owned()))?
+                }
+                PrimitiveTy::F128 => {
+                    Err(UnsupportedError::Other("rust doesn't have f128".to_owned()))?
+                }
             },
             Ty::Enum(enum_ty) => {
                 let name = alias.unwrap_or(&enum_ty.name);
@@ -885,12 +863,6 @@ impl RustcAbiImpl {
         convention: CallingConvention,
     ) -> Result<&'static str, GenerateError> {
         let conv = match convention {
-            CallingConvention::All => {
-                unreachable!("CallingConvention::All is sugar that shouldn't reach here")
-            }
-            CallingConvention::Handwritten => {
-                unreachable!("CallingConvention::Handwritten shouldn't reach codegen backends!")
-            }
             CallingConvention::C => "C",
             CallingConvention::Cdecl => "cdecl",
             CallingConvention::System => "system",
@@ -899,7 +871,11 @@ impl RustcAbiImpl {
             CallingConvention::Aapcs => "aapcs",
             CallingConvention::Stdcall => "stdcall",
             CallingConvention::Fastcall => "fastcall",
-            CallingConvention::Vectorcall => "vectorcall",
+            CallingConvention::Vectorcall => {
+                return Err(UnsupportedError::Other(
+                    "vectorcall is an unstable rust feature".to_owned(),
+                ))?
+            }
         };
         Ok(conv)
     }
@@ -967,9 +943,9 @@ impl RustcAbiImpl {
                 continue;
             }
             if has_normal_return {
-                return Err(GenerateError::RustUnsupported(
+                return Err(UnsupportedError::Other(
                     "multiple normal returns (should this be a tuple?)".to_owned(),
-                ));
+                ))?;
             }
             has_normal_return = true;
             let arg_ty = &state.tynames[&arg.ty];

@@ -136,67 +136,75 @@ impl TestHarness {
     ) -> TestRunResults {
         use TestRunMode::*;
 
-        let mut run_results = TestRunResults::default();
-        if test_rules.run <= Skip {
-            return run_results;
+        let mut res = TestRunResults::new(test_key, test_rules);
+        if res.rules.run <= Skip {
+            return res;
         }
 
-        run_results.ran_to = Generate;
-        run_results.source = Some(self.generate_test(&test_key).await);
-        let source = match run_results.source.as_ref().unwrap() {
+        res.ran_to = Generate;
+        res.source = Some(self.generate_test(&res.key).await);
+        let source = match res.source.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
-                warn!("Failed to generate source: {}", e);
-                return run_results;
+                // If the codegen says "hey i don't support this", respect
+                // that as an opt-out. (Doing it in this late-bound way
+                // reduces the maintenance burden on backend authors.)
+                if let GenerateError::Unsupported(e) = e {
+                    res.rules.run = Skip;
+                    warn!("skipping {}", e);
+                } else {
+                    warn!("failed to generate source: {}", e);
+                }
+                return res;
             }
         };
-        if test_rules.run <= Generate {
-            return run_results;
+        if res.rules.run <= Generate {
+            return res;
         }
 
-        run_results.ran_to = Build;
-        run_results.build = Some(self.build_test(&test_key, source, &out_dir).await);
-        let build = match run_results.build.as_ref().unwrap() {
+        res.ran_to = Build;
+        res.build = Some(self.build_test(&res.key, source, &out_dir).await);
+        let build = match res.build.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
                 warn!("Failed to build test: {}", e);
-                return run_results;
+                return res;
             }
         };
-        if test_rules.run <= Build {
-            return run_results;
+        if res.rules.run <= Build {
+            return res;
         }
 
-        run_results.ran_to = Link;
-        run_results.link = Some(self.link_dynamic_lib(&test_key, build, &out_dir).await);
-        let link = match run_results.link.as_ref().unwrap() {
+        res.ran_to = Link;
+        res.link = Some(self.link_dynamic_lib(&res.key, build, &out_dir).await);
+        let link = match res.link.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
                 warn!("Failed to link test: {}", e);
-                return run_results;
+                return res;
             }
         };
-        if test_rules.run <= Link {
-            return run_results;
+        if res.rules.run <= Link {
+            return res;
         }
 
-        run_results.ran_to = Run;
-        run_results.run = Some(self.run_dynamic_test(&test_key, link).await);
-        let run = match run_results.run.as_ref().unwrap() {
+        res.ran_to = Run;
+        res.run = Some(self.run_dynamic_test(&res.key, link).await);
+        let run = match res.run.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
                 warn!("Failed to run test: {}", e);
-                return run_results;
+                return res;
             }
         };
-        if test_rules.run <= Run {
-            return run_results;
+        if res.rules.run <= Run {
+            return res;
         }
 
-        run_results.ran_to = Check;
-        run_results.check = Some(self.check_test(&test_key, run).await);
+        res.ran_to = Check;
+        res.check = Some(self.check_test(&res.key, run).await);
 
-        run_results
+        res
     }
 }
 

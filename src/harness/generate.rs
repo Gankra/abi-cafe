@@ -11,7 +11,6 @@ use crate::error::*;
 use crate::*;
 
 const GENERATED_SRC_DIR: &str = "generated_impls";
-const HANDWRITTEN_SRC_DIR: &str = "handwritten_impls";
 
 impl TestHarness {
     pub async fn generate_test(&self, key: &TestKey) -> Result<GenerateOutput, GenerateError> {
@@ -58,12 +57,7 @@ impl TestHarness {
     }
 
     fn src_path(&self, key: &TestKey, call_side: CallSide) -> Utf8PathBuf {
-        let src_dir = if key.options.convention == CallingConvention::Handwritten {
-            Utf8PathBuf::from(HANDWRITTEN_SRC_DIR)
-        } else {
-            Utf8PathBuf::from(GENERATED_SRC_DIR)
-        };
-
+        let src_dir = Utf8PathBuf::from(GENERATED_SRC_DIR);
         let abi_id = key.abi_id(call_side);
         let abi = self.abi_by_test_key(key, call_side);
         let mut output = self.base_id(key, Some(call_side), "_");
@@ -88,13 +82,6 @@ async fn generate_src(
     call_side: CallSide,
     options: TestOptions,
 ) -> Result<(), GenerateError> {
-    if let CallingConvention::Handwritten = options.convention {
-        if src_path.exists() {
-            return Ok(());
-        } else {
-            return Err(GenerateError::Skipped);
-        }
-    }
     let mut output_string = String::new();
     let test = test_with_abi.with_options(options)?;
     match call_side {

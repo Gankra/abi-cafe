@@ -3,7 +3,7 @@ use rand::Rng;
 use rand_core::{RngCore, SeedableRng};
 use serde::Serialize;
 
-use crate::{CliParseError, TestOptions};
+use crate::{CliParseError, GenerateError, TestOptions};
 
 type RngImpl = rand_pcg::Pcg64;
 
@@ -105,7 +105,10 @@ impl std::fmt::Display for ValueGeneratorKind {
 
 impl ValueTree {
     /// Create the ValueTree for an entire program
-    pub fn new(types: &TypedProgram, generator_kind: ValueGeneratorKind) -> Self {
+    pub fn new(
+        types: &TypedProgram,
+        generator_kind: ValueGeneratorKind,
+    ) -> Result<Self, GenerateError> {
         let mut generators = generator_kind.builder();
         // Construct value generators for every function
         let funcs = types
@@ -121,23 +124,23 @@ impl ValueTree {
                     .map(|(is_input, arg)| {
                         let mut vals = vec![];
                         let arg_name = arg.name.to_string();
-                        generators.build_values(types, arg.ty, &mut vals, arg_name.clone());
-                        ArgValues {
+                        generators.build_values(types, arg.ty, &mut vals, arg_name.clone())?;
+                        Ok(ArgValues {
                             ty: arg.ty,
                             arg_name,
                             is_input,
                             vals,
-                        }
+                        })
                     })
-                    .collect();
-                FuncValues { func_name, args }
+                    .collect::<Result<Vec<_>, GenerateError>>()?;
+                Ok(FuncValues { func_name, args })
             })
-            .collect();
+            .collect::<Result<Vec<_>, GenerateError>>()?;
 
-        ValueTree {
+        Ok(ValueTree {
             generator_kind,
             funcs,
-        }
+        })
     }
 
     #[track_caller]
@@ -265,7 +268,7 @@ impl ValueGeneratorBuilder {
         ty_idx: TyIdx,
         vals: &mut Vec<Value>,
         path: String,
-    ) {
+    ) -> Result<(), GenerateError> {
         let ty = types.realize_ty(ty_idx);
         match ty {
             // Primitives and enums just have the one value
@@ -276,10 +279,10 @@ impl ValueGeneratorBuilder {
             Ty::Empty => {}
 
             // Alias and ref are just wrappers
-            Ty::Alias(ty) => self.build_values(types, ty.real, vals, path),
+            Ty::Alias(ty) => self.build_values(types, ty.real, vals, path)?,
             Ty::Ref(ty) => {
                 let new_path = format!("{path}.*");
-                self.build_values(types, ty.pointee_ty, vals, new_path)
+                self.build_values(types, ty.pointee_ty, vals, new_path)?;
             }
 
             // Struct and array are just all of their fields combined
@@ -287,13 +290,13 @@ impl ValueGeneratorBuilder {
                 for field in &ty.fields {
                     let field_name = &field.ident;
                     let new_path = format!("{path}.{field_name}");
-                    self.build_values(types, field.ty, vals, new_path);
+                    self.build_values(types, field.ty, vals, new_path)?;
                 }
             }
             Ty::Array(ty) => {
                 for idx in 0..ty.len {
                     let new_path = format!("{path}[{idx}]");
-                    self.build_values(types, ty.elem_ty, vals, new_path);
+                    self.build_values(types, ty.elem_ty, vals, new_path)?;
                 }
             }
 
@@ -308,7 +311,7 @@ impl ValueGeneratorBuilder {
                 if let Some(field) = ty.fields.get(active_variant_idx) {
                     let field_name = &field.ident;
                     let new_path = format!("{path}.{field_name}");
-                    self.build_values(types, field.ty, vals, new_path);
+                    self.build_values(types, field.ty, vals, new_path)?;
                 }
             }
             Ty::Tagged(ty) => {
@@ -325,7 +328,7 @@ impl ValueGeneratorBuilder {
                             let variant_name = &variant.name;
                             let field_name = &field.ident;
                             let new_path = format!("{path}.{variant_name}.{field_name}");
-                            self.build_values(types, field.ty, vals, new_path);
+                            self.build_values(types, field.ty, vals, new_path)?;
                         }
                     }
                 }
@@ -335,6 +338,7 @@ impl ValueGeneratorBuilder {
             // produce the same number of values
             Ty::Pun(ty) => {
                 let mut out_vals = None::<Vec<_>>;
+                let mut out_block = None::<&PunBlockTy>;
                 let saved_self = self.clone();
                 for block in &ty.blocks {
                     // Every time we re-enter here, restore our state to before we started.
@@ -344,16 +348,25 @@ impl ValueGeneratorBuilder {
 
                     // Shove values into a temp buffer instead of the main one
                     let mut new_vals = vec![];
-                    self.build_values(types, block.real, &mut new_vals, path.clone());
+                    self.build_values(types, block.real, &mut new_vals, path.clone())?;
 
                     // If there are multiple blocks, check that this new one matches
                     // all the other ones in length (making the pun semantically comprehensible)
                     if let Some(old_vals) = out_vals {
-                        assert!(old_vals.len() != new_vals.len(), "pun {} had cases with different numbers of values (~leaf fields), this is unsupported", ty.name);
+                        if old_vals.len() != new_vals.len() {
+                            return Err(GenerateError::MismatchedPunVals {
+                                pun: ty.name.to_string(),
+                                block1: block.real.to_string(),
+                                block1_val_count: old_vals.len(),
+                                block2: out_block.unwrap().real.to_string(),
+                                block2_val_count: old_vals.len(),
+                            });
+                        }
                     }
 
                     // Finally store the result
                     out_vals = Some(new_vals);
+                    out_block = Some(block);
                 }
 
                 // If we visited any blocks, properly add the values to the output
@@ -362,6 +375,7 @@ impl ValueGeneratorBuilder {
                 }
             }
         }
+        Ok(())
     }
 }
 

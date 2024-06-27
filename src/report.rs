@@ -20,11 +20,6 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
         check: Pass(Check),
     };
 
-    // If the caller/callee don't support these options, skip them
-    if !caller.supports_options(&test.options) || !callee.supports_options(&test.options) {
-        result.run = Skip;
-    }
-
     // Now apply specific custom expectations for platforms/suites
     let is_c = caller.lang() == "c" || callee.lang() == "c";
     let is_rust = caller.lang() == "rust" || callee.lang() == "rust";
@@ -123,11 +118,11 @@ pub struct RunOutput {
     pub callee_outputs: WriteBuffer,
 }
 
-pub fn report_test(key: TestKey, rules: TestRules, results: TestRunResults) -> TestReport {
+pub fn report_test(results: TestRunResults) -> TestReport {
     use TestConclusion::*;
     use TestRunMode::*;
     // Ok now check if it matched our expectation
-    let conclusion = if rules.run == Skip {
+    let conclusion = if results.rules.run == Skip {
         // If we were told to skip, we skipped
         Skipped
     } else if let Some(Err(GenerateError::Skipped)) = results.source {
@@ -136,7 +131,7 @@ pub fn report_test(key: TestKey, rules: TestRules, results: TestRunResults) -> T
         // a million unsupported combinations
         Skipped
     } else {
-        let passed = match &rules.check {
+        let passed = match &results.rules.check {
             TestCheckMode::Pass(must_pass) => match must_pass {
                 Skip => true,
                 Generate => results.source.as_ref().map(|r| r.is_ok()).unwrap_or(false),
@@ -164,7 +159,7 @@ pub fn report_test(key: TestKey, rules: TestRules, results: TestRunResults) -> T
             TestCheckMode::Random => true,
         };
         if passed {
-            if matches!(rules.check, TestCheckMode::Busted(_)) {
+            if matches!(results.rules.check, TestCheckMode::Busted(_)) {
                 TestConclusion::Busted
             } else {
                 TestConclusion::Passed
@@ -174,8 +169,8 @@ pub fn report_test(key: TestKey, rules: TestRules, results: TestRunResults) -> T
         }
     };
     TestReport {
-        key,
-        rules,
+        key: results.key.clone(),
+        rules: results.rules.clone(),
         conclusion,
         results,
     }
@@ -271,6 +266,8 @@ pub enum TestCheckMode {
 
 #[derive(Debug, Serialize)]
 pub struct TestRunResults {
+    pub key: TestKey,
+    pub rules: TestRules,
     pub ran_to: TestRunMode,
     pub source: Option<Result<GenerateOutput, GenerateError>>,
     pub build: Option<Result<BuildOutput, BuildError>>,
@@ -279,9 +276,11 @@ pub struct TestRunResults {
     pub check: Option<CheckOutput>,
 }
 
-impl Default for TestRunResults {
-    fn default() -> Self {
+impl TestRunResults {
+    pub fn new(key: TestKey, rules: TestRules) -> Self {
         Self {
+            key,
+            rules,
             ran_to: TestRunMode::Skip,
             source: None,
             build: None,

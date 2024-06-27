@@ -1,0 +1,12 @@
+pun "MetersU32" {
+    lang "rust" {
+        @ "#[repr(transparent)]"
+        struct "MetersU32" {
+            a "u32"
+        }
+    }
+
+    lang "c" "cpp" {
+        alias "MetersU32" "u32"
+    }
+}

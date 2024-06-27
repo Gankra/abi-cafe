@@ -7,36 +7,38 @@ pub enum CliParseError {
 }
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
-#[allow(dead_code)]
+pub enum UnsupportedError {
+    #[error("unsupported: {0}")]
+    Other(String),
+}
+
+#[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum GenerateError {
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Unsupported(#[from] UnsupportedError),
     #[error("io error\n{0}")]
     Fmt(#[from] std::fmt::Error),
     #[error("io error\n{0}")]
     Io(#[from] std::io::Error),
-    #[error("kdl parse error")]
-    KdlParseError(String, String, #[source] kdl::KdlError),
     #[error(transparent)]
     #[diagnostic(transparent)]
     KdlScriptError(#[from] kdl_script::KdlScriptError),
-    #[error("Two structs had the name {name}, but different layout! \nExpected {old_decl} \nGot {new_decl}")]
-    InconsistentStructDefinition {
-        name: String,
-        old_decl: String,
-        new_decl: String,
-    },
-    #[error("If you use the Handwritten calling convention, all functions in the test must use only that.")]
-    HandwrittenMixing,
-    #[error("No handwritten source for this pairing (skipping)")]
-    NoHandwrittenSource,
-    #[error("Unsupported Signature For Rust: {0}")]
-    RustUnsupported(String),
-    #[error("Unsupported Signature For C: {0}")]
-    CUnsupported(String),
-    #[error("ABI impl doesn't support this calling convention.")]
-    UnsupportedConvention,
     /// Used to signal we just skipped it
     #[error("<skipped>")]
     Skipped,
+    #[error(
+        "pun {pun} had blocks with different numbers of values
+  block1 had {block1_val_count}: {block1}
+  block2 had {block2_val_count}: {block2}"
+    )]
+    MismatchedPunVals {
+        pun: String,
+        block1: String,
+        block1_val_count: usize,
+        block2: String,
+        block2_val_count: usize,
+    },
 }
 
 #[derive(Debug, thiserror::Error, Diagnostic)]

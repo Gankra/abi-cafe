@@ -28,7 +28,6 @@ pub static ABI_IMPL_CLANG: &str = "clang";
 pub static ABI_IMPL_MSVC: &str = "msvc";
 
 pub static ALL_CONVENTIONS: &[CallingConvention] = &[
-    CallingConvention::Handwritten,
     CallingConvention::C,
     CallingConvention::Cdecl,
     CallingConvention::Stdcall,
@@ -274,7 +273,6 @@ pub trait AbiImpl {
     fn name(&self) -> &'static str;
     fn lang(&self) -> &'static str;
     fn src_ext(&self) -> &'static str;
-    fn supports_options(&self, options: &TestOptions) -> bool;
     fn pun_env(&self) -> Arc<PunEnv>;
     fn generate_callee(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError>;
     fn generate_caller(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError>;
@@ -294,15 +292,15 @@ pub trait AbiImpl {
 }
 
 impl Test {
-    pub fn has_convention(&self, convention: CallingConvention) -> bool {
-        convention != CallingConvention::Handwritten
+    pub fn has_convention(&self, _convention: CallingConvention) -> bool {
+        true
     }
 
     pub async fn with_vals(
         self: &Arc<Self>,
         vals: ValueGeneratorKind,
     ) -> Result<Arc<TestWithVals>, GenerateError> {
-        let vals = Arc::new(ValueTree::new(&self.types, vals));
+        let vals = Arc::new(ValueTree::new(&self.types, vals)?);
         Ok(Arc::new(TestWithVals {
             inner: self.clone(),
             vals,
@@ -341,12 +339,6 @@ impl TestWithAbi {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename = "lowercase")]
 pub enum CallingConvention {
-    // These conventions are special ones that "desugar" to others
-    /// Sugar for "every possible convention"
-    All,
-    /// A complete opaque convention, the implementation must be manually
-    /// written in the handwritten_impls directory.
-    Handwritten,
     /// The platform's default C convention (cdecl?)
     C,
     /// ???
@@ -376,10 +368,6 @@ pub enum CallingConvention {
 impl CallingConvention {
     pub fn name(&self) -> &'static str {
         match self {
-            CallingConvention::All => {
-                unreachable!("CallingConvention::All is sugar and shouldn't reach here!")
-            }
-            CallingConvention::Handwritten => "handwritten",
             CallingConvention::C => "c",
             CallingConvention::Cdecl => "cdecl",
             CallingConvention::System => "system",
@@ -404,8 +392,6 @@ impl std::str::FromStr for CallingConvention {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let val = match s {
-            "all" => CallingConvention::All,
-            "handwritten" => CallingConvention::Handwritten,
             "c" => CallingConvention::C,
             "cdecl" => CallingConvention::Cdecl,
             "system" => CallingConvention::System,

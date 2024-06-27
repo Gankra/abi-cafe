@@ -1,0 +1,33 @@
+@derive "Display"
+struct "Point" {
+    x "f64"
+    y "f64"
+}
+
+fn "main" {
+    outputs { a "f64"; }
+
+    let "pt1" "Point" {
+        x 1.0
+        y 2.0
+    }
+    let "pt2" "Point" {
+        x 10.0
+        y 20.0
+    }
+    
+    let "sum" "add:" "pt1" "pt2"
+    print "sum"
+
+    return "+:" "sum.x" "sum.y"
+}
+
+fn "add" {
+    inputs { a "Point"; b "Point"; }
+    outputs { a "Point"; }
+
+    return "Point" {
+        x "+:" "a.x" "b.x"
+        y "+:" "a.y" "b.y"
+    }
+}

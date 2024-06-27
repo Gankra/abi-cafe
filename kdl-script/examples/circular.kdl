@@ -1,0 +1,25 @@
+tagged "OptionRefA" {
+    None
+    Some { _0 "&A"; }
+}
+
+struct "B" {
+    val "OptionRefA"
+}
+
+struct "A" {
+    val "B"
+}
+
+struct "Point" {
+    x "f32"
+    y "f32"
+}
+
+fn "pointy" {
+    inputs { pt "Point"; }
+}
+
+fn "usesA" {
+    inputs { a "A"; }
+}

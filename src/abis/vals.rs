@@ -69,7 +69,7 @@ enum ValueGeneratorBuilder {
     Random { rng: RngImpl },
 }
 
-#[derive(Debug, Copy, Clone, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 pub enum ValueGeneratorKind {
     Graffiti,
     Random { seed: u64 },

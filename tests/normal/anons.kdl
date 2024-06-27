@@ -1,0 +1,35 @@
+// Cases that allow a backend to encounter tuple-structs/tuple-variants
+
+struct "MyTupleStruct" {
+    _ "bool"
+    _ "i32"
+    _ "u64"
+}
+tagged "MyTagged" {
+    TupleVariant {
+        _ "bool"
+        _ "i32"
+        _ "u64"
+    }
+    HybridVariant {
+        x "bool"
+        _ "u32"
+    }
+    StructVariant {
+        x "u8"
+        z "i64"
+    }
+    EmptyVariant {
+    }
+    NoneLike
+}
+fn "anons" {
+    inputs {
+        _ "u32"
+        _ "MyTupleStruct"
+        z "i8"
+    }
+    outputs {
+        _ "MyTagged"
+    }
+}

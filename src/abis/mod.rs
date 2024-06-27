@@ -69,8 +69,19 @@ pub struct Test {
     pub name: String,
     /// Parsed and Typechecked kdl-script program
     pub types: Arc<TypedProgram>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TestWithVals {
+    pub inner: Arc<Test>,
     /// Values that the test should have
     pub vals: Arc<ValueTree>,
+}
+impl std::ops::Deref for TestWithVals {
+    type Target = Test;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
 }
 
 /// Options for a test
@@ -186,13 +197,13 @@ impl std::fmt::Display for CallSide {
 /// However if a test fails we can requery with "just this one failing function"
 /// to generate a minimized test-case for debugging/reporting.
 #[derive(Debug, Clone)]
-pub struct TestForAbi {
-    pub inner: Test,
+pub struct TestWithAbi {
+    pub inner: Arc<TestWithVals>,
     pub env: Arc<PunEnv>,
     pub defs: Arc<DefinitionGraph>,
 }
-impl std::ops::Deref for TestForAbi {
-    type Target = Test;
+impl std::ops::Deref for TestWithAbi {
+    type Target = TestWithVals;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
@@ -209,7 +220,7 @@ impl std::ops::Deref for TestForAbi {
 /// This also contains some utilities for interning compute type names/expressions.
 #[derive(Debug, Clone)]
 pub struct TestImpl {
-    pub inner: TestForAbi,
+    pub inner: Arc<TestWithAbi>,
     pub options: TestOptions,
 
     // interning state
@@ -218,7 +229,7 @@ pub struct TestImpl {
     pub borrowed_tynames: HashMap<TyIdx, String>,
 }
 impl std::ops::Deref for TestImpl {
-    type Target = TestForAbi;
+    type Target = TestWithAbi;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
@@ -257,16 +268,30 @@ pub trait AbiImpl {
 }
 
 impl Test {
-    pub fn has_convention(&self, _convention: CallingConvention) -> bool {
-        true
+    pub fn has_convention(&self, convention: CallingConvention) -> bool {
+        convention != CallingConvention::Handwritten
     }
-    pub async fn for_abi(
-        &self,
+
+    pub async fn with_vals(
+        self: &Arc<Self>,
+        vals: ValueGeneratorKind,
+    ) -> Result<Arc<TestWithVals>, GenerateError> {
+        let vals = Arc::new(ValueTree::new(&self.types, vals));
+        Ok(Arc::new(TestWithVals {
+            inner: self.clone(),
+            vals,
+        }))
+    }
+}
+
+impl TestWithVals {
+    pub async fn with_abi(
+        self: &Arc<Self>,
         abi: &(dyn AbiImpl + Send + Sync),
-    ) -> Result<Arc<TestForAbi>, GenerateError> {
+    ) -> Result<Arc<TestWithAbi>, GenerateError> {
         let env = abi.pun_env();
         let defs = Arc::new(self.types.definition_graph(&env)?);
-        Ok(Arc::new(TestForAbi {
+        Ok(Arc::new(TestWithAbi {
             inner: self.clone(),
             env,
             defs,
@@ -274,8 +299,8 @@ impl Test {
     }
 }
 
-impl TestForAbi {
-    pub fn with_options(&self, options: TestOptions) -> Result<TestImpl, GenerateError> {
+impl TestWithAbi {
+    pub fn with_options(self: &Arc<Self>, options: TestOptions) -> Result<TestImpl, GenerateError> {
         let desired_funcs = options.functions.active_funcs(&self.types);
         Ok(TestImpl {
             inner: self.clone(),

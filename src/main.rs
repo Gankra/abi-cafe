@@ -9,15 +9,15 @@ mod procgen;
 mod report;
 
 use abis::*;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use error::*;
 use harness::*;
 use report::*;
 use std::error::Error;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::OnceCell;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use vals::ValueGeneratorKind;
 
 pub type SortedMap<K, V> = std::collections::BTreeMap<K, V>;
@@ -75,159 +75,26 @@ pub struct Config {
 #[error("some tests failed")]
 pub struct TestsFailed {}
 
-#[derive(Default)]
-pub struct TestHarness {
-    tests: SortedMap<TestId, Arc<Test>>,
-    abi_impls: SortedMap<AbiImplId, Arc<dyn AbiImpl + Send + Sync>>,
-    test_with_abi_impls: Mutex<SortedMap<(TestId, AbiImplId), Arc<OnceCell<Arc<TestForAbi>>>>>,
-    sources: Mutex<SortedMap<Utf8PathBuf, Arc<OnceCell<()>>>>,
-    static_libs: Mutex<SortedMap<String, Arc<OnceCell<String>>>>,
-}
-
-impl TestHarness {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn add_abi_impl<A: AbiImpl + Send + Sync + 'static>(&mut self, id: AbiImplId, abi_impl: A) {
-        let old = self.abi_impls.insert(id.clone(), Arc::new(abi_impl));
-        assert!(old.is_none(), "duplicate abi impl id: {}", id);
-    }
-    pub fn abi_by_test_key(
-        &self,
-        key: &TestKey,
-        call_side: CallSide,
-    ) -> Arc<dyn AbiImpl + Send + Sync> {
-        let abi_id = key.abi_id(call_side);
-        self.abi_impls[abi_id].clone()
-    }
-
-    pub fn set_tests(&mut self, tests: Vec<Test>) {
-        for test in tests {
-            let id = test.name.clone();
-            let old = self.tests.insert(id.clone(), Arc::new(test));
-            assert!(old.is_none(), "duplicate test id: {}", id);
-        }
-    }
-    pub async fn test_with_abi_impl(
-        &self,
-        test: &Test,
-        abi_id: AbiImplId,
-    ) -> Result<Arc<TestForAbi>, GenerateError> {
-        let test_id = test.name.clone();
-        let abi_impl = self.abi_impls[&abi_id].clone();
-        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
-        let once = self
-            .test_with_abi_impls
-            .lock()
-            .unwrap()
-            .entry((test_id, abi_id.clone()))
-            .or_insert_with(|| Arc::new(OnceCell::new()))
-            .clone();
-        // Either acquire the cached result, or make it
-        let output = once
-            .get_or_try_init(|| test.for_abi(&*abi_impl))
-            .await?
-            .clone();
-        Ok(output)
-    }
-    pub fn get_test_rules(&self, test_key: &TestKey) -> TestRules {
-        let caller = self.abi_impls[&test_key.caller].clone();
-        let callee = self.abi_impls[&test_key.callee].clone();
-
-        get_test_rules(test_key, &*caller, &*callee)
-    }
-
-    pub fn spawn_test(
-        self: Arc<Self>,
-        rt: &tokio::runtime::Runtime,
-        rules: TestRules,
-        test_key: TestKey,
-        out_dir: Utf8PathBuf,
-    ) -> tokio::task::JoinHandle<TestRunResults> {
-        let harness = self.clone();
-        rt.spawn(async move { harness.do_test(test_key, rules, out_dir).await })
-    }
-
-    /// Generate, Compile, Link, Load, and Run this test.
-    #[tracing::instrument(name = "test", skip_all, fields(id = self.base_id(&test_key, None, "::")))]
-    pub async fn do_test(
-        &self,
-        test_key: TestKey,
-        test_rules: TestRules,
-        out_dir: Utf8PathBuf,
-    ) -> TestRunResults {
-        use TestRunMode::*;
-
-        let mut run_results = TestRunResults::default();
-        if test_rules.run <= Skip {
-            return run_results;
-        }
-
-        run_results.ran_to = Generate;
-        run_results.source = Some(self.generate_test(&test_key).await);
-        let source = match run_results.source.as_ref().unwrap() {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("Failed to generate source: {}", e);
-                return run_results;
-            }
-        };
-        if test_rules.run <= Generate {
-            return run_results;
-        }
-
-        run_results.ran_to = Build;
-        run_results.build = Some(self.build_test(&test_key, source, &out_dir).await);
-        let build = match run_results.build.as_ref().unwrap() {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("Failed to build test: {}", e);
-                return run_results;
-            }
-        };
-        if test_rules.run <= Build {
-            return run_results;
-        }
-
-        run_results.ran_to = Link;
-        run_results.link = Some(self.link_dynamic_lib(&test_key, build, &out_dir).await);
-        let link = match run_results.link.as_ref().unwrap() {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("Failed to link test: {}", e);
-                return run_results;
-            }
-        };
-        if test_rules.run <= Link {
-            return run_results;
-        }
-
-        run_results.ran_to = Run;
-        run_results.run = Some(self.run_dynamic_test(&test_key, link).await);
-        let run = match run_results.run.as_ref().unwrap() {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("Failed to run test: {}", e);
-                return run_results;
-            }
-        };
-        if test_rules.run <= Run {
-            return run_results;
-        }
-
-        run_results.ran_to = Check;
-        run_results.check = Some(self.check_test(&test_key, run).await);
-
-        run_results
-    }
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let cfg = cli::make_app();
     debug!("parsed cli!");
     let out_dir = init_dirs()?;
 
-    let mut harness = TestHarness::new();
+    let rt = tokio::runtime::Runtime::new().expect("failed to init tokio runtime");
+    let _handle = rt.enter();
+
+    // Grab all the tests
+    let test_sources = harness::find_tests(&std::path::PathBuf::from("tests"))?;
+    let read_tasks = test_sources
+        .into_iter()
+        .map(|(test, test_file)| harness::spawn_read_test(&rt, test, test_file));
+
+    // We could async pipeline this harder but it's nice to know all the tests upfront
+    let tests = read_tasks
+        .filter_map(|task| rt.block_on(task).expect("failed to join on task").ok())
+        .map(|test| (test.name.clone(), test))
+        .collect();
+    let mut harness = TestHarness::new(tests);
 
     harness.add_abi_impl(
         ABI_IMPL_RUSTC.to_owned(),
@@ -257,23 +124,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             abis::RustcAbiImpl::new(&cfg, Some(path.to_owned())),
         );
     }
-    debug!("configured ABIs!");
 
-    // Grab all the tests
-    let tests = read_tests(cfg.val_generator)?;
-    harness.set_tests(tests);
-    debug!("loaded tests!");
+    debug!("configured ABIs!");
     let harness = Arc::new(harness);
+
+    debug!("loaded tests!");
     // Run the tests
     use TestConclusion::*;
-    let rt = tokio::runtime::Runtime::new().expect("failed to init tokio runtime");
-    let _handle = rt.enter();
-    // This is written as nested iterator adaptors so that it can maybe be changed to use
-    // rayon's par_iter, but currently the code isn't properly threadsafe due to races on
-    // the filesystem when setting up the various output dirs :(
+
     let tasks = harness
-        .tests
-        .values()
+        .all_tests()
+        .into_iter()
         .flat_map(|test| {
             // If the cli has test filters, apply those
             if !cfg.run_tests.is_empty() && !cfg.run_tests.contains(&test.name) {
@@ -371,73 +232,80 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if full_report.failed() {
-        do_thing(&harness, &rt, &out_dir, &full_report);
+        generate_minimized_failures(&harness, &rt, &out_dir, &full_report);
         Err(TestsFailed {})?;
     }
     Ok(())
 }
 
-fn do_thing(
+fn generate_minimized_failures(
     harness: &Arc<TestHarness>,
     rt: &tokio::runtime::Runtime,
     out_dir: &Utf8Path,
     reports: &FullReport,
 ) {
     info!("rerunning failures");
-    for report in &reports.tests {
+    let tasks = reports.tests.iter().flat_map(|report| {
         let Some(check) = report.results.check.as_ref() else {
-            continue;
+            return vec![];
         };
-        for func_result in &check.subtest_checks {
-            let Err(failure) = func_result else {
-                continue;
-            };
-            let functions = match *failure {
-                CheckFailure::ArgCountMismatch { func_idx, .. } => FunctionSelector::One {
-                    idx: func_idx,
-                    args: ArgSelector::All,
-                },
-                CheckFailure::ValCountMismatch {
-                    func_idx, arg_idx, ..
-                } => FunctionSelector::One {
-                    idx: func_idx,
-                    args: ArgSelector::One {
-                        idx: arg_idx,
-                        vals: ValSelector::All,
+        check
+            .subtest_checks
+            .iter()
+            .filter_map(|func_result| {
+                let Err(failure) = func_result else {
+                    return None;
+                };
+                let functions = match *failure {
+                    CheckFailure::ArgCountMismatch { func_idx, .. } => FunctionSelector::One {
+                        idx: func_idx,
+                        args: ArgSelector::All,
                     },
-                },
-                CheckFailure::ValMismatch {
-                    func_idx,
-                    arg_idx,
-                    val_idx,
-                    ..
-                }
-                | CheckFailure::TagMismatch {
-                    func_idx,
-                    arg_idx,
-                    val_idx,
-                    ..
-                } => FunctionSelector::One {
-                    idx: func_idx,
-                    args: ArgSelector::One {
-                        idx: arg_idx,
-                        vals: ValSelector::One { idx: val_idx },
+                    CheckFailure::ValCountMismatch {
+                        func_idx, arg_idx, ..
+                    } => FunctionSelector::One {
+                        idx: func_idx,
+                        args: ArgSelector::One {
+                            idx: arg_idx,
+                            vals: ValSelector::All,
+                        },
                     },
-                },
-            };
+                    CheckFailure::ValMismatch {
+                        func_idx,
+                        arg_idx,
+                        val_idx,
+                        ..
+                    }
+                    | CheckFailure::TagMismatch {
+                        func_idx,
+                        arg_idx,
+                        val_idx,
+                        ..
+                    } => FunctionSelector::One {
+                        idx: func_idx,
+                        args: ArgSelector::One {
+                            idx: arg_idx,
+                            vals: ValSelector::One { idx: val_idx },
+                        },
+                    },
+                };
 
-            let mut test_key = report.key.clone();
-            test_key.options.functions = functions;
-            test_key.options.val_writer = WriteImpl::Print;
-            let rules = report.rules.clone();
-            debug!("rerunning {}", harness.base_id(&test_key, None, "::"));
-            let task = harness
-                .clone()
-                .spawn_test(rt, rules, test_key, out_dir.to_owned());
-            let results = rt.block_on(task).expect("failed to join task");
-            let source = results.source.unwrap().unwrap();
-            debug!("  caller: {}", source.caller_src);
-            debug!("  callee: {}", source.callee_src);
-        }
-    }
+                let mut test_key = report.key.clone();
+                test_key.options.functions = functions;
+                test_key.options.val_writer = WriteImpl::Print;
+                let mut rules = report.rules.clone();
+                rules.run = TestRunMode::Generate;
+
+                let task = harness
+                    .clone()
+                    .spawn_test(rt, rules, test_key, out_dir.to_owned());
+                Some(task)
+            })
+            .collect()
+    });
+
+    let _results = tasks
+        .into_iter()
+        .map(|task| rt.block_on(task).expect("failed to join task"))
+        .collect::<Vec<_>>();
 }

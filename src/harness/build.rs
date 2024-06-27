@@ -43,7 +43,7 @@ impl TestHarness {
         let lib_name = self.static_lib_name(key, call_side);
         // Briefly lock this map to insert/acquire a OnceCell and then release the lock
         let once = self
-            .static_libs
+            .built_static_libs
             .lock()
             .unwrap()
             .entry(lib_name.clone())

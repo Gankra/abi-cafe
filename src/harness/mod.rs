@@ -6,12 +6,18 @@
 //! 4. running the test impls
 //! 5. checking the test results
 
-use std::error::Error;
-
 use crate::{
-    vals::ValueGeneratorKind, ArgSelector, CallSide, FunctionSelector, TestHarness, TestKey,
-    TestOptions, ValSelector, WriteImpl,
+    get_test_rules, vals::ValueGeneratorKind, AbiImpl, AbiImplId, ArgSelector, CallSide,
+    FunctionSelector, GenerateError, SortedMap, Test, TestId, TestKey, TestOptions, TestRules,
+    TestRunMode, TestRunResults, TestWithAbi, TestWithVals, ValSelector, WriteImpl,
 };
+use camino::Utf8PathBuf;
+use std::{
+    error::Error,
+    sync::{Arc, Mutex},
+};
+use tokio::sync::OnceCell;
+use tracing::warn;
 
 mod build;
 mod check;
@@ -20,10 +26,179 @@ mod read;
 mod run;
 
 use build::init_build_dir;
-use camino::Utf8PathBuf;
 use generate::init_generate_dir;
-pub use read::read_tests;
+pub use read::{find_tests, spawn_read_test};
 pub use run::WriteBuffer;
+
+pub type Memoized<K, V> = Mutex<SortedMap<K, Arc<OnceCell<V>>>>;
+
+#[derive(Default)]
+pub struct TestHarness {
+    abi_impls: SortedMap<AbiImplId, Arc<dyn AbiImpl + Send + Sync>>,
+    tests: SortedMap<TestId, Arc<Test>>,
+    tests_with_vals: Memoized<(TestId, ValueGeneratorKind), Arc<TestWithVals>>,
+    tests_with_abi_impl: Memoized<(TestId, ValueGeneratorKind, AbiImplId), Arc<TestWithAbi>>,
+    generated_sources: Memoized<Utf8PathBuf, ()>,
+    built_static_libs: Memoized<String, String>,
+}
+
+impl TestHarness {
+    pub fn new(tests: SortedMap<TestId, Arc<Test>>) -> Self {
+        Self {
+            tests,
+            ..Self::default()
+        }
+    }
+    pub fn add_abi_impl<A: AbiImpl + Send + Sync + 'static>(&mut self, id: AbiImplId, abi_impl: A) {
+        let old = self.abi_impls.insert(id.clone(), Arc::new(abi_impl));
+        assert!(old.is_none(), "duplicate abi impl id: {}", id);
+    }
+    pub fn abi_by_test_key(
+        &self,
+        key: &TestKey,
+        call_side: CallSide,
+    ) -> Arc<dyn AbiImpl + Send + Sync> {
+        let abi_id = key.abi_id(call_side);
+        self.abi_impls[abi_id].clone()
+    }
+    pub fn all_tests(&self) -> Vec<Arc<Test>> {
+        self.tests.values().cloned().collect()
+    }
+    pub fn test(&self, test: &TestId) -> Arc<Test> {
+        self.tests[test].clone()
+    }
+    pub async fn test_with_vals(
+        &self,
+        test_id: &TestId,
+        vals: ValueGeneratorKind,
+    ) -> Result<Arc<TestWithVals>, GenerateError> {
+        let test_id = test_id.clone();
+        let test = self.test(&test_id);
+        let once = self
+            .tests_with_vals
+            .lock()
+            .unwrap()
+            .entry((test_id, vals))
+            .or_insert_with(|| Arc::new(OnceCell::new()))
+            .clone();
+        // Either acquire the cached result, or make it
+        let output = once.get_or_try_init(|| test.with_vals(vals)).await?.clone();
+        Ok(output)
+    }
+    pub async fn test_with_abi_impl(
+        &self,
+        test: Arc<TestWithVals>,
+        abi_id: AbiImplId,
+    ) -> Result<Arc<TestWithAbi>, GenerateError> {
+        let test_id = test.name.clone();
+        let vals = test.vals.generator_kind;
+        let abi_impl = self.abi_impls[&abi_id].clone();
+        // Briefly lock this map to insert/acquire a OnceCell and then release the lock
+        let once = self
+            .tests_with_abi_impl
+            .lock()
+            .unwrap()
+            .entry((test_id, vals, abi_id.clone()))
+            .or_insert_with(|| Arc::new(OnceCell::new()))
+            .clone();
+        // Either acquire the cached result, or make it
+        let output = once
+            .get_or_try_init(|| test.with_abi(&*abi_impl))
+            .await?
+            .clone();
+        Ok(output)
+    }
+    pub fn get_test_rules(&self, test_key: &TestKey) -> TestRules {
+        let caller = self.abi_impls[&test_key.caller].clone();
+        let callee = self.abi_impls[&test_key.callee].clone();
+
+        get_test_rules(test_key, &*caller, &*callee)
+    }
+
+    pub fn spawn_test(
+        self: Arc<Self>,
+        rt: &tokio::runtime::Runtime,
+        rules: TestRules,
+        test_key: TestKey,
+        out_dir: Utf8PathBuf,
+    ) -> tokio::task::JoinHandle<TestRunResults> {
+        let harness = self.clone();
+        rt.spawn(async move { harness.do_test(test_key, rules, out_dir).await })
+    }
+
+    /// Generate, Compile, Link, Load, and Run this test.
+    #[tracing::instrument(name = "test", skip_all, fields(id = self.base_id(&test_key, None, "::")))]
+    pub async fn do_test(
+        &self,
+        test_key: TestKey,
+        test_rules: TestRules,
+        out_dir: Utf8PathBuf,
+    ) -> TestRunResults {
+        use TestRunMode::*;
+
+        let mut run_results = TestRunResults::default();
+        if test_rules.run <= Skip {
+            return run_results;
+        }
+
+        run_results.ran_to = Generate;
+        run_results.source = Some(self.generate_test(&test_key).await);
+        let source = match run_results.source.as_ref().unwrap() {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Failed to generate source: {}", e);
+                return run_results;
+            }
+        };
+        if test_rules.run <= Generate {
+            return run_results;
+        }
+
+        run_results.ran_to = Build;
+        run_results.build = Some(self.build_test(&test_key, source, &out_dir).await);
+        let build = match run_results.build.as_ref().unwrap() {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Failed to build test: {}", e);
+                return run_results;
+            }
+        };
+        if test_rules.run <= Build {
+            return run_results;
+        }
+
+        run_results.ran_to = Link;
+        run_results.link = Some(self.link_dynamic_lib(&test_key, build, &out_dir).await);
+        let link = match run_results.link.as_ref().unwrap() {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Failed to link test: {}", e);
+                return run_results;
+            }
+        };
+        if test_rules.run <= Link {
+            return run_results;
+        }
+
+        run_results.ran_to = Run;
+        run_results.run = Some(self.run_dynamic_test(&test_key, link).await);
+        let run = match run_results.run.as_ref().unwrap() {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Failed to run test: {}", e);
+                return run_results;
+            }
+        };
+        if test_rules.run <= Run {
+            return run_results;
+        }
+
+        run_results.ran_to = Check;
+        run_results.check = Some(self.check_test(&test_key, run).await);
+
+        run_results
+    }
+}
 
 pub fn init_dirs() -> Result<Utf8PathBuf, Box<dyn Error>> {
     init_generate_dir()?;

@@ -18,7 +18,10 @@ impl TestHarness {
             callee_outputs,
         }: &RunOutput,
     ) -> CheckOutput {
-        let test = self.tests[&key.test].clone();
+        let test = self
+            .test_with_vals(&key.test, key.options.val_generator)
+            .await
+            .expect("check-test called before test_with_vals!?");
         let options = &key.options;
         // Now check the results
 
@@ -101,15 +104,18 @@ impl TestHarness {
                 .zip(caller_inputs)
                 .zip(callee_inputs)
             {
-                if let Err(e) = self.check_vals(
-                    key,
-                    "input",
-                    func_idx,
-                    arg_idx,
-                    expected_arg,
-                    caller_vals,
-                    callee_vals,
-                ) {
+                if let Err(e) = self
+                    .check_vals(
+                        key,
+                        "input",
+                        func_idx,
+                        arg_idx,
+                        expected_arg,
+                        caller_vals,
+                        callee_vals,
+                    )
+                    .await
+                {
                     results.push(Err(e));
                     continue 'funcs;
                 }
@@ -121,15 +127,18 @@ impl TestHarness {
                 .zip(caller_outputs)
                 .zip(callee_outputs)
             {
-                if let Err(e) = self.check_vals(
-                    key,
-                    "output",
-                    func_idx,
-                    arg_idx,
-                    expected_arg,
-                    caller_vals,
-                    callee_vals,
-                ) {
+                if let Err(e) = self
+                    .check_vals(
+                        key,
+                        "output",
+                        func_idx,
+                        arg_idx,
+                        expected_arg,
+                        caller_vals,
+                        callee_vals,
+                    )
+                    .await
+                {
                     results.push(Err(e));
                     continue 'funcs;
                 }
@@ -181,17 +190,20 @@ impl TestHarness {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn check_vals(
+    async fn check_vals<'a>(
         &self,
         key: &TestKey,
         arg_kind: &str,
         func_idx: usize,
         arg_idx: usize,
-        mut expected_arg: ArgValuesIter,
+        mut expected_arg: ArgValuesIter<'a>,
         caller_vals: &Vec<Vec<u8>>,
         callee_vals: &Vec<Vec<u8>>,
     ) -> Result<(), CheckFailure> {
-        let test = &self.tests[&key.test];
+        let test = self
+            .test_with_vals(&key.test, key.options.val_generator)
+            .await
+            .expect("check called before test_with_vals!?");
         let types = &test.types;
         let options = &key.options;
         let func = types.realize_func(func_idx);

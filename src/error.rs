@@ -1,6 +1,12 @@
 use miette::Diagnostic;
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
+pub enum CliParseError {
+    #[error("{0}")]
+    Other(String),
+}
+
+#[derive(Debug, thiserror::Error, Diagnostic)]
 #[allow(dead_code)]
 pub enum GenerateError {
     #[error("io error\n{0}")]
@@ -33,7 +39,7 @@ pub enum GenerateError {
     Skipped,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum BuildError {
     #[error("io error\n{0}")]
     Io(#[from] std::io::Error),
@@ -46,7 +52,7 @@ pub enum BuildError {
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum CheckFailure {
     #[error("  {func_name} {arg_kind} count mismatch (expected: {expected_len}, caller: {}, callee: {})
     caller: {caller:#02X?}
@@ -118,7 +124,7 @@ pub enum CheckFailure {
     },
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum LinkError {
     #[error("io error\n{0}")]
     Io(#[from] std::io::Error),
@@ -128,7 +134,7 @@ pub enum LinkError {
     RustLink(std::process::Output),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum RunError {
     #[error("test loading error (dynamic linking failed)\n{0}")]
     LoadError(#[from] libloading::Error),

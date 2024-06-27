@@ -69,6 +69,8 @@ pub struct Config {
     pub run_tests: Vec<String>,
     pub rustc_codegen_backends: Vec<(String, String)>,
     pub val_generator: ValueGeneratorKind,
+    pub write_impl: WriteImpl,
+    pub minimizing_write_impl: WriteImpl,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -166,7 +168,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 options: TestOptions {
                                     convention: *convention,
                                     functions: FunctionSelector::All,
-                                    val_writer: WriteImpl::HarnessCallback,
+                                    val_writer: cfg.write_impl,
                                     val_generator: cfg.val_generator,
                                 },
                             };
@@ -232,13 +234,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if full_report.failed() {
-        generate_minimized_failures(&harness, &rt, &out_dir, &full_report);
+        generate_minimized_failures(&cfg, &harness, &rt, &out_dir, &full_report);
         Err(TestsFailed {})?;
     }
     Ok(())
 }
 
 fn generate_minimized_failures(
+    cfg: &Config,
     harness: &Arc<TestHarness>,
     rt: &tokio::runtime::Runtime,
     out_dir: &Utf8Path,
@@ -292,7 +295,7 @@ fn generate_minimized_failures(
 
                 let mut test_key = report.key.clone();
                 test_key.options.functions = functions;
-                test_key.options.val_writer = WriteImpl::Print;
+                test_key.options.val_writer = cfg.minimizing_write_impl;
                 let mut rules = report.rules.clone();
                 rules.run = TestRunMode::Generate;
 

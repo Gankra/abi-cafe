@@ -20,21 +20,21 @@ struct Cli {
     add_rustc_codegen_backend: Vec<String>,
     #[clap(long, default_value_t = OutputFormat::Human)]
     output_format: OutputFormat,
+    #[clap(long)]
+    gen_vals: Option<ValueGeneratorKind>,
+    #[clap(long)]
+    write_vals: Option<WriteImpl>,
+    #[clap(long)]
+    minimize_vals: Option<WriteImpl>,
 }
 
 pub fn make_app() -> Config {
-    static ABI_IMPLS: &[&str] = &[
-        ABI_IMPL_RUSTC,
-        ABI_IMPL_CC,
-        ABI_IMPL_GCC,
-        ABI_IMPL_CLANG,
-        ABI_IMPL_MSVC,
-    ];
     /// The pairings of impls to run. LHS calls RHS.
     static DEFAULT_TEST_PAIRS: &[(&str, &str)] = &[
-        (ABI_IMPL_RUSTC, ABI_IMPL_RUSTC), // (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
-                                          // (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
-                                          // (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
+        (ABI_IMPL_RUSTC, ABI_IMPL_RUSTC),
+        // (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
+        // (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
+        // (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
     ];
 
     let config = Cli::parse();
@@ -84,7 +84,9 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
         }
     }
 
-    let value_generator = ValueGeneratorKind::Graffiti;
+    let val_generator = config.gen_vals.unwrap_or(ValueGeneratorKind::Graffiti);
+    let minimizing_write_impl = config.minimize_vals.unwrap_or(WriteImpl::Print);
+    let write_impl = config.write_vals.unwrap_or(WriteImpl::HarnessCallback);
 
     let output_format = config.output_format;
 
@@ -116,6 +118,8 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
         run_tests,
         run_pairs,
         rustc_codegen_backends,
-        val_generator: value_generator,
+        val_generator,
+        write_impl,
+        minimizing_write_impl,
     }
 }

@@ -1,8 +1,7 @@
 use super::*;
-use kdl_script::parse::Attr;
+use kdl_script::parse::{Attr, AttrAligned, AttrPacked, AttrPassthrough, AttrRepr, LangRepr, Repr};
 use kdl_script::types::{AliasTy, ArrayTy, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use std::fmt::Write;
-use tracing::warn;
 
 impl RustcAbiImpl {
     /// Every test should start by loading in the harness' "header"
@@ -311,43 +310,77 @@ impl RustcAbiImpl {
         &self,
         f: &mut Fivemat,
         attrs: &[Attr],
-        ty_style: &str,
+        _ty_style: &str,
     ) -> Result<(), GenerateError> {
+        let mut default_c_repr = true;
         let mut repr_attrs = vec![];
-        let mut packed = false;
+        let mut other_attrs = vec![];
         for attr in attrs {
             match attr {
-                Attr::Derive(attr) => {
-                    return Err(UnsupportedError::Other(format!(
-                        "derive attr not supported {attr:?}"
-                    )))?;
+                Attr::Align(AttrAligned { align }) => {
+                    repr_attrs.push(format!("align({})", align.val));
                 }
-                Attr::Packed(_) => {
-                    packed = true;
+                Attr::Packed(AttrPacked {}) => {
+                    repr_attrs.push("packed".to_owned());
                 }
-                Attr::Passthrough(attr) => {
-                    warn!("found passthrough attr on {ty_style}, assuming repr(transparent)");
-                    repr_attrs.push("transparent");
+                Attr::Passthrough(AttrPassthrough(attr)) => {
+                    other_attrs.push(attr.to_string());
+                }
+                Attr::Repr(AttrRepr { reprs }) => {
+                    // Any explicit repr attributes disables default C
+                    default_c_repr = false;
+                    for repr in reprs {
+                        let val = match repr {
+                            Repr::Primitive(prim) => match prim {
+                                PrimitiveTy::I8 => "i8",
+                                PrimitiveTy::I16 => "i16",
+                                PrimitiveTy::I32 => "i32",
+                                PrimitiveTy::I64 => "i64",
+                                PrimitiveTy::I128 => "i128",
+                                PrimitiveTy::U8 => "u8",
+                                PrimitiveTy::U16 => "u16",
+                                PrimitiveTy::U32 => "u32",
+                                PrimitiveTy::U64 => "u64",
+                                PrimitiveTy::U128 => "u128",
+                                PrimitiveTy::I256
+                                | PrimitiveTy::U256
+                                | PrimitiveTy::F16
+                                | PrimitiveTy::F32
+                                | PrimitiveTy::F64
+                                | PrimitiveTy::F128
+                                | PrimitiveTy::Bool
+                                | PrimitiveTy::Ptr => {
+                                    return Err(UnsupportedError::Other(format!(
+                                        "unsupport repr({prim:?})"
+                                    )))?;
+                                }
+                            },
+                            Repr::Lang(LangRepr::C) => "C",
+                            Repr::Lang(LangRepr::Rust) => {
+                                continue;
+                            }
+                            Repr::Transparent => "transparent",
+                        };
+                        repr_attrs.push(val.to_owned());
+                    }
                 }
             }
         }
-        if repr_attrs.is_empty() {
-            repr_attrs.push("C");
+        if default_c_repr {
+            repr_attrs.push("C".to_owned());
         }
-        if packed {
-            repr_attrs.push("packed");
-        }
-        if !repr_attrs.is_empty() {
-            write!(f, "#[repr(")?;
-            let mut multi = false;
-            for repr in repr_attrs {
-                if multi {
-                    write!(f, ", ")?;
-                }
-                multi = true;
-                write!(f, "{repr}")?;
+        write!(f, "#[repr(")?;
+        let mut multi = false;
+        for repr in repr_attrs {
+            if multi {
+                write!(f, ", ")?;
             }
-            writeln!(f, ")]")?;
+            multi = true;
+            write!(f, "{repr}")?;
+        }
+        writeln!(f, ")]")?;
+        for attr in other_attrs {
+            writeln!(f, "{}", attr)?;
         }
         Ok(())
     }

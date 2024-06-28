@@ -167,7 +167,7 @@ pub struct Arg {
 }
 
 /// A primitive
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PrimitiveTy {
     /// `i8` / `int8_t`
     I8,
@@ -206,6 +206,27 @@ pub enum PrimitiveTy {
     /// An opaque pointer (like `void*`)
     Ptr,
 }
+
+pub const PRIMITIVES: &[(&str, PrimitiveTy)] = &[
+    ("i8", PrimitiveTy::I8),
+    ("i16", PrimitiveTy::I16),
+    ("i32", PrimitiveTy::I32),
+    ("i64", PrimitiveTy::I64),
+    ("i128", PrimitiveTy::I128),
+    ("i256", PrimitiveTy::I256),
+    ("u8", PrimitiveTy::U8),
+    ("u16", PrimitiveTy::U16),
+    ("u32", PrimitiveTy::U32),
+    ("u64", PrimitiveTy::U64),
+    ("u128", PrimitiveTy::U128),
+    ("u256", PrimitiveTy::U256),
+    ("f16", PrimitiveTy::F16),
+    ("f32", PrimitiveTy::F32),
+    ("f64", PrimitiveTy::F64),
+    ("f128", PrimitiveTy::F128),
+    ("bool", PrimitiveTy::Bool),
+    ("ptr", PrimitiveTy::Ptr),
+];
 
 /// The Ty of a nominal struct.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -492,27 +513,10 @@ pub fn typeck(comp: &mut Compiler, parsed: &ParsedProgram) -> Result<TypedProgra
 impl TyCtx {
     /// Add the builtin types to the TyCtx
     fn add_builtins(&mut self) {
-        let builtins = [
-            ("i8", Ty::Primitive(PrimitiveTy::I8)),
-            ("i16", Ty::Primitive(PrimitiveTy::I16)),
-            ("i32", Ty::Primitive(PrimitiveTy::I32)),
-            ("i64", Ty::Primitive(PrimitiveTy::I64)),
-            ("i128", Ty::Primitive(PrimitiveTy::I128)),
-            ("i256", Ty::Primitive(PrimitiveTy::I256)),
-            ("u8", Ty::Primitive(PrimitiveTy::U8)),
-            ("u16", Ty::Primitive(PrimitiveTy::U16)),
-            ("u32", Ty::Primitive(PrimitiveTy::U32)),
-            ("u64", Ty::Primitive(PrimitiveTy::U64)),
-            ("u128", Ty::Primitive(PrimitiveTy::U128)),
-            ("u256", Ty::Primitive(PrimitiveTy::U256)),
-            ("f16", Ty::Primitive(PrimitiveTy::F16)),
-            ("f32", Ty::Primitive(PrimitiveTy::F32)),
-            ("f64", Ty::Primitive(PrimitiveTy::F64)),
-            ("f128", Ty::Primitive(PrimitiveTy::F128)),
-            ("bool", Ty::Primitive(PrimitiveTy::Bool)),
-            ("ptr", Ty::Primitive(PrimitiveTy::Ptr)),
-            ("()", Ty::Empty),
-        ];
+        let builtins = PRIMITIVES
+            .iter()
+            .map(|(name, prim)| (*name, Ty::Primitive(*prim)))
+            .chain(Some(("()", Ty::Empty)));
 
         for (ty_name, ty) in builtins {
             let ty_idx = self.tys.len();
@@ -805,8 +809,8 @@ impl TyCtx {
             // However if we *already* restacked ourselves, at this point assume there's
             // an infinite type without the proper indirection of a reference!
             if already_visited.contains(&cur_ty) {
-                return Err(KdlScriptTypeError {
-                    message: format!("This type is infinitely recursive without an indirection!"),
+                Err(KdlScriptTypeError {
+                    message: "This type is infinitely recursive without an indirection!".to_owned(),
                     src: this.src.clone(),
                     span: this.span_for_ty_decl(cur_ty),
                     help: Some("Add a reference (&) somewhere".to_owned()),
@@ -1109,7 +1113,7 @@ impl TypedProgram {
                 (DefinitionGraphNode::Ty(l), DefinitionGraphNode::Ty(r)) => {
                     let lty = self.realize_ty(*l);
                     let rty = self.realize_ty(*r);
-                    rty.is_nominal().cmp(&lty.is_nominal()).then(l.cmp(&r))
+                    rty.is_nominal().cmp(&lty.is_nominal()).then(l.cmp(r))
                 }
             });
             *component = sorted_nodes;

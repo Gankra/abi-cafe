@@ -102,24 +102,23 @@ fn main() -> Result<(), Box<dyn Error>> {
         ABI_IMPL_RUSTC.to_owned(),
         abis::RustcAbiImpl::new(&cfg, None),
     );
-    /*
-    runner.add_abi_impl(
+    harness.add_abi_impl(
         ABI_IMPL_CC.to_owned(),
         abis::CcAbiImpl::new(&cfg, ABI_IMPL_CC),
     );
-    runner.add_abi_impl(
+    harness.add_abi_impl(
         ABI_IMPL_GCC.to_owned(),
         abis::CcAbiImpl::new(&cfg, ABI_IMPL_GCC),
     );
-    runner.add_abi_impl(
+    harness.add_abi_impl(
         ABI_IMPL_CLANG.to_owned(),
         abis::CcAbiImpl::new(&cfg, ABI_IMPL_CLANG),
     );
-    runner.add_abi_impl(
+    harness.add_abi_impl(
         ABI_IMPL_MSVC.to_owned(),
         abis::CcAbiImpl::new(&cfg, ABI_IMPL_MSVC),
     );
-    */
+
     for (name, path) in &cfg.rustc_codegen_backends {
         harness.add_abi_impl(
             name.to_owned(),

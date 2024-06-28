@@ -31,10 +31,10 @@ struct Cli {
 pub fn make_app() -> Config {
     /// The pairings of impls to run. LHS calls RHS.
     static DEFAULT_TEST_PAIRS: &[(&str, &str)] = &[
-        (ABI_IMPL_RUSTC, ABI_IMPL_RUSTC),
-        // (ABI_IMPL_RUSTC, ABI_IMPL_CC), // Rust calls C
-        // (ABI_IMPL_CC, ABI_IMPL_RUSTC), // C calls Rust
-        // (ABI_IMPL_CC, ABI_IMPL_CC),    // C calls C
+        (ABI_IMPL_RUSTC, ABI_IMPL_RUSTC), // Rust calls Rust
+        (ABI_IMPL_RUSTC, ABI_IMPL_CC),    // Rust calls C
+        (ABI_IMPL_CC, ABI_IMPL_RUSTC),    // C calls Rust
+        (ABI_IMPL_CC, ABI_IMPL_CC),       // C calls C
     ];
 
     let config = Cli::parse();

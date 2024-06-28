@@ -3,7 +3,7 @@ use kdl_script::types::{AliasTy, ArrayTy, PrimitiveTy, RefTy, Ty, TyIdx};
 use std::fmt::Write;
 use vals::{ArgValuesIter, Value};
 
-impl RustcAbiImpl {
+impl CcAbiImpl {
     pub fn init_leaf_value(
         &self,
         f: &mut Fivemat,
@@ -15,45 +15,73 @@ impl RustcAbiImpl {
         match state.types.realize_ty(ty) {
             // Primitives are the only "real" values with actual bytes that advance val_idx
             Ty::Primitive(prim) => match prim {
-                PrimitiveTy::I8 => write!(f, "{}i8", val.generate_i8())?,
-                PrimitiveTy::I16 => write!(f, "{}i16", val.generate_i16())?,
-                PrimitiveTy::I32 => write!(f, "{}i32", val.generate_i32())?,
-                PrimitiveTy::I64 => write!(f, "{}i64", val.generate_i64())?,
-                PrimitiveTy::I128 => write!(f, "{}i128", val.generate_i128())?,
-                PrimitiveTy::U8 => write!(f, "{}u8", val.generate_u8())?,
-                PrimitiveTy::U16 => write!(f, "{}u16", val.generate_u16())?,
-                PrimitiveTy::U32 => write!(f, "{}u32", val.generate_u32())?,
-                PrimitiveTy::U64 => write!(f, "{}u64", val.generate_u64())?,
-                PrimitiveTy::U128 => write!(f, "{}u128", val.generate_u128())?,
+                PrimitiveTy::I8 => write!(f, "{}", val.generate_i8())?,
+                PrimitiveTy::I16 => write!(f, "{}", val.generate_i16())?,
+                PrimitiveTy::I32 => write!(f, "{}", val.generate_i32())?,
+                PrimitiveTy::I64 => write!(f, "{}", val.generate_i64())?,
+                PrimitiveTy::U8 => write!(f, "{}", val.generate_u8())?,
+                PrimitiveTy::U16 => write!(f, "{}", val.generate_u16())?,
+                PrimitiveTy::U32 => write!(f, "{}", val.generate_u32())?,
+                PrimitiveTy::U64 => write!(f, "{}ull", val.generate_u64())?,
+                PrimitiveTy::I128 => {
+                    let val = val.generate_u128();
+                    let lower = (val as u128) & 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
+                    let higher = ((val as u128) & 0xFFFF_FFFF_FFFF_FFFF_0000_0000_0000_0000) >> 64;
+                    write!(
+                        f,
+                        "((__int128_t){lower:#X}ull) | (((__int128_t){higher:#X}ull) << 64)"
+                    )?
+                }
+                PrimitiveTy::U128 => {
+                    let val = val.generate_u128();
+                    let lower = val & 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
+                    let higher = (val & 0xFFFF_FFFF_FFFF_FFFF_0000_0000_0000_0000) >> 64;
+                    write!(
+                        f,
+                        "((__uint128_t){lower:#X}ull) | (((__uint128_t){higher:#X}ull) << 64)"
+                    )?
+                }
 
-                PrimitiveTy::F32 => write!(f, "f32::from_bits({})", val.generate_u32())?,
-                PrimitiveTy::F64 => write!(f, "f64::from_bits({})", val.generate_u64())?,
+                PrimitiveTy::F32 => {
+                    let val = f32::from_bits(val.generate_u32());
+                    if val.fract() == 0.0 {
+                        write!(f, "{val}.0f")?
+                    } else {
+                        write!(f, "{val}f")?
+                    }
+                }
+                PrimitiveTy::F64 => {
+                    let val = f64::from_bits(val.generate_u64());
+                    if val.fract() == 0.0 {
+                        write!(f, "{val}.0")?
+                    } else {
+                        write!(f, "{val}")?
+                    }
+                }
                 PrimitiveTy::Bool => write!(f, "true")?,
                 PrimitiveTy::Ptr => {
                     if true {
-                        write!(f, "{:#X}u64 as *mut ()", val.generate_u64())?
+                        write!(f, "(void*){:#X}ull", val.generate_u64())?
                     } else {
-                        write!(f, "{:#X}u32 as *mut ()", val.generate_u32())?
+                        write!(f, "(void*){:#X}ul", val.generate_u32())?
                     }
                 }
                 PrimitiveTy::I256 => {
-                    Err(UnsupportedError::Other("rust doesn't have i256".to_owned()))?
+                    Err(UnsupportedError::Other("c doesn't have i256?".to_owned()))?
                 }
                 PrimitiveTy::U256 => {
-                    Err(UnsupportedError::Other("rust doesn't have u256".to_owned()))?
+                    Err(UnsupportedError::Other("c doesn't have u256?".to_owned()))?
                 }
-                PrimitiveTy::F16 => {
-                    Err(UnsupportedError::Other("rust doesn't have f16".to_owned()))?
-                }
+                PrimitiveTy::F16 => Err(UnsupportedError::Other("c doesn't have f16?".to_owned()))?,
                 PrimitiveTy::F128 => {
-                    Err(UnsupportedError::Other("rust doesn't have f128".to_owned()))?
+                    Err(UnsupportedError::Other("c doesn't have f128?".to_owned()))?
                 }
             },
             Ty::Enum(enum_ty) => {
                 let name = alias.unwrap_or(&enum_ty.name);
                 if let Some(variant) = val.select_val(&enum_ty.variants) {
                     let variant_name = &variant.name;
-                    write!(f, "{name}::{variant_name}")?;
+                    write!(f, "{name}_{variant_name}")?;
                 }
             }
             _ => unreachable!("only primitives and enums should be passed to generate_leaf_value"),
@@ -78,18 +106,16 @@ impl RustcAbiImpl {
                 let val = vals.next_val();
                 self.init_leaf_value(f, state, ty, &val, alias)?;
             }
-            Ty::Empty => {
-                write!(f, "()")?;
-            }
             Ty::Ref(RefTy { pointee_ty }) => {
                 // The value is a mutable reference to a temporary
-                write!(f, "&mut {ref_temp_name}")?;
+                write!(f, "&{ref_temp_name}")?;
 
                 // TODO: should this be a recursive call to create_var (need create_var_inner?)
                 // Now do the rest of the recursion on constructing the temporary
                 let mut ref_temp = String::new();
                 let mut ref_temp_f = Fivemat::new(&mut ref_temp, INDENT);
-                write!(&mut ref_temp_f, "let mut {ref_temp_name} = ")?;
+                let (pre, post) = &state.tynames[pointee_ty];
+                write!(&mut ref_temp_f, "{pre}{ref_temp_name}{post} = ")?;
                 let ref_temp_name = format!("{ref_temp_name}_");
                 self.init_value(
                     &mut ref_temp_f,
@@ -104,7 +130,7 @@ impl RustcAbiImpl {
                 extra_decls.push(ref_temp);
             }
             Ty::Array(ArrayTy { elem_ty, len }) => {
-                write!(f, "[")?;
+                write!(f, "{{")?;
                 for arr_idx in 0..*len {
                     if arr_idx > 0 {
                         write!(f, ", ")?;
@@ -112,18 +138,18 @@ impl RustcAbiImpl {
                     let ref_temp_name = format!("{ref_temp_name}{arr_idx}_");
                     self.init_value(f, state, *elem_ty, vals, alias, &ref_temp_name, extra_decls)?;
                 }
-                write!(f, "]")?;
+                write!(f, "}}")?;
             }
             // Nominal types we need to emit a decl for
             Ty::Struct(struct_ty) => {
                 let name = alias.unwrap_or(&struct_ty.name);
-                write!(f, "{name} {{ ")?;
+                write!(f, "{{ ")?;
                 for (field_idx, field) in struct_ty.fields.iter().enumerate() {
                     if field_idx > 0 {
                         write!(f, ", ")?;
                     }
                     let field_name = &field.ident;
-                    write!(f, "{field_name}: ")?;
+                    write!(f, ".{field_name} = ")?;
                     let ref_temp_name = format!("{ref_temp_name}{field_name}_");
                     self.init_value(f, state, field.ty, vals, alias, &ref_temp_name, extra_decls)?;
                 }
@@ -131,11 +157,11 @@ impl RustcAbiImpl {
             }
             Ty::Union(union_ty) => {
                 let name = alias.unwrap_or(&union_ty.name);
-                write!(f, "{name} {{ ")?;
+                write!(f, "{{ ")?;
                 let tag_val = vals.next_val();
                 if let Some(field) = tag_val.select_val(&union_ty.fields) {
                     let field_name = &field.ident;
-                    write!(f, "{field_name}: ")?;
+                    write!(f, ".{field_name} = ")?;
                     let ref_temp_name = format!("{ref_temp_name}{field_name}_");
                     self.init_value(f, state, field.ty, vals, alias, &ref_temp_name, extra_decls)?;
                 }
@@ -143,6 +169,10 @@ impl RustcAbiImpl {
             }
 
             Ty::Tagged(tagged_ty) => {
+                return Err(UnsupportedError::Other(
+                    "c doesn't have tagged unions impled yet".to_owned(),
+                ))?;
+                /*
                 let name = alias.unwrap_or(&tagged_ty.name);
                 let tag_val = vals.next_val();
                 if let Some(variant) = tag_val.select_val(&tagged_ty.variants) {
@@ -170,6 +200,7 @@ impl RustcAbiImpl {
                         write!(f, " }}")?;
                     }
                 }
+                 */
             }
             Ty::Alias(AliasTy { real, name, .. }) => {
                 let alias = alias.or_else(|| Some(name));
@@ -180,6 +211,12 @@ impl RustcAbiImpl {
             Ty::Pun(pun) => {
                 let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();
                 self.init_value(f, state, real_ty, vals, alias, ref_temp_name, extra_decls)?;
+            }
+
+            Ty::Empty => {
+                return Err(UnsupportedError::Other(
+                    "c doesn't have empty tuples".to_owned(),
+                ))?
             }
         };
 

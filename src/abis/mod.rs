@@ -1,6 +1,9 @@
-// pub mod c;
+pub mod c;
 pub mod rust;
 pub mod vals;
+
+pub use c::CcAbiImpl;
+pub use rust::RustcAbiImpl;
 
 use std::{collections::HashMap, fmt::Write, sync::Arc};
 
@@ -9,7 +12,6 @@ use kdl_script::{
     types::{FuncIdx, TyIdx},
     DefinitionGraph, PunEnv, TypedProgram,
 };
-pub use rust::RustcAbiImpl;
 use serde::Serialize;
 use vals::{ValueGeneratorKind, ValueTree};
 
@@ -223,11 +225,6 @@ impl std::ops::Deref for TestWithAbi {
 pub struct TestImpl {
     pub inner: Arc<TestWithAbi>,
     pub options: TestOptions,
-
-    // interning state
-    pub desired_funcs: Vec<FuncIdx>,
-    pub tynames: HashMap<TyIdx, String>,
-    pub borrowed_tynames: HashMap<TyIdx, String>,
 }
 impl std::ops::Deref for TestImpl {
     type Target = TestWithAbi;
@@ -325,13 +322,9 @@ impl TestWithVals {
 
 impl TestWithAbi {
     pub fn with_options(self: &Arc<Self>, options: TestOptions) -> Result<TestImpl, GenerateError> {
-        let desired_funcs = options.functions.active_funcs(&self.types);
         Ok(TestImpl {
             inner: self.clone(),
             options,
-            desired_funcs,
-            tynames: Default::default(),
-            borrowed_tynames: Default::default(),
         })
     }
 }

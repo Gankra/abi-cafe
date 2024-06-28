@@ -4,24 +4,21 @@ use kdl_script::types::{AliasTy, ArrayTy, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx
 use std::fmt::Write;
 
 impl RustcAbiImpl {
-    /// Every test should start by loading in the harness' "header"
-    /// and forward-declaring any structs that will be used.
-    pub fn write_harness_prefix(
+    pub fn generate_caller_externs(
         &self,
         f: &mut Fivemat,
         state: &TestImpl,
     ) -> Result<(), GenerateError> {
-        // No extra harness gunk if not needed
-        if state.options.val_writer != WriteImpl::HarnessCallback {
-            return Ok(());
+        let convention_decl = self.convention_decl(state.options.convention)?;
+        writeln!(f, "extern \"{convention_decl}\" {{",)?;
+        f.add_indent(1);
+        for &func in &state.desired_funcs {
+            self.generate_signature(f, state, func)?;
+            writeln!(f, ";")?;
         }
-        if state.options.convention == CallingConvention::Vectorcall {
-            writeln!(f, "#![feature(abi_vectorcall)]")?;
-        }
-        // Load test harness "headers"
-        writeln!(f, "{}", RUST_TEST_PREFIX)?;
+        f.sub_indent(1);
+        writeln!(f, "}}")?;
         writeln!(f)?;
-
         Ok(())
     }
 

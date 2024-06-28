@@ -1,0 +1,36 @@
+// A test demonstrating a self-referential type with a basic
+// intrusive list using pass-by-ref. Codegen backends are
+// expected to handle this, although most of the heavy lifting
+// is done by kdl-script and ValTree, so as long as you do what
+// those APIs say, it should just work!
+//
+// The way this works is that each instance of `Link` (and any `tagged`)
+// will select a random one of its variants (deterministically) to take on.
+// As such the length of each `IntrusiveList` will be, essentially, determined
+// by flipping a coin until it comes up tails.
+//
+// This could be a procgen test but then it would make nightmarish outparams
+// and honestly we could all do without that!
+
+struct "IntrusiveList" {
+    next "Link"
+}
+
+struct "Node" {
+    val "u32";
+    next "Link";
+}
+
+tagged "Link" {
+    Some { _ "&Node"; }
+    None
+}
+
+fn "intrusive1" {
+    inputs { _ "IntrusiveList"; }
+}
+
+fn "intrusivemany" {
+    inputs { _ "&[IntrusiveList; 12]"; }
+}
+

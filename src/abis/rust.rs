@@ -288,7 +288,6 @@ impl RustcAbiImpl {
         var_name: &str,
         _var_ty: TyIdx,
     ) -> Result<(), GenerateError> {
-        // TODO: implement outparam returns
         writeln!(f, "{var_name}")?;
         Ok(())
     }

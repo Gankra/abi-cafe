@@ -1,8 +1,11 @@
+// The canonical pun type example:
+// rust's repr(transparent) should behave like the bare integer
+
 pun "MetersU32" {
     lang "rust" {
-        @ "#[repr(transparent)]"
+        @repr "transparent"
         struct "MetersU32" {
-            a "u32"
+            _ "u32"
         }
     }
 

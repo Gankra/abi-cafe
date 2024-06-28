@@ -22,6 +22,7 @@ use thiserror::Error;
 use tracing::trace;
 
 use crate::spanned::Spanned;
+use crate::types::{PrimitiveTy, PRIMITIVES};
 use crate::{Compiler, Result};
 
 pub type StableMap<K, V> = linked_hash_map::LinkedHashMap<K, V>;
@@ -177,10 +178,12 @@ pub enum Tydent {
 /// a function or other such nonsense...
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Attr {
-    /// rust-style derive (unused, just for testing)
-    Derive(AttrDerive),
     /// The type should be packed
     Packed(AttrPacked),
+    /// The type should be aligned
+    Align(AttrAligned),
+    /// The type should use this repr
+    Repr(AttrRepr),
     /// Pass this attribute through to the target language
     Passthrough(AttrPassthrough),
 }
@@ -195,17 +198,37 @@ pub enum Attr {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AttrPacked {}
 
-/// An attribute declaring a rust-style derive (unused, just for testing).
+/// An attribute to passthrough to the target language.
 ///
-/// @derive "Trait1" "Trait2" ...
+/// @ "whatever you want buddy"
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AttrDerive(Vec<Spanned<String>>);
+pub struct AttrAligned {
+    pub align: IntExpr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AttrRepr {
+    pub reprs: Vec<Repr>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Repr {
+    Primitive(PrimitiveTy),
+    Lang(LangRepr),
+    Transparent,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum LangRepr {
+    Rust,
+    C,
+}
 
 /// An attribute to passthrough to the target language.
 ///
 /// @ "whatever you want buddy"
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AttrPassthrough(Spanned<String>);
+pub struct AttrPassthrough(pub Spanned<String>);
 
 /// A struct decl.
 ///
@@ -761,18 +784,55 @@ impl Parser<'_> {
 
     /// Parse an `@attribute` node.
     fn attr(&mut self, attr: &KdlNode) -> Result<Attr> {
-        let entries = attr.entries();
         let attr = match attr.name().value() {
             "@packed" => {
                 trace!("packed attr");
                 self.no_children(attr)?;
                 Attr::Packed(AttrPacked {})
             }
-            "@derive" => {
-                trace!("derive attr");
-                let traits = self.string_list(entries)?;
-                self.no_children(attr)?;
-                Attr::Derive(AttrDerive(traits))
+            "@align" => {
+                trace!("align attr");
+                let Some(e) = attr.entries().first() else {
+                    return Err(KdlScriptParseError {
+                        message: "align attr needs an integer argument".to_owned(),
+                        src: self.src.clone(),
+                        span: *attr.name().span(),
+                        help: None,
+                    })?;
+                };
+                let align = self.int_expr(e)?;
+                Attr::Align(AttrAligned { align })
+            }
+            "@repr" => {
+                trace!("repr attr");
+                let raw_reprs = self.string_list(attr.entries())?;
+                let mut reprs = vec![];
+                for raw_repr in raw_reprs {
+                    let repr = match &**raw_repr {
+                        "rust" => Repr::Lang(LangRepr::Rust),
+                        "c" => Repr::Lang(LangRepr::C),
+                        "transparent" => Repr::Transparent,
+                        name => {
+                            let mut prim_repr = None;
+                            for &(prim_name, prim) in PRIMITIVES {
+                                if prim_name == name {
+                                    prim_repr = Some(prim);
+                                }
+                            }
+                            let Some(prim_repr) = prim_repr else {
+                                return Err(KdlScriptParseError {
+                                    message: "repr attr has unknown kind".to_owned(),
+                                    src: self.src.clone(),
+                                    span: *attr.name().span(),
+                                    help: None,
+                                })?;
+                            };
+                            Repr::Primitive(prim_repr)
+                        }
+                    };
+                    reprs.push(repr);
+                }
+                Attr::Repr(AttrRepr { reprs })
             }
             "@" => {
                 trace!("passthrough attr");
@@ -1160,7 +1220,7 @@ fn unicode_space(input: &str) -> NomResult<&str, &str> {
 /// Possibly the type checker, but it also kinda needs to be deferred
 /// to the target language backends as a language may not be able to
 /// handle a `u256` or whatever.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntExpr {
     pub span: SourceSpan,
     pub val: i64,

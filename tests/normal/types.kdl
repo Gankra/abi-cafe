@@ -8,8 +8,6 @@ struct "Complex" {
     elems1 "[Simple;10]"
     elems2 "[Simple;9]"
     val "Simple"
-    // reffed "&Simple"
-    // array_ref "&[&Simple;2]"
     opaque "ptr"
     flag "bool"
 }
@@ -75,7 +73,7 @@ fn "arraytime" {
     inputs {
         a "[i32;4]"
         b "[[i32;4];5]"
-        // c "[[[&Simple;1];2];3]"
+        c "[[[&Simple;1];2];3]"
     }
 }
 

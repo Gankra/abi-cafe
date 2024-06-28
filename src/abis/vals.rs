@@ -410,12 +410,11 @@ impl ValueGenerator {
             return 0;
         }
         let mut rng = match self {
-            ValueGenerator::Graffiti { .. } => {
+            ValueGenerator::Graffiti { idx } => {
                 // To turn our pattern value into a fairly evenly distributed selection
-                // of the possible values in the range, just generate a grafitti u64 and
-                // use it as the seed for an rng, then ask rand to figure it out!
-                let seed = self.generate_u64();
-                RngImpl::seed_from_u64(seed)
+                // of the possible values in the range, use the index as a seed.
+                // This removes some aliasing from if we tried to use the graffiti pattern.
+                RngImpl::seed_from_u64(*idx)
             }
             ValueGenerator::Random { seed } => RngImpl::seed_from_u64(*seed),
         };

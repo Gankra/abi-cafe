@@ -182,7 +182,7 @@ impl RustcAbiImpl {
         let mut proper_outputs = function
             .outputs
             .iter()
-            .filter(|arg| !state.borrowed_tynames.contains_key(&arg.ty));
+            .filter(|arg| !state.types.ty_contains_ref(arg.ty));
         let output = proper_outputs.next();
         let too_many_outputs = proper_outputs.next();
         if too_many_outputs.is_some() {
@@ -200,7 +200,7 @@ impl RustcAbiImpl {
         let out_params = function
             .outputs
             .iter()
-            .filter(|arg| state.borrowed_tynames.contains_key(&arg.ty));
+            .filter(|arg| state.types.ty_contains_ref(arg.ty));
 
         for (arg_idx, arg) in inputs.chain(out_params).enumerate() {
             if arg_idx > 0 {
@@ -297,7 +297,7 @@ impl RustcAbiImpl {
                     self.intern_tyname(state, ty)?;
                 }
                 kdl_script::Definition::DefineTy(ty) => {
-                    debug!("generate ty {}", state.types.format_ty(ty));
+                    debug!("define ty {}", state.types.format_ty(ty));
                     self.generate_tydef(f, state, ty)?;
                 }
                 kdl_script::Definition::DefineFunc(_) => {
@@ -419,14 +419,10 @@ impl RustcAbiImpl {
         // Make sure our own name is interned
         self.intern_tyname(state, ty)?;
 
+        let has_borrows = state.types.ty_contains_ref(ty);
         match state.types.realize_ty(ty) {
             // Nominal types we need to emit a decl for
             Ty::Struct(struct_ty) => {
-                let has_borrows = struct_ty
-                    .fields
-                    .iter()
-                    .any(|field| state.borrowed_tynames.contains_key(&field.ty));
-
                 // Emit an actual struct decl
                 self.repr_attr(f, &struct_ty.attrs, "struct")?;
                 if has_borrows {
@@ -448,11 +444,6 @@ impl RustcAbiImpl {
                 writeln!(f, "}}\n")?;
             }
             Ty::Union(union_ty) => {
-                let has_borrows = union_ty
-                    .fields
-                    .iter()
-                    .any(|field| state.borrowed_tynames.contains_key(&field.ty));
-
                 // Emit an actual union decl
                 self.repr_attr(f, &union_ty.attrs, "union")?;
                 if has_borrows {
@@ -487,17 +478,6 @@ impl RustcAbiImpl {
                 writeln!(f, "}}\n")?;
             }
             Ty::Tagged(tagged_ty) => {
-                let has_borrows = tagged_ty.variants.iter().any(|v| {
-                    v.fields
-                        .as_ref()
-                        .map(|fields| {
-                            fields
-                                .iter()
-                                .any(|field| state.borrowed_tynames.contains_key(&field.ty))
-                        })
-                        .unwrap_or(false)
-                });
-
                 // Emit an actual enum decl
                 self.repr_attr(f, &tagged_ty.attrs, "tagged")?;
                 if has_borrows {
@@ -896,7 +876,7 @@ impl RustcAbiImpl {
         }
         // Add outparams
         for arg in &function.outputs {
-            let is_outparam = state.borrowed_tynames.contains_key(&arg.ty);
+            let is_outparam = state.types.ty_contains_ref(arg.ty);
             if !is_outparam {
                 // Handled in next loop
                 continue;
@@ -914,7 +894,7 @@ impl RustcAbiImpl {
         // Add normal returns
         let mut has_normal_return = false;
         for arg in &function.outputs {
-            let is_outparam = state.borrowed_tynames.contains_key(&arg.ty);
+            let is_outparam = state.types.ty_contains_ref(arg.ty);
             if is_outparam {
                 // Already handled
                 continue;
@@ -1203,11 +1183,8 @@ impl RustcAbiImpl {
             WriteImpl::HarnessCallback => {
                 writeln!(f, "write_field({to}, &{}u32);", u32::MAX)?;
             }
-            WriteImpl::Assert => {
-                unreachable!("enum had unexpected variant!?");
-            }
-            WriteImpl::Print => {
-                unreachable!("enum had unexpected variant!?");
+            WriteImpl::Assert | WriteImpl::Print => {
+                writeln!(f, r#"unreachable!("enum had unexpected variant!?")"#)?;
             }
             WriteImpl::Noop => {
                 // Noop, do nothing

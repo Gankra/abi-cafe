@@ -5,7 +5,7 @@ mod init;
 mod write;
 
 use camino::Utf8Path;
-use kdl_script::types::{Func, FuncIdx, TyIdx};
+use kdl_script::types::{Func, FuncIdx};
 use kdl_script::PunEnv;
 use std::fmt::Write;
 use std::sync::Arc;
@@ -115,24 +115,6 @@ impl RustcAbiImpl {
         Ok(())
     }
 
-    fn generate_caller_externs(
-        &self,
-        f: &mut Fivemat,
-        state: &TestImpl,
-    ) -> Result<(), GenerateError> {
-        let convention_decl = self.convention_decl(state.options.convention)?;
-        writeln!(f, "extern \"{convention_decl}\" {{",)?;
-        f.add_indent(1);
-        for &func in &state.desired_funcs {
-            self.generate_signature(f, state, func)?;
-            writeln!(f, ";")?;
-        }
-        f.sub_indent(1);
-        writeln!(f, "}}")?;
-        writeln!(f)?;
-        Ok(())
-    }
-
     fn generate_caller_body(
         &self,
         f: &mut Fivemat,
@@ -148,7 +130,7 @@ impl RustcAbiImpl {
         for arg in &function.inputs {
             let arg_vals: ArgValuesIter = func_vals.next_arg();
             // Create and report the input
-            self.create_var(f, state, &arg.name, arg.ty, arg_vals.clone())?;
+            self.init_var(f, state, &arg.name, arg.ty, arg_vals.clone())?;
             self.write_var(f, state, &arg.name, arg.ty, arg_vals, VAR_CALLER_INPUTS)?;
         }
 
@@ -191,7 +173,7 @@ impl RustcAbiImpl {
             if arg_idx > 0 {
                 write!(f, ", ")?;
             }
-            self.pass_var(f, state, &arg.name, arg.ty)?;
+            write!(f, "{}", arg.name)?;
         }
         writeln!(f, ");")?;
         writeln!(f)?;
@@ -242,7 +224,7 @@ impl RustcAbiImpl {
         // Create outputs and report them
         for arg in &function.outputs {
             let arg_vals = func_vals.next_arg();
-            self.create_var(f, state, &arg.name, arg.ty, arg_vals.clone())?;
+            self.init_var(f, state, &arg.name, arg.ty, arg_vals.clone())?;
             self.write_var(f, state, &arg.name, arg.ty, arg_vals, VAR_CALLEE_OUTPUTS)?;
         }
 
@@ -252,7 +234,7 @@ impl RustcAbiImpl {
         // Return the outputs
         self.check_returns(state, function)?;
         for arg in function.outputs.iter() {
-            self.return_var(f, state, &arg.name, arg.ty)?;
+            writeln!(f, "{}", arg.name)?;
         }
         f.sub_indent(1);
         writeln!(f, "}}")?;
@@ -268,28 +250,6 @@ impl RustcAbiImpl {
             is_nightly: built_info::RUSTC_VERSION.contains("nightly"),
             codegen_backend,
         }
-    }
-
-    fn pass_var(
-        &self,
-        f: &mut dyn Write,
-        _state: &TestImpl,
-        var_name: &str,
-        _var_ty: TyIdx,
-    ) -> Result<(), GenerateError> {
-        write!(f, "{var_name}")?;
-        Ok(())
-    }
-
-    fn return_var(
-        &self,
-        f: &mut dyn Write,
-        _state: &TestImpl,
-        var_name: &str,
-        _var_ty: TyIdx,
-    ) -> Result<(), GenerateError> {
-        writeln!(f, "{var_name}")?;
-        Ok(())
     }
 
     fn check_returns(&self, state: &TestImpl, function: &Func) -> Result<(), GenerateError> {

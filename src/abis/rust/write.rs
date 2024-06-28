@@ -4,6 +4,27 @@ use std::fmt::Write;
 use vals::Value;
 
 impl RustcAbiImpl {
+    /// Every test should start by loading in the harness' "header"
+    /// and forward-declaring any structs that will be used.
+    pub fn write_harness_prefix(
+        &self,
+        f: &mut Fivemat,
+        state: &TestImpl,
+    ) -> Result<(), GenerateError> {
+        // No extra harness gunk if not needed
+        if state.options.val_writer != WriteImpl::HarnessCallback {
+            return Ok(());
+        }
+        if state.options.convention == CallingConvention::Vectorcall {
+            writeln!(f, "#![feature(abi_vectorcall)]")?;
+        }
+        // Load test harness "headers"
+        writeln!(f, "{}", RUST_TEST_PREFIX)?;
+        writeln!(f)?;
+
+        Ok(())
+    }
+
     /// Emit the WRITE calls and FINISHED_VAL for this value.
     /// This will WRITE every leaf subfield of the type.
     /// `to` is the BUFFER to use, `from` is the variable name of the value.
@@ -192,7 +213,7 @@ impl RustcAbiImpl {
             }
             WriteImpl::Assert => {
                 write!(f, "assert_eq!({path}, ")?;
-                self.generate_leaf_value(f, state, val.ty, val, None)?;
+                self.init_leaf_value(f, state, val.ty, val, None)?;
                 writeln!(f, ");")?;
             }
             WriteImpl::Print => {

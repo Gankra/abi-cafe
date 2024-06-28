@@ -4,7 +4,7 @@ use std::fmt::Write;
 use vals::{ArgValuesIter, Value};
 
 impl RustcAbiImpl {
-    pub fn generate_leaf_value(
+    pub fn init_leaf_value(
         &self,
         f: &mut Fivemat,
         state: &TestImpl,
@@ -62,7 +62,7 @@ impl RustcAbiImpl {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn generate_value(
+    pub fn init_value(
         &self,
         f: &mut Fivemat,
         state: &TestImpl,
@@ -76,7 +76,7 @@ impl RustcAbiImpl {
             // Primitives and Enums are the only "real" values with actual bytes
             Ty::Primitive(_) | Ty::Enum(_) => {
                 let val = vals.next_val();
-                self.generate_leaf_value(f, state, ty, &val, alias)?;
+                self.init_leaf_value(f, state, ty, &val, alias)?;
             }
             Ty::Empty => {
                 write!(f, "()")?;
@@ -91,7 +91,7 @@ impl RustcAbiImpl {
                 let mut ref_temp_f = Fivemat::new(&mut ref_temp, INDENT);
                 write!(&mut ref_temp_f, "let mut {ref_temp_name} = ")?;
                 let ref_temp_name = format!("{ref_temp_name}_");
-                self.generate_value(
+                self.init_value(
                     &mut ref_temp_f,
                     state,
                     *pointee_ty,
@@ -110,15 +110,7 @@ impl RustcAbiImpl {
                         write!(f, ", ")?;
                     }
                     let ref_temp_name = format!("{ref_temp_name}{arr_idx}_");
-                    self.generate_value(
-                        f,
-                        state,
-                        *elem_ty,
-                        vals,
-                        alias,
-                        &ref_temp_name,
-                        extra_decls,
-                    )?;
+                    self.init_value(f, state, *elem_ty, vals, alias, &ref_temp_name, extra_decls)?;
                 }
                 write!(f, "]")?;
             }
@@ -133,15 +125,7 @@ impl RustcAbiImpl {
                     let field_name = &field.ident;
                     write!(f, "{field_name}: ")?;
                     let ref_temp_name = format!("{ref_temp_name}{field_name}_");
-                    self.generate_value(
-                        f,
-                        state,
-                        field.ty,
-                        vals,
-                        alias,
-                        &ref_temp_name,
-                        extra_decls,
-                    )?;
+                    self.init_value(f, state, field.ty, vals, alias, &ref_temp_name, extra_decls)?;
                 }
                 write!(f, " }}")?;
             }
@@ -153,15 +137,7 @@ impl RustcAbiImpl {
                     let field_name = &field.ident;
                     write!(f, "{field_name}: ")?;
                     let ref_temp_name = format!("{ref_temp_name}{field_name}_");
-                    self.generate_value(
-                        f,
-                        state,
-                        field.ty,
-                        vals,
-                        alias,
-                        &ref_temp_name,
-                        extra_decls,
-                    )?;
+                    self.init_value(f, state, field.ty, vals, alias, &ref_temp_name, extra_decls)?;
                 }
                 write!(f, " }}")?;
             }
@@ -181,7 +157,7 @@ impl RustcAbiImpl {
                             let field_name = &field.ident;
                             write!(f, "{field_name}: ")?;
                             let ref_temp_name = format!("{ref_temp_name}{field_name}_");
-                            self.generate_value(
+                            self.init_value(
                                 f,
                                 state,
                                 field.ty,
@@ -197,20 +173,20 @@ impl RustcAbiImpl {
             }
             Ty::Alias(AliasTy { real, name, .. }) => {
                 let alias = alias.or_else(|| Some(name));
-                self.generate_value(f, state, *real, vals, alias, ref_temp_name, extra_decls)?;
+                self.init_value(f, state, *real, vals, alias, ref_temp_name, extra_decls)?;
             }
 
             // Puns should be evaporated
             Ty::Pun(pun) => {
                 let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();
-                self.generate_value(f, state, real_ty, vals, alias, ref_temp_name, extra_decls)?;
+                self.init_value(f, state, real_ty, vals, alias, ref_temp_name, extra_decls)?;
             }
         };
 
         Ok(())
     }
 
-    pub fn create_var(
+    pub fn init_var(
         &self,
         f: &mut Fivemat,
         state: &TestImpl,
@@ -226,7 +202,7 @@ impl RustcAbiImpl {
         let mut extra_decls = Vec::new();
         write!(&mut real_var_decl_f, "{let_mut} {var_name} = ")?;
         let ref_temp_name = format!("{var_name}_");
-        self.generate_value(
+        self.init_value(
             &mut real_var_decl_f,
             state,
             var_ty,

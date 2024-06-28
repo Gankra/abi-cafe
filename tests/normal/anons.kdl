@@ -23,6 +23,7 @@ tagged "MyTagged" {
     }
     NoneLike
 }
+
 fn "anons" {
     inputs {
         _ "u32"

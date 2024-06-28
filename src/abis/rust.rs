@@ -15,13 +15,38 @@ use super::*;
 use crate::fivemat::Fivemat;
 use crate::vals::ArgValuesIter;
 
-pub static RUST_TEST_PREFIX: &str = include_str!("../../harness/rust_test_prefix.rs");
+pub static RUST_HARNESS_PREFIX: &str = include_str!("../../harness/rust_harness_prefix.rs");
 
 const VAR_CALLER_INPUTS: &str = "CALLER_INPUTS";
 const VAR_CALLER_OUTPUTS: &str = "CALLER_OUTPUTS";
 const VAR_CALLEE_INPUTS: &str = "CALLEE_INPUTS";
 const VAR_CALLEE_OUTPUTS: &str = "CALLEE_OUTPUTS";
 const INDENT: &str = "    ";
+
+pub struct TestState {
+    pub inner: TestImpl,
+    // interning state
+    pub desired_funcs: Vec<FuncIdx>,
+    pub tynames: HashMap<TyIdx, String>,
+    pub borrowed_tynames: HashMap<TyIdx, String>,
+}
+impl std::ops::Deref for TestState {
+    type Target = TestImpl;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+impl TestState {
+    fn new(inner: TestImpl) -> Self {
+        let desired_funcs = inner.options.functions.active_funcs(&inner.types);
+        Self {
+            inner,
+            desired_funcs,
+            tynames: Default::default(),
+            borrowed_tynames: Default::default(),
+        }
+    }
+}
 
 #[allow(dead_code)]
 pub struct RustcAbiImpl {
@@ -82,14 +107,16 @@ impl AbiImpl for RustcAbiImpl {
         self.compile_callee(src_path, out_dir, lib_name)
     }
 
-    fn generate_callee(&self, f: &mut dyn Write, mut test: TestImpl) -> Result<(), GenerateError> {
+    fn generate_callee(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError> {
         let mut f = Fivemat::new(f, INDENT);
-        self.generate_callee_impl(&mut f, &mut test)
+        let mut state = TestState::new(test);
+        self.generate_callee_impl(&mut f, &mut state)
     }
 
-    fn generate_caller(&self, f: &mut dyn Write, mut test: TestImpl) -> Result<(), GenerateError> {
+    fn generate_caller(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError> {
         let mut f = Fivemat::new(f, INDENT);
-        self.generate_caller_impl(&mut f, &mut test)
+        let mut state = TestState::new(test);
+        self.generate_caller_impl(&mut f, &mut state)
     }
 }
 
@@ -97,7 +124,7 @@ impl RustcAbiImpl {
     pub fn generate_caller_impl(
         &self,
         f: &mut Fivemat,
-        state: &mut TestImpl,
+        state: &mut TestState,
     ) -> Result<(), GenerateError> {
         // Generate type decls and gather up functions
         self.generate_definitions(f, state)?;
@@ -118,7 +145,7 @@ impl RustcAbiImpl {
     fn generate_caller_body(
         &self,
         f: &mut Fivemat,
-        state: &TestImpl,
+        state: &TestState,
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
         writeln!(f, "unsafe {{")?;
@@ -154,7 +181,7 @@ impl RustcAbiImpl {
     fn call_function(
         &self,
         f: &mut Fivemat,
-        state: &TestImpl,
+        state: &TestState,
         function: &Func,
     ) -> Result<(), GenerateError> {
         let func_name = &function.name;
@@ -185,7 +212,7 @@ impl RustcAbiImpl {
     pub fn generate_callee_impl(
         &self,
         f: &mut Fivemat,
-        state: &mut TestImpl,
+        state: &mut TestState,
     ) -> Result<(), GenerateError> {
         // Generate type decls and gather up functions
         self.generate_definitions(f, state)?;
@@ -200,7 +227,7 @@ impl RustcAbiImpl {
     fn generate_callee_body(
         &self,
         f: &mut Fivemat,
-        state: &TestImpl,
+        state: &TestState,
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
         let function = state.types.realize_func(func);
@@ -233,7 +260,7 @@ impl RustcAbiImpl {
 
         // Return the outputs
         self.check_returns(state, function)?;
-        for arg in function.outputs.iter() {
+        if let Some(arg) = function.outputs.first() {
             writeln!(f, "{}", arg.name)?;
         }
         f.sub_indent(1);
@@ -252,7 +279,7 @@ impl RustcAbiImpl {
         }
     }
 
-    fn check_returns(&self, state: &TestImpl, function: &Func) -> Result<(), GenerateError> {
+    fn check_returns(&self, state: &TestState, function: &Func) -> Result<(), GenerateError> {
         let has_outparams = function
             .outputs
             .iter()

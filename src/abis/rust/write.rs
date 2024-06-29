@@ -19,7 +19,11 @@ impl RustcAbiImpl {
             writeln!(f, "#![feature(abi_vectorcall)]")?;
         }
         // Load test harness "headers"
-        writeln!(f, "{}", RUST_HARNESS_PREFIX)?;
+        writeln!(
+            f,
+            "{}",
+            crate::files::get_file("harness/rust/harness_prefix.rs")
+        )?;
         writeln!(f)?;
 
         Ok(())

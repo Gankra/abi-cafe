@@ -10,8 +10,6 @@ use crate::abis::*;
 use crate::error::*;
 use crate::*;
 
-const GENERATED_SRC_DIR: &str = "generated_impls";
-
 impl TestHarness {
     pub async fn generate_test(&self, key: &TestKey) -> Result<GenerateOutput, GenerateError> {
         // FIXME: these two could be done concurrently
@@ -57,22 +55,13 @@ impl TestHarness {
     }
 
     fn src_path(&self, key: &TestKey, call_side: CallSide) -> Utf8PathBuf {
-        let src_dir = Utf8PathBuf::from(GENERATED_SRC_DIR);
         let abi_id = key.abi_id(call_side);
         let abi = self.abi_by_test_key(key, call_side);
         let mut output = self.base_id(key, Some(call_side), "_");
         output.push('.');
         output.push_str(abi.src_ext());
-        src_dir.join(abi_id).join(output)
+        self.paths.generated_src_dir.join(abi_id).join(output)
     }
-}
-
-/// Delete and recreate the generated src dir
-pub fn init_generate_dir() -> Result<(), GenerateError> {
-    std::fs::create_dir_all(GENERATED_SRC_DIR)?;
-    std::fs::remove_dir_all(GENERATED_SRC_DIR)?;
-    std::fs::create_dir_all(GENERATED_SRC_DIR)?;
-    Ok(())
 }
 
 async fn generate_src(

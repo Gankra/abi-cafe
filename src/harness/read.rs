@@ -8,16 +8,39 @@ use std::{
 use camino::{Utf8Path, Utf8PathBuf};
 use tracing::warn;
 
-use crate::{error::*, SortedMap, Test, TestId};
+use crate::{error::*, files::Paths, SortedMap, Test, TestId};
 
 #[derive(Debug, Clone)]
 pub enum TestFile {
-    Kdl(Utf8PathBuf),
-    KdlProcgen(Utf8PathBuf),
+    Kdl(Pathish),
+    KdlProcgen(Pathish),
 }
 
-pub fn find_tests(start_dir: &Path) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
+#[derive(Debug, Clone)]
+pub enum Pathish {
+    Runtime(Utf8PathBuf),
+    Static(Utf8PathBuf),
+}
+impl Pathish {
+    fn as_str(&self) -> &str {
+        match self {
+            Pathish::Runtime(path) | Pathish::Static(path) => path.as_str(),
+        }
+    }
+}
+
+pub fn find_tests(paths: &Paths) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
+    let mut tests = find_tests_runtime(paths.runtime_test_input_dir.as_std_path())?;
+    let mut more_tests = find_tests_static()?;
+    tests.append(&mut more_tests);
+    Ok(tests)
+}
+
+pub fn find_tests_runtime(start_dir: &Path) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
     let mut tests = SortedMap::new();
+    if !start_dir.exists() {
+        return Ok(tests);
+    }
     let mut dirs = vec![start_dir.to_owned()];
     while let Some(dir) = dirs.pop() {
         for entry in std::fs::read_dir(dir)? {
@@ -31,11 +54,37 @@ pub fn find_tests(start_dir: &Path) -> Result<SortedMap<TestId, TestFile>, Gener
 
             let path = entry.path();
             let test_file = Utf8PathBuf::from_path_buf(path).expect("non-utf8 test path");
-            let Some((name, test)) = classify_test(&test_file) else {
+            let Some((name, test)) = classify_test(&test_file, true) else {
                 warn!("test isn't a known test format: {}", test_file);
                 continue;
             };
             tests.insert(name, test);
+        }
+    }
+    Ok(tests)
+}
+
+pub fn find_tests_static() -> Result<SortedMap<TestId, TestFile>, GenerateError> {
+    let mut tests = SortedMap::new();
+    let mut dirs = vec![crate::files::tests()];
+    while let Some(dir) = dirs.pop() {
+        for entry in dir.entries() {
+            // If it's a dir, add it to the working set
+            if let Some(dir) = entry.as_dir() {
+                dirs.push(dir);
+                continue;
+            }
+
+            if let Some(file) = entry.as_file() {
+                let path = file.path();
+                let test_file =
+                    Utf8PathBuf::from_path_buf(path.to_owned()).expect("non-utf8 test path");
+                let Some((name, test)) = classify_test(&test_file, false) else {
+                    warn!("test isn't a known test format: {}", test_file);
+                    continue;
+                };
+                tests.insert(name, test);
+            }
         }
     }
     Ok(tests)
@@ -80,22 +129,31 @@ async fn read_test_inner(test: &TestId, test_file: TestFile) -> Result<Arc<Test>
     }))
 }
 
+fn read_file_to_string(pathish: &Pathish) -> std::io::Result<String> {
+    match pathish {
+        Pathish::Runtime(path) => read_runtime_file_to_string(path),
+        Pathish::Static(path) => Ok(crate::files::get_file(path)),
+    }
+}
+
 #[allow(clippy::manual_map)]
-fn classify_test(test_file: &Utf8Path) -> Option<(String, TestFile)> {
+fn classify_test(test_file: &Utf8Path, is_runtime: bool) -> Option<(String, TestFile)> {
     let file_name = test_file.file_name().expect("test file had no name!?");
+    let pathish = if is_runtime {
+        Pathish::Runtime(test_file.to_owned())
+    } else {
+        Pathish::Static(test_file.to_owned())
+    };
     if let Some(test_name) = file_name.strip_suffix(".procgen.kdl") {
-        Some((
-            test_name.to_owned(),
-            TestFile::KdlProcgen(test_file.to_owned()),
-        ))
+        Some((test_name.to_owned(), TestFile::KdlProcgen(pathish)))
     } else if let Some(test_name) = file_name.strip_suffix(".kdl") {
-        Some((test_name.to_owned(), TestFile::Kdl(test_file.to_owned())))
+        Some((test_name.to_owned(), TestFile::Kdl(pathish)))
     } else {
         None
     }
 }
 
-fn read_file_to_string(file: &Utf8Path) -> std::io::Result<String> {
+fn read_runtime_file_to_string(file: &Utf8Path) -> std::io::Result<String> {
     let file = File::open(file)?;
     let mut reader = BufReader::new(file);
     let mut input = String::new();

@@ -15,9 +15,6 @@ use super::*;
 use crate::fivemat::Fivemat;
 use crate::vals::ArgValuesIter;
 
-pub static TEST_PREFIX: &str = include_str!("../../harness/c_test_prefix.h");
-pub static HARNESS_PREFIX: &str = include_str!("../../harness/c_harness_prefix.h");
-
 const VAR_CALLER_INPUTS: &str = "CALLER_INPUTS";
 const VAR_CALLER_OUTPUTS: &str = "CALLER_OUTPUTS";
 const VAR_CALLEE_INPUTS: &str = "CALLEE_INPUTS";
@@ -305,6 +302,13 @@ impl CcAbiImpl {
         out_dir: &Utf8Path,
         lib_name: &str,
     ) -> Result<String, BuildError> {
+        /*
+        let out_sub = src_path.parent().unwrap();
+        let ensure_out = out_dir.join(out_sub);
+        std::fs::create_dir_all(ensure_out).unwrap();
+        info!("out: {}", out_dir);
+        info!("lib: {}", lib_name);
+         */
         cc::Build::new()
             .file(src_path)
             .opt_level(0)

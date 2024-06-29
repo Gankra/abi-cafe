@@ -1,4 +1,5 @@
-use crate::{abis::*, Config, OutputFormat};
+use crate::{abis::*, files::Paths, Config, OutputFormat};
+use camino::Utf8PathBuf;
 use clap::Parser;
 use tracing::warn;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -99,6 +100,17 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
         .with(filter_layer)
         .with(logger.clone())
         .init();
+
+    let target_dir: Utf8PathBuf = "target".into();
+    let out_dir = target_dir.join("temp");
+    let generated_src_dir = target_dir.join("generated_impls");
+    let runtime_test_input_dir = "abi_cafe_tests".into();
+    let paths = Paths {
+        target_dir,
+        out_dir,
+        generated_src_dir,
+        runtime_test_input_dir,
+    };
     Config {
         output_format,
         procgen_tests,
@@ -110,5 +122,6 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
         val_generator,
         write_impl,
         minimizing_write_impl,
+        paths,
     }
 }

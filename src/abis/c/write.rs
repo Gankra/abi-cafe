@@ -12,13 +12,17 @@ impl CcAbiImpl {
         state: &TestState,
     ) -> Result<(), GenerateError> {
         // Always need includes for things like int8_t
-        writeln!(f, "{}", TEST_PREFIX)?;
+        writeln!(f, "{}", crate::files::get_file("harness/c/test_prefix.h"))?;
         // No extra harness gunk if not needed
         if state.options.val_writer != WriteImpl::HarnessCallback {
             return Ok(());
         }
         // Load test harness "headers"
-        writeln!(f, "{}", HARNESS_PREFIX)?;
+        writeln!(
+            f,
+            "{}",
+            crate::files::get_file("harness/c/harness_prefix.h")
+        )?;
 
         writeln!(f)?;
 

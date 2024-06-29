@@ -9,15 +9,10 @@ impl CcAbiImpl {
         f: &mut Fivemat,
         state: &TestState,
     ) -> Result<(), GenerateError> {
-        let convention_decl = self.convention_decl(state.options.convention)?;
-        writeln!(f, "extern \"{convention_decl}\" {{",)?;
-        f.add_indent(1);
         for &func in &state.desired_funcs {
             self.generate_signature(f, state, func)?;
             writeln!(f, ";")?;
         }
-        f.sub_indent(1);
-        writeln!(f, "}}")?;
         writeln!(f)?;
         Ok(())
     }
@@ -109,11 +104,11 @@ impl CcAbiImpl {
                 }
             }
             // Nominal types we need to emit a decl for
-            Ty::Struct(struct_ty) => (struct_ty.name.to_string(), None),
-            Ty::Union(union_ty) => (union_ty.name.to_string(), None),
-            Ty::Enum(enum_ty) => (enum_ty.name.to_string(), None),
-            Ty::Tagged(tagged_ty) => (tagged_ty.name.to_string(), None),
-            Ty::Alias(alias_ty) => (alias_ty.name.to_string(), None),
+            Ty::Struct(struct_ty) => (format!("{} ", struct_ty.name), None),
+            Ty::Union(union_ty) => (format!("{} ", union_ty.name), None),
+            Ty::Enum(enum_ty) => (format!("{} ", enum_ty.name), None),
+            Ty::Tagged(tagged_ty) => (format!("{} ", tagged_ty.name), None),
+            Ty::Alias(alias_ty) => (format!("{} ", alias_ty.name), None),
             // Puns should be evaporated
             Ty::Pun(pun) => {
                 let real_ty = state.types.resolve_pun(pun, &state.env).unwrap();
@@ -434,12 +429,14 @@ impl CcAbiImpl {
     ) -> Result<(), GenerateError> {
         let function = state.types.realize_func(func);
 
-        if let Some(output) = function.outputs.first() {
+        let (pre, post) = if let Some(output) = function.outputs.first() {
             let (pre, post) = &state.tynames[&output.ty];
-            write!(f, "{pre}{}{post}(", function.name)?;
+            (&**pre, &**post)
         } else {
-            write!(f, "void {}(", function.name)?;
-        }
+            ("void ", "")
+        };
+        let convention_decl = self.convention_decl(state.options.convention)?;
+        write!(f, "{pre}{}{}{post}(", convention_decl, function.name)?;
         let mut multiarg = false;
         // Add inputs
         for arg in &function.inputs {
@@ -451,6 +448,7 @@ impl CcAbiImpl {
             let (pre, post) = &state.tynames[&arg.ty];
             write!(f, "{pre}{}{post}", arg_name)?;
         }
+        write!(f, ")")?;
         Ok(())
     }
 

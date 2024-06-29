@@ -232,12 +232,11 @@ impl CcAbiImpl {
         mut vals: ArgValuesIter,
     ) -> Result<(), GenerateError> {
         // Generate the input
-        let needs_mut = false;
-        let let_mut = if needs_mut { "let mut" } else { "let" };
         let mut real_var_decl = String::new();
         let mut real_var_decl_f = Fivemat::new(&mut real_var_decl, INDENT);
         let mut extra_decls = Vec::new();
-        write!(&mut real_var_decl_f, "{let_mut} {var_name} = ")?;
+        let (pre, post) = &state.tynames[&var_ty];
+        write!(&mut real_var_decl_f, "{pre}{var_name}{post} = ")?;
         let ref_temp_name = format!("{var_name}_");
         self.init_value(
             &mut real_var_decl_f,

@@ -156,6 +156,8 @@ impl CcAbiImpl {
         state: &TestState,
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
+        writeln!(f, "{{")?;
+        f.add_indent(1);
         let function = state.types.realize_func(func);
 
         // Create vars for all the inputs
@@ -179,6 +181,8 @@ impl CcAbiImpl {
 
         // Report the function is complete
         self.write_end_function(f, state, VAR_CALLER_INPUTS, VAR_CALLER_OUTPUTS)?;
+        f.sub_indent(1);
+        writeln!(f, "}}")?;
         Ok(())
     }
 

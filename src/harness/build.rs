@@ -1,16 +1,12 @@
-use std::env;
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use tracing::info;
 
 use crate::error::*;
 use crate::report::*;
 use crate::*;
-
-const OUT_DIR: &str = "target/temp";
 
 impl TestHarness {
     pub async fn build_test(
@@ -82,22 +78,6 @@ impl TestHarness {
     }
 }
 
-/// Delete and recreate the build dir
-pub fn init_build_dir() -> Result<Utf8PathBuf, BuildError> {
-    let out_dir = Utf8PathBuf::from(OUT_DIR);
-    std::fs::create_dir_all(&out_dir)?;
-    std::fs::remove_dir_all(&out_dir)?;
-    std::fs::create_dir_all(&out_dir)?;
-
-    // Set up env vars for CC
-    env::set_var("OUT_DIR", &out_dir);
-    env::set_var("HOST", built_info::HOST);
-    env::set_var("TARGET", built_info::TARGET);
-    env::set_var("OPT_LEVEL", "0");
-
-    Ok(out_dir)
-}
-
 async fn build_static_lib(
     src_path: &Utf8Path,
     abi: Arc<dyn AbiImpl + Send + Sync>,
@@ -119,7 +99,7 @@ fn link_dynamic_lib(
     out_dir: &Utf8Path,
     dynamic_lib_name: &str,
 ) -> Result<LinkOutput, LinkError> {
-    let src = PathBuf::from("harness/harness.rs");
+    let src = out_dir.join("harness.rs");
     let output = out_dir.join(dynamic_lib_name);
     let mut cmd = Command::new("rustc");
     cmd.arg("-v")

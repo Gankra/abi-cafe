@@ -15,8 +15,6 @@ use super::*;
 use crate::fivemat::Fivemat;
 use crate::vals::ArgValuesIter;
 
-pub static RUST_HARNESS_PREFIX: &str = include_str!("../../harness/rust_harness_prefix.rs");
-
 const VAR_CALLER_INPUTS: &str = "CALLER_INPUTS";
 const VAR_CALLER_OUTPUTS: &str = "CALLER_OUTPUTS";
 const VAR_CALLEE_INPUTS: &str = "CALLEE_INPUTS";

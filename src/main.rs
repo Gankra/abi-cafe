@@ -1,6 +1,7 @@
 mod abis;
 mod cli;
 mod error;
+mod files;
 mod fivemat;
 mod harness;
 mod log;
@@ -9,8 +10,8 @@ mod procgen;
 mod report;
 
 use abis::*;
-use camino::Utf8Path;
 use error::*;
+use files::Paths;
 use harness::*;
 use report::*;
 use std::error::Error;
@@ -71,6 +72,7 @@ pub struct Config {
     pub val_generator: ValueGeneratorKind,
     pub write_impl: WriteImpl,
     pub minimizing_write_impl: WriteImpl,
+    pub paths: Paths,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -80,13 +82,13 @@ pub struct TestsFailed {}
 fn main() -> Result<(), Box<dyn Error>> {
     let cfg = cli::make_app();
     debug!("parsed cli!");
-    let out_dir = init_dirs()?;
+    cfg.paths.init_dirs()?;
 
     let rt = tokio::runtime::Runtime::new().expect("failed to init tokio runtime");
     let _handle = rt.enter();
 
     // Grab all the tests
-    let test_sources = harness::find_tests(&std::path::PathBuf::from("tests"))?;
+    let test_sources = harness::find_tests(&cfg.paths)?;
     let read_tasks = test_sources
         .into_iter()
         .map(|(test, test_file)| harness::spawn_read_test(&rt, test, test_file));
@@ -96,7 +98,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .filter_map(|task| rt.block_on(task).expect("failed to join on task").ok())
         .map(|test| (test.name.clone(), test))
         .collect();
-    let mut harness = TestHarness::new(tests);
+    let mut harness = TestHarness::new(tests, cfg.paths.clone());
 
     harness.add_abi_impl(
         ABI_IMPL_RUSTC.to_owned(),
@@ -172,12 +174,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                                 },
                             };
                             let rules = harness.get_test_rules(&test_key);
-                            let task = harness.clone().spawn_test(
-                                &rt,
-                                rules.clone(),
-                                test_key.clone(),
-                                out_dir.clone(),
-                            );
+                            let task =
+                                harness
+                                    .clone()
+                                    .spawn_test(&rt, rules.clone(), test_key.clone());
 
                             Some(task)
                         })
@@ -233,7 +233,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if full_report.failed() {
-        generate_minimized_failures(&cfg, &harness, &rt, &out_dir, &full_report);
+        generate_minimized_failures(&cfg, &harness, &rt, &full_report);
         Err(TestsFailed {})?;
     }
     Ok(())
@@ -243,7 +243,6 @@ fn generate_minimized_failures(
     cfg: &Config,
     harness: &Arc<TestHarness>,
     rt: &tokio::runtime::Runtime,
-    out_dir: &Utf8Path,
     reports: &FullReport,
 ) {
     info!("rerunning failures");
@@ -298,9 +297,7 @@ fn generate_minimized_failures(
                 let mut rules = report.rules.clone();
                 rules.run = TestRunMode::Generate;
 
-                let task = harness
-                    .clone()
-                    .spawn_test(rt, rules, test_key, out_dir.to_owned());
+                let task = harness.clone().spawn_test(rt, rules, test_key);
                 Some(task)
             })
             .collect()

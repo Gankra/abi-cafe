@@ -140,13 +140,13 @@ fn add_func(
 ) -> std::fmt::Result {
     writeln!(out, r#"fn "{func_name}" {{"#)?;
     writeln!(out, r#"    inputs {{"#)?;
-    for (idx, arg_ty) in inputs.iter().enumerate() {
-        writeln!(out, r#"        arg{idx} "{arg_ty}""#)?;
+    for arg_ty in inputs {
+        writeln!(out, r#"        _ "{arg_ty}""#)?;
     }
     writeln!(out, r#"    }}"#)?;
     writeln!(out, r#"    outputs {{"#)?;
-    for (idx, arg_ty) in outputs.iter().enumerate() {
-        writeln!(out, r#"        arg{idx} "{arg_ty}""#)?;
+    for arg_ty in outputs {
+        writeln!(out, r#"        _ "{arg_ty}""#)?;
     }
     writeln!(out, r#"    }}"#)?;
     writeln!(out, r#"}}"#)?;

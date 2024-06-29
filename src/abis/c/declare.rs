@@ -60,7 +60,7 @@ impl CcAbiImpl {
                 let name = match prim {
                     PrimitiveTy::I8 => "int8_t ",
                     PrimitiveTy::I16 => "int16_t ",
-                    PrimitiveTy::I32 => "int32_4 ",
+                    PrimitiveTy::I32 => "int32_t ",
                     PrimitiveTy::I64 => "int64_t ",
                     PrimitiveTy::I128 => "__int128_t ",
                     PrimitiveTy::U8 => "uint8_t ",

@@ -7,15 +7,12 @@
 //! 5. checking the test results
 
 use crate::{
-    get_test_rules, vals::ValueGeneratorKind, AbiImpl, AbiImplId, ArgSelector, CallSide,
-    FunctionSelector, GenerateError, SortedMap, Test, TestId, TestKey, TestOptions, TestRules,
-    TestRunMode, TestRunResults, TestWithAbi, TestWithVals, ValSelector, WriteImpl,
+    files::Paths, get_test_rules, vals::ValueGeneratorKind, AbiImpl, AbiImplId, ArgSelector,
+    CallSide, FunctionSelector, GenerateError, SortedMap, Test, TestId, TestKey, TestOptions,
+    TestRules, TestRunMode, TestRunResults, TestWithAbi, TestWithVals, ValSelector, WriteImpl,
 };
 use camino::Utf8PathBuf;
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 use tokio::sync::OnceCell;
 use tracing::warn;
 
@@ -25,15 +22,13 @@ mod generate;
 mod read;
 mod run;
 
-use build::init_build_dir;
-use generate::init_generate_dir;
 pub use read::{find_tests, spawn_read_test};
 pub use run::WriteBuffer;
 
 pub type Memoized<K, V> = Mutex<SortedMap<K, Arc<OnceCell<V>>>>;
 
-#[derive(Default)]
 pub struct TestHarness {
+    paths: Paths,
     abi_impls: SortedMap<AbiImplId, Arc<dyn AbiImpl + Send + Sync>>,
     tests: SortedMap<TestId, Arc<Test>>,
     tests_with_vals: Memoized<(TestId, ValueGeneratorKind), Arc<TestWithVals>>,
@@ -43,10 +38,15 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    pub fn new(tests: SortedMap<TestId, Arc<Test>>) -> Self {
+    pub fn new(tests: SortedMap<TestId, Arc<Test>>, paths: Paths) -> Self {
         Self {
+            paths,
             tests,
-            ..Self::default()
+            abi_impls: Default::default(),
+            tests_with_vals: Default::default(),
+            tests_with_abi_impl: Default::default(),
+            generated_sources: Default::default(),
+            built_static_libs: Default::default(),
         }
     }
     pub fn add_abi_impl<A: AbiImpl + Send + Sync + 'static>(&mut self, id: AbiImplId, abi_impl: A) {
@@ -120,22 +120,17 @@ impl TestHarness {
         rt: &tokio::runtime::Runtime,
         rules: TestRules,
         test_key: TestKey,
-        out_dir: Utf8PathBuf,
     ) -> tokio::task::JoinHandle<TestRunResults> {
         let harness = self.clone();
-        rt.spawn(async move { harness.do_test(test_key, rules, out_dir).await })
+        rt.spawn(async move { harness.do_test(test_key, rules).await })
     }
 
     /// Generate, Compile, Link, Load, and Run this test.
     #[tracing::instrument(name = "test", skip_all, fields(id = self.base_id(&test_key, None, "::")))]
-    pub async fn do_test(
-        &self,
-        test_key: TestKey,
-        test_rules: TestRules,
-        out_dir: Utf8PathBuf,
-    ) -> TestRunResults {
+    pub async fn do_test(&self, test_key: TestKey, test_rules: TestRules) -> TestRunResults {
         use TestRunMode::*;
 
+        let out_dir = self.paths.out_dir.clone();
         let mut res = TestRunResults::new(test_key, test_rules);
         if res.rules.run <= Skip {
             return res;
@@ -206,12 +201,6 @@ impl TestHarness {
 
         res
     }
-}
-
-pub fn init_dirs() -> Result<Utf8PathBuf, Box<dyn Error>> {
-    init_generate_dir()?;
-    let build_dir = init_build_dir()?;
-    Ok(build_dir)
 }
 
 impl TestHarness {

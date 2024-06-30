@@ -64,9 +64,6 @@ enum Platform {
 }
 
 impl AbiImpl for CcAbiImpl {
-    fn name(&self) -> &'static str {
-        self.mode
-    }
     fn lang(&self) -> &'static str {
         "c"
     }

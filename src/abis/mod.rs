@@ -267,7 +267,6 @@ impl std::fmt::Display for WriteImpl {
 
 /// ABI is probably a bad name for this... it's like, a language/compiler impl. idk.
 pub trait AbiImpl {
-    fn name(&self) -> &'static str;
     fn lang(&self) -> &'static str;
     fn src_ext(&self) -> &'static str;
     fn pun_env(&self) -> Arc<PunEnv>;

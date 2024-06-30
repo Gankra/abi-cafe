@@ -60,9 +60,6 @@ enum Platform {
 }
 
 impl AbiImpl for RustcAbiImpl {
-    fn name(&self) -> &'static str {
-        "rustc"
-    }
     fn lang(&self) -> &'static str {
         "rust"
     }

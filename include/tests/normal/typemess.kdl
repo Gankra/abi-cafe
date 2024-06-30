@@ -20,17 +20,17 @@ enum "ErrorCode" {
 
 tagged "OptionI32" {
     None
-    Some { _0 "i32"; }
+    Some { _ "i32"; }
 }
 
 tagged "MyResult" {
-    Ok { _0 "[u32;3]"; }
-    Err { _0 "ErrorCode"; }
+    Ok { _ "[u32;3]"; }
+    Err { _ "ErrorCode"; }
 }
 
 tagged "MyDeepResult" {
-    Ok { _0 "MyResult"; }
-    Err { _0 "OptionI32"; }
+    Ok { _ "MyResult"; }
+    Err { _ "OptionI32"; }
     FileNotFound { x "bool"; y "Simple"; }
 }
 

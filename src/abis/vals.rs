@@ -15,7 +15,6 @@ pub struct ValueTree {
 
 #[derive(Debug, Clone)]
 pub struct FuncValues {
-    pub func_name: String,
     pub args: Vec<ArgValues>,
 }
 
@@ -23,7 +22,6 @@ pub struct FuncValues {
 pub struct ArgValues {
     pub arg_name: String,
     pub ty: TyIdx,
-    pub is_input: bool,
     pub vals: Vec<Value>,
 }
 
@@ -115,25 +113,22 @@ impl ValueTree {
             .all_funcs()
             .map(|func_idx| {
                 let func = types.realize_func(func_idx);
-                let func_name = func.name.to_string();
                 let args = func
                     .inputs
                     .iter()
-                    .map(|arg| (true, arg))
-                    .chain(func.outputs.iter().map(|arg| (false, arg)))
-                    .map(|(is_input, arg)| {
+                    .chain(&func.outputs)
+                    .map(|arg| {
                         let mut vals = vec![];
                         let arg_name = arg.name.to_string();
                         generators.build_values(types, arg.ty, &mut vals, arg_name.clone())?;
                         Ok(ArgValues {
                             ty: arg.ty,
                             arg_name,
-                            is_input,
                             vals,
                         })
                     })
                     .collect::<Result<Vec<_>, GenerateError>>()?;
-                Ok(FuncValues { func_name, args })
+                Ok(FuncValues { args })
             })
             .collect::<Result<Vec<_>, GenerateError>>()?;
 

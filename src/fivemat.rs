@@ -77,6 +77,9 @@ mod test {
     fn fivemat_basic() -> std::fmt::Result {
         let mut out = String::new();
         let mut f = Fivemat::new(&mut out, "    ");
+        let ident_inner = "Inner";
+        let ident_x = "x";
+        let ty_f64 = "f64";
         writeln!(&mut f)?;
         {
             writeln!(&mut f, "struct MyStruct {{")?;
@@ -88,10 +91,10 @@ mod test {
             }
             {
                 write!(&mut f, "field2: ")?;
-                writeln!(&mut f, "{} {{", "Inner")?;
+                writeln!(&mut f, "{} {{", ident_inner)?;
                 f.add_indent(1);
                 {
-                    writeln!(&mut f, "{}: {},", "x", "f64")?;
+                    writeln!(&mut f, "{}: {},", ident_x, ty_f64)?;
                     writeln!(&mut f, "y: f32,")?;
                 }
                 f.sub_indent(1);

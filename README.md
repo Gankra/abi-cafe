@@ -48,9 +48,10 @@ The currently supported AbiImpls are:
 
 By default, we test the following pairings:
 
+* rustc_calls_rustc
+* cc_calls_cc
 * rustc_calls_cc
 * cc_calls_rustc
-* cc_calls_cc
 
 In theory other implementations aren't *too bad* to add. You just need to:
 
@@ -106,11 +107,13 @@ The test format support for the following types/concepts:
 
 # Adding Tests
 
-There are two kinds of tests: `.kdl` and `.procgen.kdl`
+The default suite of tests can be found in `/include/tests/`
+
+There are two kinds of tests: `.kdl` ("normal") and `.procgen.kdl` ("procgen").
 
 The latter is sugar for the former, where you just define a type with the same name of the file (so `MetersU32.procgen.kdl` is expected to define a type named `MetersU32`), and we generate a battery of types/functions that stress it out.
 
-Tests are specified as [ron](https://github.com/ron-rs/ron) files in the test/ directory, because it's more compact than JSON, has comments, and is more reliable with large integers. Because C is in some sense the "lingua franca" of FFI that everyone has to deal with, we prefer using C types in these definitions.
+Tests are specified as [kdl-script](https://github.com/ron-rs/ron) files in the test/ directory, because it's more compact than JSON, has comments, and is more reliable with large integers. Because C is in some sense the "lingua franca" of FFI that everyone has to deal with, we prefer using C types in these definitions.
 
 You don't need to register the test anywhere, we will just try to parse every file in that directory.
 

@@ -259,7 +259,7 @@ impl RustcAbiImpl {
                 if let Some(real_tyname) = state.borrowed_tynames.get(real) {
                     writeln!(f, "type {name}<'a> = {real_tyname};\n")?;
                 } else {
-                    let real_tyname = &state.tynames[&real];
+                    let real_tyname = &state.tynames[real];
                     writeln!(f, "type {name} = {real_tyname};\n")?;
                 }
             }

@@ -1,0 +1,22 @@
+// This is a simple little test case to demonstrate a basic normal
+// abi-cafe test that includes some custom types and functions
+
+struct "Point3" {
+    x "f32"
+    y "f32"
+    z "f32"
+}
+
+fn "print" {
+    inputs { _ "Point3"; }
+}
+
+fn "scale" {
+    inputs { _ "Point3"; factor "f32"; }
+    output { "Point3"; }
+}
+
+fn "add" {
+    inputs { _ "Point3"; _ "Point3"; }
+    outputs { _ "Point3"; }
+}

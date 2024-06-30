@@ -1,0 +1,5 @@
+// An array of floats (wrapped in a struct because C hates arrays)
+
+struct "F32Array" {
+    _ "[f32; 4]"
+}

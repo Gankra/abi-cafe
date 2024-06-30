@@ -30,7 +30,7 @@ impl Paths {
             let harness_file_contents = get_file("harness/harness.rs");
             let harness_file_path = self.harness_main_file();
             let mut file =
-                std::fs::File::create_new(&harness_file_path).expect("failed to create harness.rs");
+                std::fs::File::create_new(harness_file_path).expect("failed to create harness.rs");
             file.write_all(harness_file_contents.as_bytes())
                 .expect("failed to initialize harness.rs");
         }

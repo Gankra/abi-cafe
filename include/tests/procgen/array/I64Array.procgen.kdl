@@ -1,0 +1,5 @@
+// An array of i64 (wrapped in a struct because C hates arrays)
+
+struct "I64Array" {
+    _ "[i64; 3]"
+}

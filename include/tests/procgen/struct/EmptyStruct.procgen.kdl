@@ -1,0 +1,3 @@
+// How disagreeable are top-level empty structs?
+struct "EmptyStruct" {
+}

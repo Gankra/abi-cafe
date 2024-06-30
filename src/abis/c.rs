@@ -335,7 +335,7 @@ impl CcAbiImpl {
             .arg("-o")
             .arg(&obj_path)
             .arg("-c")
-            .arg(&src_path)
+            .arg(src_path)
             .status()
             .unwrap();
         Command::new("ar")
@@ -363,7 +363,7 @@ impl CcAbiImpl {
             .arg("-o")
             .arg(&obj_path)
             .arg("-c")
-            .arg(&src_path)
+            .arg(src_path)
             .status()
             .unwrap();
         Command::new("ar")

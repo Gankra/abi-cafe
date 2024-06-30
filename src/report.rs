@@ -1,4 +1,5 @@
 use camino::Utf8PathBuf;
+use console::Style;
 use serde::Serialize;
 use serde_json::json;
 
@@ -333,25 +334,40 @@ impl FullReport {
         use TestConclusion::*;
         writeln!(f, "Final Results:")?;
 
+        let red = Style::new().red();
+        let green = Style::new().green();
+        let blue = Style::new().blue();
         for test in &self.tests {
+            if let Skipped = test.conclusion {
+                continue;
+            }
             let pretty_test_name = harness.full_test_name(&test.key);
             write!(f, "{pretty_test_name:<40} ")?;
             match (&test.conclusion, &test.rules.check) {
-                (Skipped, _) => write!(f, "skipped")?,
+                (Skipped, _) => {
+                    // Don't mention these, too many
+                    // write!(f, "skipped")?
+                }
 
                 (Passed, Pass(_)) => write!(f, "passed")?,
                 (Passed, Random) => write!(f, "passed (random, result ignored)")?,
                 (Passed, Fail(_)) => write!(f, "passed (failed as expected)")?,
 
-                (Failed, Pass(_)) => write!(f, "failed")?,
-                (Failed, Random) => write!(f, "failed!? (failed but random!?)")?,
-                (Failed, Fail(_)) => write!(f, "failed (passed unexpectedly!)")?,
-                (Failed, TestCheckMode::Busted(_)) => {
-                    write!(f, "fixed (test was busted, congrats!)")?
+                (Failed, Pass(_)) => write!(f, "{}", red.apply_to("failed"))?,
+                (Failed, Random) => {
+                    write!(f, "{}", red.apply_to("failed!? (failed but random!?)"))?
                 }
+                (Failed, Fail(_)) => {
+                    write!(f, "{}", red.apply_to("failed (passed unexpectedly!)"))?
+                }
+                (Failed, TestCheckMode::Busted(_)) => write!(
+                    f,
+                    "{}",
+                    green.apply_to("fixed (test was busted, congrats!)")
+                )?,
 
                 (TestConclusion::Busted, _) | (Passed, TestCheckMode::Busted(_)) => {
-                    write!(f, "busted (known failure, ignored)")?
+                    write!(f, "{}", blue.apply_to("busted (known failure, ignored)"))?
                 }
             }
 
@@ -386,15 +402,22 @@ impl FullReport {
             writeln!(f)?;
         }
         writeln!(f)?;
-        writeln!(
-            f,
+        let summary_style = if self.summary.num_failed > 0 {
+            red
+        } else if self.summary.num_busted > 0 {
+            blue
+        } else {
+            green
+        };
+        let summary = format!(
             "{} tests run - {} passed, {} busted, {} failed, {} skipped",
             self.summary.num_tests,
             self.summary.num_passed,
             self.summary.num_busted,
             self.summary.num_failed,
-            self.summary.num_skipped,
-        )?;
+            self.summary.num_skipped
+        );
+        writeln!(f, "{}", summary_style.apply_to(summary),)?;
         Ok(())
     }
 

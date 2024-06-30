@@ -417,25 +417,53 @@ impl RustcAbiImpl {
         &self,
         convention: CallingConvention,
     ) -> Result<&'static str, GenerateError> {
+        use super::Platform::*;
+
         let conv = match convention {
             CallingConvention::C => "C",
-            CallingConvention::Cdecl => "cdecl",
             CallingConvention::System => "system",
             CallingConvention::Win64 => "win64",
             CallingConvention::Sysv64 => "sysv64",
             CallingConvention::Aapcs => "aapcs",
-            CallingConvention::Stdcall => "stdcall",
-            CallingConvention::Fastcall => "fastcall",
-            CallingConvention::Vectorcall => {
-                if self.is_nightly {
-                    "vectorcall"
+            CallingConvention::Cdecl => {
+                if self.platform == Windows {
+                    "cdecl"
                 } else {
-                    return Err(UnsupportedError::Other(
-                        "vectorcall is an unstable rust feature".to_owned(),
-                    ))?;
+                    return Err(self.unsupported_convention(&convention))?;
+                }
+            }
+            CallingConvention::Stdcall => {
+                if self.platform == Windows {
+                    "stdcall"
+                } else {
+                    return Err(self.unsupported_convention(&convention))?;
+                }
+            }
+            CallingConvention::Fastcall => {
+                if self.platform == Windows {
+                    "fastcall"
+                } else {
+                    return Err(self.unsupported_convention(&convention))?;
+                }
+            }
+            CallingConvention::Vectorcall => {
+                if self.platform == Windows {
+                    if self.is_nightly {
+                        "vectorcall"
+                    } else {
+                        return Err(UnsupportedError::Other(
+                            "vectorcall is an unstable rust feature, requires nightly".to_owned(),
+                        ))?;
+                    }
+                } else {
+                    return Err(self.unsupported_convention(&convention))?;
                 }
             }
         };
         Ok(conv)
+    }
+
+    fn unsupported_convention(&self, convention: &CallingConvention) -> UnsupportedError {
+        UnsupportedError::Other(format!("unsupported convention {convention}"))
     }
 }

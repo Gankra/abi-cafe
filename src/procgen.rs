@@ -11,17 +11,25 @@ fn procgen_test_for_ty_impl(
 ) -> std::fmt::Result {
     let ty = ty_name;
     let ty_ref = format!("&{ty_name}");
-    if let Some(ty_def) = ty_def {
+
+    // Apply the type's definitions first
+    let has_refs = if let Some(ty_def) = ty_def {
         writeln!(out, "{}", ty_def)?;
-    }
+        // To avoid outparam nonsense, avoid testing outputs of the type
+        // if any part of its definition involves a reference.
+        // (Yes this is a blunt check but it's fine enough.)
+        ty_def.contains('&')
+    } else {
+        false
+    };
 
     // Start gentle with basic one value in/out tests
     add_func(out, "val_in", &[ty], &[])?;
-    add_func(out, "val_out", &[], &[ty])?;
-    add_func(out, "val_in_out", &[ty], &[ty])?;
     add_func(out, "ref_in", &[&ty_ref], &[])?;
-    // add_func(out, "ref_out", &[], &[&ty_ref])?;
-    // add_func(out, "ref_in_out", &[&ty_ref], &[&ty_ref])?;
+    if !has_refs {
+        add_func(out, "val_out", &[], &[ty])?;
+        add_func(out, "val_in_out", &[ty], &[ty])?;
+    }
 
     // Stress out the calling convention and try lots of different
     // input counts. For many types this will result in register

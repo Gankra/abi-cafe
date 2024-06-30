@@ -1,0 +1,9 @@
+// A nice little struct with probably a lot of padding
+
+struct "SimplePaddedStruct" {
+    _ "u8"
+    _ "f32"
+    _ "i16"
+    _ "bool"
+    _ "i64"
+}

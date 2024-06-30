@@ -1,0 +1,5 @@
+// An array of bytes (wrapped in a struct because C hates arrays)
+
+struct "U8Array" {
+    _ "[u8; 6]"
+}

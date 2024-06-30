@@ -1,0 +1,8 @@
+// Just a nice little multi variant enum
+
+enum "MultiVariantEnum" {
+    "A"
+    "B"
+    "C"
+    "D"
+}

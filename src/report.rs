@@ -11,6 +11,7 @@ use crate::TestId;
 use crate::WriteBuffer;
 
 /// These are the builtin test-expectations, edit these if there are new rules!
+#[allow(unused_variables)]
 pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl) -> TestRules {
     use TestCheckMode::*;
     use TestRunMode::*;
@@ -26,28 +27,18 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl
     let is_rust = caller.lang() == "rust" || callee.lang() == "rust";
     let is_rust_and_c = is_c && is_rust;
 
-    // llvm and gcc disagree on the u128 ABI everywhere but aarch64 (arm64) and s390x.
-    // This is Bad! Ideally we should check for all clang<->gcc pairs but to start
-    // let's mark rust <-> C as disagreeing (because rust also disagrees with clang).
-    if !cfg!(any(target_arch = "aarch64", target_arch = "s390x"))
-        && test.test == "ui128"
-        && is_rust_and_c
-    {
-        result.check = Busted(Check);
-    }
-
     // i128 types are fake on windows so this is all random garbage that might
     // not even compile, but that datapoint is a little interesting/useful
     // so let's keep running them and just ignore the result for now.
     //
     // Anyone who cares about this situation more can make the expectations more precise.
-    if cfg!(windows) && test.test == "ui128" {
+    if cfg!(windows) && (test.test == "i128" || test.test == "u128") {
         result.check = Random;
     }
 
-    // This test is just for investigation right now, nothing normative
-    if test.test == "sysv_i128_emulation" {
-        result.check = Random;
+    // FIXME: investigate why this is failing to build
+    if cfg!(windows) && is_c && (test.test == "EmptyStruct" || test.test == "EmptyStructInside") {
+        result.check = Busted(Build);
     }
 
     //

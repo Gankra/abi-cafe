@@ -49,7 +49,7 @@ pub enum BuildError {
         std::str::from_utf8(&.0.stdout).unwrap(),
         std::str::from_utf8(&.0.stderr).unwrap())]
     RustCompile(std::process::Output),
-    #[error("c compile errror\n{0}")]
+    #[error("c compile error\n{0}")]
     CCompile(#[from] cc::Error),
 }
 

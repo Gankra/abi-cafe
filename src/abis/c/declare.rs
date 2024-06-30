@@ -1,5 +1,5 @@
 use super::*;
-use kdl_script::parse::{Attr, AttrAligned, AttrPacked, AttrPassthrough, AttrRepr, LangRepr, Repr};
+use kdl_script::parse::Attr;
 use kdl_script::types::{AliasTy, ArrayTy, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use std::fmt::Write;
 
@@ -251,12 +251,12 @@ impl CcAbiImpl {
                 f.add_indent(1);
                 for variant in &enum_ty.variants {
                     let variant_name = &variant.name;
-                    writeln!(f, "{variant_name};")?;
+                    writeln!(f, "{}_{variant_name},", enum_ty.name)?;
                 }
                 f.sub_indent(1);
                 writeln!(f, "}} {};\n", enum_ty.name)?;
             }
-            Ty::Tagged(tagged_ty) => {
+            Ty::Tagged(_tagged_ty) => {
                 return Err(UnsupportedError::Other(
                     "c doesn't have tagged unions impled yet".to_owned(),
                 ))?;
@@ -336,7 +336,7 @@ impl CcAbiImpl {
 
     pub fn generate_repr_attr(
         &self,
-        f: &mut Fivemat,
+        _f: &mut Fivemat,
         attrs: &[Attr],
         _ty_style: &str,
     ) -> Result<(), GenerateError> {

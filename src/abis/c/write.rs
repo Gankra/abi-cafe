@@ -105,7 +105,7 @@ impl CcAbiImpl {
                     self.write_fields(f, state, to, &base, field.ty, vals)?;
                 }
             }
-            Ty::Tagged(tagged_ty) => {
+            Ty::Tagged(_tagged_ty) => {
                 return Err(UnsupportedError::Other(
                     "c doesn't have tagged unions impled yet".to_owned(),
                 ))?;
@@ -244,7 +244,12 @@ impl CcAbiImpl {
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "write_field({to}, (uint32_t){});", variant_idx)?;
+                writeln!(f, "{{")?;
+                f.add_indent(1);
+                writeln!(f, "uint32_t _temp = {};", variant_idx)?;
+                writeln!(f, "write_field({to}, _temp);")?;
+                f.sub_indent(1);
+                writeln!(f, "}}")?;
             }
             WriteImpl::Assert => {
                 // Noop, do nothing
@@ -259,6 +264,7 @@ impl CcAbiImpl {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn write_error_tag_field(
         &self,
         f: &mut Fivemat,
@@ -267,7 +273,12 @@ impl CcAbiImpl {
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "write_field({to}, (uint32_t){});", u32::MAX)?;
+                writeln!(f, "{{")?;
+                f.add_indent(1);
+                writeln!(f, "uint32_t _temp = {};", u32::MAX)?;
+                writeln!(f, "write_field({to}, _temp);")?;
+                f.sub_indent(1);
+                writeln!(f, "}}")?;
             }
             WriteImpl::Assert | WriteImpl::Print => {
                 writeln!(f, r#"unreachable("enum had unexpected variant!?")"#)?;

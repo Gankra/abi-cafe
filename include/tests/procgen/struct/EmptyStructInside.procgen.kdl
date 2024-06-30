@@ -1,0 +1,10 @@
+// Are empty structs ok if they're inside another struct?
+
+struct "EmptyStructInside" {
+    _ "u32"
+    _ "EmptyStruct"
+    _ "u64"
+}
+
+struct "EmptyStruct" {
+}

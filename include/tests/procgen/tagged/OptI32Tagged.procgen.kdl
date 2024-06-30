@@ -1,0 +1,6 @@
+// An option-like enum of i32
+
+tagged "OptI32Tagged" {
+    Some { _ "i32"; }
+    None
+}

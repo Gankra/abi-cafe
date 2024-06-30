@@ -1,0 +1,9 @@
+// A tagged that's basically an enum
+
+tagged "CLikeTagged" {
+    "A"
+    "B"
+    "C"
+    "D"
+    "E"
+}

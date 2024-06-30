@@ -1,0 +1,3 @@
+union "SingleVariantUnion" {
+    _ "u32"
+}

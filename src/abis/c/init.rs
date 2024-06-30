@@ -24,7 +24,7 @@ impl CcAbiImpl {
                 PrimitiveTy::U32 => write!(f, "{}", val.generate_u32())?,
                 PrimitiveTy::U64 => write!(f, "{}ull", val.generate_u64())?,
                 PrimitiveTy::I128 => {
-                    let val = val.generate_u128();
+                    let val = val.generate_i128();
                     let lower = (val as u128) & 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
                     let higher = ((val as u128) & 0xFFFF_FFFF_FFFF_FFFF_0000_0000_0000_0000) >> 64;
                     write!(
@@ -142,7 +142,6 @@ impl CcAbiImpl {
             }
             // Nominal types we need to emit a decl for
             Ty::Struct(struct_ty) => {
-                let name = alias.unwrap_or(&struct_ty.name);
                 write!(f, "{{ ")?;
                 for (field_idx, field) in struct_ty.fields.iter().enumerate() {
                     if field_idx > 0 {
@@ -156,7 +155,6 @@ impl CcAbiImpl {
                 write!(f, " }}")?;
             }
             Ty::Union(union_ty) => {
-                let name = alias.unwrap_or(&union_ty.name);
                 write!(f, "{{ ")?;
                 let tag_val = vals.next_val();
                 if let Some(field) = tag_val.select_val(&union_ty.fields) {
@@ -168,7 +166,7 @@ impl CcAbiImpl {
                 write!(f, " }}")?;
             }
 
-            Ty::Tagged(tagged_ty) => {
+            Ty::Tagged(_tagged_ty) => {
                 return Err(UnsupportedError::Other(
                     "c doesn't have tagged unions impled yet".to_owned(),
                 ))?;

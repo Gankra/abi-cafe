@@ -1,0 +1,9 @@
+// A nice little struct with probably no padding
+
+struct "SimpleStruct" {
+    _ "i32"
+    _ "u32"
+    _ "f64"
+    _ "u64"
+    _ "bool"
+}

@@ -49,7 +49,14 @@ impl TestState {
 #[allow(dead_code)]
 pub struct RustcAbiImpl {
     is_nightly: bool,
+    platform: Platform,
     codegen_backend: Option<String>,
+}
+
+#[derive(PartialEq)]
+enum Platform {
+    Windows,
+    Unixy,
 }
 
 impl AbiImpl for RustcAbiImpl {
@@ -271,7 +278,14 @@ impl RustcAbiImpl {
 
 impl RustcAbiImpl {
     pub fn new(_system_info: &Config, codegen_backend: Option<String>) -> Self {
+        let platform = if cfg!(target_os = "windows") {
+            Platform::Windows
+        } else {
+            Platform::Unixy
+        };
+
         Self {
+            platform,
             is_nightly: built_info::RUSTC_VERSION.contains("nightly"),
             codegen_backend,
         }

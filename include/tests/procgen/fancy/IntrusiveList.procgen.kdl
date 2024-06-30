@@ -25,12 +25,3 @@ tagged "Link" {
     Some { _ "&Node"; }
     None
 }
-
-fn "intrusive1" {
-    inputs { _ "IntrusiveList"; }
-}
-
-fn "intrusivemany" {
-    inputs { _ "&[IntrusiveList; 12]"; }
-}
-

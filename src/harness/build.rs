@@ -47,9 +47,14 @@ impl TestHarness {
             .clone();
         // Either acquire the cached result, or make it
         let real_lib_name = once
-            .get_or_try_init(|| {
+            .get_or_try_init(|| async {
+                let _token = self
+                    .concurrency_limiter
+                    .acquire()
+                    .await
+                    .expect("failed to acquire concurrency limit semaphore");
                 info!("compiling   {lib_name}");
-                build_static_lib(src_path, abi_impl, call_side, out_dir, &lib_name)
+                build_static_lib(src_path, abi_impl, call_side, out_dir, &lib_name).await
             })
             .await?
             .clone();
@@ -62,6 +67,11 @@ impl TestHarness {
         build: &BuildOutput,
         out_dir: &Utf8Path,
     ) -> Result<LinkOutput, LinkError> {
+        let _token = self
+            .concurrency_limiter
+            .acquire()
+            .await
+            .expect("failed to acquire concurrency limit semaphore");
         let dynamic_lib_name = self.dynamic_lib_name(key);
         info!("linking     {dynamic_lib_name}");
         link_dynamic_lib(build, out_dir, &dynamic_lib_name)

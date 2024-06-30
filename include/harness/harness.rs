@@ -1,3 +1,14 @@
+//! This is the primary file for the abi-cafe cdylib that all tests are compiled into.
+//!
+//! This will be statically linked into a cdylib with two other static libraries:
+//! the caller and callee. The caller is expected to define the function `do_test`,
+//! and call a bunch of functions defined by the callee. The cdylib
+//! is run by the harness `dlopen`ing it and running `test_start`, passing in various
+//! buffers and callbacks for instrumenting the result of the execution.
+//!
+//! This instrumentation is only used in the default mode of `WriteImpl::HarnessCallback`.
+//! Otherwise the caller/callee may use things like asserts/prints.
+
 #[repr(transparent)]
 #[derive(Copy, Clone)]
 pub struct WriteBuffer(*mut ());
@@ -23,18 +34,18 @@ pub static mut FINISHED_VAL: Option<FinishedValCallback> = None;
 #[no_mangle]
 pub static mut FINISHED_FUNC: Option<FinishedFuncCallback> = None;
 
-extern { 
+extern {
     fn do_test();
 }
 
 #[no_mangle]
 pub extern fn test_start(
-    write_callback: WriteCallback, 
-    finished_val_callback: FinishedValCallback, 
-    finished_func_callback: FinishedFuncCallback, 
-    caller_inputs: WriteBuffer, 
-    caller_outputs: WriteBuffer, 
-    callee_inputs: WriteBuffer, 
+    write_callback: WriteCallback,
+    finished_val_callback: FinishedValCallback,
+    finished_func_callback: FinishedFuncCallback,
+    caller_inputs: WriteBuffer,
+    caller_outputs: WriteBuffer,
+    callee_inputs: WriteBuffer,
     callee_outputs: WriteBuffer,
 ) {
     unsafe {

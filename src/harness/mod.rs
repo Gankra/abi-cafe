@@ -13,7 +13,7 @@ use crate::{
 };
 use camino::Utf8PathBuf;
 use std::sync::{Arc, Mutex};
-use tokio::sync::OnceCell;
+use tokio::sync::{OnceCell, Semaphore};
 use tracing::warn;
 
 mod build;
@@ -35,6 +35,7 @@ pub struct TestHarness {
     tests_with_abi_impl: Memoized<(TestId, ValueGeneratorKind, AbiImplId), Arc<TestWithAbi>>,
     generated_sources: Memoized<Utf8PathBuf, ()>,
     built_static_libs: Memoized<String, String>,
+    concurrency_limiter: tokio::sync::Semaphore,
 }
 
 impl TestHarness {
@@ -47,6 +48,7 @@ impl TestHarness {
             tests_with_abi_impl: Default::default(),
             generated_sources: Default::default(),
             built_static_libs: Default::default(),
+            concurrency_limiter: Semaphore::new(8),
         }
     }
     pub fn add_abi_impl<A: AbiImpl + Send + Sync + 'static>(&mut self, id: AbiImplId, abi_impl: A) {

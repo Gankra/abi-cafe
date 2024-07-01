@@ -1,0 +1,9 @@
+// This was a problem for rustc (I think u32 = ulong here?)
+//
+// https://github.com/rust-lang/rust/issues/80127
+
+@align 16
+struct "TwoU32s" {
+    a "u32"
+    b "u32"
+}

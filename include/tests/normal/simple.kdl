@@ -13,7 +13,7 @@ fn "print" {
 
 fn "scale" {
     inputs { _ "Point3"; factor "f32"; }
-    output { "Point3"; }
+    outputs { "Point3"; }
 }
 
 fn "add" {

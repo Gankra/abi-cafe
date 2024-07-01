@@ -1,6 +1,7 @@
 union "MultiVariantUnion" {
     _ "u32"
     _ "i64"
+    _ "Point3"
 }
 
 struct "Point3" {

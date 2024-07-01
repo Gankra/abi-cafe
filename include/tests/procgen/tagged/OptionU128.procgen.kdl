@@ -1,0 +1,8 @@
+// This type was a problem for cranelift
+//
+// https://github.com/rust-lang/rustc_codegen_cranelift/issues/1449
+
+tagged "OptionU128" {
+  Some { _ "u128"; }
+  None
+}

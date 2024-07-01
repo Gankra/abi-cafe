@@ -1,0 +1,9 @@
+// This was a problem for rustc on ppc64le
+//
+// https://github.com/rust-lang/rust/issues/122767
+
+@align 16
+struct "TwoU64s" {
+    a "u64"
+    b "u64"
+}

@@ -48,7 +48,7 @@ impl TestHarness {
             tests_with_abi_impl: Default::default(),
             generated_sources: Default::default(),
             built_static_libs: Default::default(),
-            concurrency_limiter: Semaphore::new(8),
+            concurrency_limiter: Semaphore::new(128),
         }
     }
     pub fn add_abi_impl<A: AbiImpl + Send + Sync + 'static>(&mut self, id: AbiImplId, abi_impl: A) {
@@ -216,6 +216,7 @@ impl TestHarness {
                     functions,
                     val_writer,
                     val_generator,
+                    repr,
                 },
             caller,
             callee,
@@ -223,7 +224,12 @@ impl TestHarness {
         call_side: Option<CallSide>,
         separator: &str,
     ) -> String {
-        let mut output = format!("{test}{separator}{convention}");
+        let mut output = String::new();
+        output.push_str(test);
+        output.push_str(separator);
+        output.push_str(&format!("conv_{convention}"));
+        output.push_str(separator);
+        output.push_str(&format!("repr_{repr}"));
         if let FunctionSelector::One { idx, args } = functions {
             let test = self.tests[test].clone();
             let func = test.types.realize_func(*idx);

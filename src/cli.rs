@@ -1,6 +1,7 @@
 use crate::{abis::*, files::Paths, Config, OutputFormat};
 use camino::Utf8PathBuf;
 use clap::Parser;
+use kdl_script::parse::LangRepr;
 use tracing::warn;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use vals::ValueGeneratorKind;
@@ -11,6 +12,8 @@ struct Cli {
     procgen_tests: bool,
     #[clap(long)]
     conventions: Vec<CallingConvention>,
+    #[clap(long)]
+    reprs: Vec<LangRepr>,
     #[clap(long)]
     impls: Vec<String>,
     #[clap(long)]
@@ -44,6 +47,11 @@ pub fn make_app() -> Config {
         ALL_CONVENTIONS.to_vec()
     } else {
         config.conventions
+    };
+    let run_reprs = if config.reprs.is_empty() {
+        ALL_REPRS.to_vec()
+    } else {
+        config.reprs
     };
 
     let run_impls = config.impls;
@@ -115,6 +123,7 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
         output_format,
         procgen_tests,
         run_conventions,
+        run_reprs,
         run_impls,
         run_tests,
         run_pairs,

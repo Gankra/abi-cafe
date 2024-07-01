@@ -9,6 +9,7 @@ use std::{collections::HashMap, fmt::Write, sync::Arc};
 
 use camino::Utf8Path;
 use kdl_script::{
+    parse::LangRepr,
     types::{FuncIdx, TyIdx},
     DefinitionGraph, PunEnv, TypedProgram,
 };
@@ -30,17 +31,21 @@ pub static ABI_IMPL_CLANG: &str = "clang";
 pub static ABI_IMPL_MSVC: &str = "msvc";
 
 pub static ALL_CONVENTIONS: &[CallingConvention] = &[
+    // C!
     CallingConvention::C,
     CallingConvention::Cdecl,
     CallingConvention::Stdcall,
     CallingConvention::Fastcall,
     CallingConvention::Vectorcall,
+    // Rust!
+    CallingConvention::Rust,
     // Note sure if these have a purpose, so omitting them for now
     // CallingConvention::System,
     // CallingConvention::Win64,
     // CallingConvention::Sysv64,
     // CallingConvention::Aapcs,
 ];
+pub static ALL_REPRS: &[LangRepr] = &[LangRepr::Rust, LangRepr::C];
 
 /// A test case, fully abstract.
 ///
@@ -95,6 +100,7 @@ pub struct TestOptions {
     pub functions: FunctionSelector,
     pub val_writer: WriteImpl,
     pub val_generator: ValueGeneratorKind,
+    pub repr: LangRepr,
 }
 impl FunctionSelector {
     pub fn should_write_arg(&self, func_idx: usize, arg_idx: usize) -> bool {
@@ -333,6 +339,8 @@ impl TestWithAbi {
 pub enum CallingConvention {
     /// The platform's default C convention (cdecl?)
     C,
+    /// Rust's default calling convention
+    Rust,
     /// ???
     Cdecl,
     /// The platorm's default OS convention (usually C, but Windows is Weird).
@@ -361,6 +369,7 @@ impl CallingConvention {
     pub fn name(&self) -> &'static str {
         match self {
             CallingConvention::C => "c",
+            CallingConvention::Rust => "rust",
             CallingConvention::Cdecl => "cdecl",
             CallingConvention::System => "system",
             CallingConvention::Win64 => "win64",
@@ -385,6 +394,7 @@ impl std::str::FromStr for CallingConvention {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let val = match s {
             "c" => CallingConvention::C,
+            "rust" => CallingConvention::Rust,
             "cdecl" => CallingConvention::Cdecl,
             "system" => CallingConvention::System,
             "win64" => CallingConvention::Win64,

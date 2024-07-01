@@ -220,7 +220,7 @@ impl CcAbiImpl {
             // Nominal types we need to emit a decl for
             Ty::Struct(struct_ty) => {
                 // Emit an actual struct decl
-                self.generate_repr_attr(f, &struct_ty.attrs, "struct")?;
+                self.generate_repr_attr(f, state, &struct_ty.attrs, "struct")?;
                 writeln!(f, "typedef struct {} {{", struct_ty.name)?;
                 f.add_indent(1);
                 for field in &struct_ty.fields {
@@ -233,7 +233,7 @@ impl CcAbiImpl {
             }
             Ty::Union(union_ty) => {
                 // Emit an actual union decl
-                self.generate_repr_attr(f, &union_ty.attrs, "union")?;
+                self.generate_repr_attr(f, state, &union_ty.attrs, "union")?;
                 writeln!(f, "typedef union {} {{", union_ty.name)?;
                 f.add_indent(1);
                 for field in &union_ty.fields {
@@ -246,7 +246,7 @@ impl CcAbiImpl {
             }
             Ty::Enum(enum_ty) => {
                 // Emit an actual enum decl
-                self.generate_repr_attr(f, &enum_ty.attrs, "enum")?;
+                self.generate_repr_attr(f, state, &enum_ty.attrs, "enum")?;
                 writeln!(f, "typedef enum {} {{", enum_ty.name)?;
                 f.add_indent(1);
                 for variant in &enum_ty.variants {
@@ -336,88 +336,80 @@ impl CcAbiImpl {
 
     pub fn generate_repr_attr(
         &self,
-        _f: &mut Fivemat,
+        f: &mut Fivemat,
+        state: &TestState,
         attrs: &[Attr],
         _ty_style: &str,
     ) -> Result<(), GenerateError> {
+        use kdl_script::parse::{AttrAligned, AttrPacked, AttrPassthrough, AttrRepr, Repr};
         if !attrs.is_empty() {
             return Err(UnsupportedError::Other(
                 "c doesn't support attrs yet".to_owned(),
             ))?;
         }
 
-        /*
-        let mut default_c_repr = true;
+        let mut default_lang_repr = true;
+        let mut lang_repr = None;
         let mut repr_attrs = vec![];
         let mut other_attrs = vec![];
         for attr in attrs {
             match attr {
-                Attr::Align(AttrAligned { align }) => {
-                    repr_attrs.push(format!("align({})", align.val));
+                Attr::Align(AttrAligned { align: _ }) => {
+                    return Err(UnsupportedError::Other("@align not implemented".to_owned()))?;
                 }
                 Attr::Packed(AttrPacked {}) => {
-                    repr_attrs.push("packed".to_owned());
+                    return Err(UnsupportedError::Other(
+                        "@packed not implemented".to_owned(),
+                    ))?;
                 }
                 Attr::Passthrough(AttrPassthrough(attr)) => {
-                    other_attrs.push(attr.to_string());
+                    other_attrs.push(attr);
                 }
                 Attr::Repr(AttrRepr { reprs }) => {
+                    default_lang_repr = false;
                     // Any explicit repr attributes disables default C
-                    default_c_repr = false;
                     for repr in reprs {
-                        let val = match repr {
-                            Repr::Primitive(prim) => match prim {
-                                PrimitiveTy::I8 => "i8",
-                                PrimitiveTy::I16 => "i16",
-                                PrimitiveTy::I32 => "i32",
-                                PrimitiveTy::I64 => "i64",
-                                PrimitiveTy::I128 => "i128",
-                                PrimitiveTy::U8 => "u8",
-                                PrimitiveTy::U16 => "u16",
-                                PrimitiveTy::U32 => "u32",
-                                PrimitiveTy::U64 => "u64",
-                                PrimitiveTy::U128 => "u128",
-                                PrimitiveTy::I256
-                                | PrimitiveTy::U256
-                                | PrimitiveTy::F16
-                                | PrimitiveTy::F32
-                                | PrimitiveTy::F64
-                                | PrimitiveTy::F128
-                                | PrimitiveTy::Bool
-                                | PrimitiveTy::Ptr => {
+                        match repr {
+                            Repr::Transparent => {
+                                return Err(UnsupportedError::Other(
+                                    "unsupport repr transparent".to_owned(),
+                                ))?;
+                            }
+                            Repr::Primitive(prim) => {
+                                return Err(UnsupportedError::Other(format!(
+                                    "unsupport repr {prim:?}"
+                                )))?;
+                            }
+                            Repr::Lang(repr) => {
+                                if let Some(old_repr) = lang_repr {
                                     return Err(UnsupportedError::Other(format!(
-                                        "unsupport repr({prim:?})"
+                                        "multiple lang reprs on one type ({old_repr}, {repr})"
                                     )))?;
                                 }
-                            },
-                            Repr::Lang(LangRepr::C) => "C",
-                            Repr::Lang(LangRepr::Rust) => {
+                                lang_repr = Some(*repr);
                                 continue;
                             }
-                            Repr::Transparent => "transparent",
                         };
-                        repr_attrs.push(val.to_owned());
                     }
                 }
             }
         }
-        if default_c_repr {
-            repr_attrs.push("C".to_owned());
+        if default_lang_repr && lang_repr.is_none() {
+            lang_repr = Some(state.options.repr);
         }
-        write!(f, "#[repr(")?;
-        let mut multi = false;
-        for repr in repr_attrs {
-            if multi {
-                write!(f, ", ")?;
+        if let Some(lang_repr) = lang_repr {
+            if let Some(attr) = self.lang_repr_decl(lang_repr)? {
+                repr_attrs.push(attr.to_owned());
             }
-            multi = true;
-            write!(f, "{repr}")?;
         }
-        writeln!(f, ")]")?;
+        if !repr_attrs.is_empty() {
+            return Err(UnsupportedError::Other(
+                "c doesn't implement non-trivial reprs attributes yet".to_owned(),
+            ))?;
+        }
         for attr in other_attrs {
             writeln!(f, "{}", attr)?;
         }
-        */
         Ok(())
     }
 
@@ -478,6 +470,10 @@ impl CcAbiImpl {
                 // all properly convered by other ABIs
                 return Err(self.unsupported_convention(&convention))?;
             }
+            // C knows no Rust
+            Rust => {
+                return Err(self.unsupported_convention(&convention))?;
+            }
             C => "",
             Cdecl => {
                 if self.platform == Windows {
@@ -522,6 +518,15 @@ impl CcAbiImpl {
         };
 
         Ok(val)
+    }
+
+    fn lang_repr_decl(&self, repr: LangRepr) -> Result<Option<&'static str>, GenerateError> {
+        match repr {
+            LangRepr::Rust => Err(UnsupportedError::Other(
+                "c doesn't support repr rust".to_owned(),
+            ))?,
+            LangRepr::C => Ok(None),
+        }
     }
 
     fn unsupported_convention(&self, convention: &CallingConvention) -> UnsupportedError {

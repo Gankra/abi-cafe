@@ -115,22 +115,6 @@ impl Compiler {
         }
         Ok(None)
     }
-
-    /*
-    fn diagnose(&mut self, err: KdlScriptError) {
-        use ErrorMode::*;
-        use ErrorStyle::*;
-        match &mut self.error_handler {
-            ErrorHandler {
-                error_mode: Scream,
-                error_style: Human,
-            } => {
-                eprintln!("{:?}", miette::Report::new(err));
-            }
-            _ => todo!(),
-        }
-    }
-     */
 }
 
 impl Default for Compiler {

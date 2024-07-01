@@ -1,5 +1,7 @@
 use miette::Diagnostic;
 
+use crate::TestId;
+
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum CliParseError {
     #[error("{0}")]
@@ -39,6 +41,19 @@ pub enum GenerateError {
         block2: String,
         block2_val_count: usize,
     },
+    #[error("failed to read and parse test {test}")]
+    ReadTest {
+        test: TestId,
+        #[source]
+        #[diagnostic_source]
+        details: Box<GenerateError>,
+    },
+}
+
+impl std::borrow::Borrow<dyn Diagnostic> for Box<GenerateError> {
+    fn borrow(&self) -> &(dyn Diagnostic + 'static) {
+        &**self
+    }
 }
 
 #[derive(Debug, thiserror::Error, Diagnostic)]

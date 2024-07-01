@@ -84,8 +84,6 @@ impl RustcAbiImpl {
             Ty::Ref(RefTy { pointee_ty }) => {
                 // The value is a mutable reference to a temporary
                 write!(f, "&mut {ref_temp_name}")?;
-
-                // TODO: should this be a recursive call to create_var (need create_var_inner?)
                 // Now do the rest of the recursion on constructing the temporary
                 let mut ref_temp = String::new();
                 let mut ref_temp_f = Fivemat::new(&mut ref_temp, INDENT);

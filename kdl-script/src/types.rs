@@ -64,7 +64,7 @@ pub struct KdlScriptTypeError {
     pub src: Arc<NamedSource>,
     #[label]
     pub span: SourceSpan,
-    #[help]
+    #[diagnostic(help)]
     pub help: Option<String>,
 }
 
@@ -724,7 +724,7 @@ impl TyCtx {
                     ty_idx
                 } else {
                     return Err(KdlScriptTypeError {
-                        message: "use of undefined type name".to_string(),
+                        message: format!("use of undefined type name: {name}"),
                         src: self.src.clone(),
                         span: Spanned::span(name),
                         help: None,

@@ -25,6 +25,7 @@ impl<T> Spanned<T> {
             end: span.offset() + span.len(),
         }
     }
+
     /// Access the start of the span of the contained value.
     pub fn start(this: &Self) -> usize {
         this.start
@@ -33,6 +34,12 @@ impl<T> Spanned<T> {
     /// Access the end of the span of the contained value.
     pub fn end(this: &Self) -> usize {
         this.end
+    }
+
+    // Acquire the span of the input
+    pub fn clone_span_from<U>(this: &mut Self, other: &Spanned<U>) {
+        this.start = other.start;
+        this.end = other.end;
     }
 
     /// Update the span

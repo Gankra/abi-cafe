@@ -100,13 +100,12 @@ pub fn spawn_read_test(
 
 /// Read a test .kdl file
 async fn read_test(test: TestId, test_file: TestFile) -> Result<Arc<Test>, GenerateError> {
-    read_test_inner(&test, test_file).await.map_err(|e| {
-        warn!(
-            "failed to read and parse test {test}, skipping\n{:?}",
-            miette::Report::new(e)
-        );
-        GenerateError::Skipped
-    })
+    read_test_inner(&test, test_file)
+        .await
+        .map_err(|e| GenerateError::ReadTest {
+            test,
+            details: Box::new(e),
+        })
 }
 
 async fn read_test_inner(test: &TestId, test_file: TestFile) -> Result<Arc<Test>, GenerateError> {

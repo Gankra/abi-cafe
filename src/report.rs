@@ -440,7 +440,7 @@ impl FullReport {
             let (status, status_message) = match test.conclusion {
                 TestConclusion::Skipped => continue,
                 TestConclusion::Passed => ("ok", None),
-                TestConclusion::Failed => ("failed", Some("todo fill this message in")),
+                TestConclusion::Failed => ("failed", Some("FIXME fill this message in")),
                 TestConclusion::Busted => ("ok", None),
             };
             let test_name = harness.full_test_name(&test.key);

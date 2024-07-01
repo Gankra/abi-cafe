@@ -190,7 +190,7 @@ pub enum Attr {
 
 /// An attribute declaring this type should be packed (remove padding/align).
 ///
-/// TODO: add support for an integer argument for the max align of a
+/// FIXME? add support for an integer argument for the max align of a
 /// field? Without one the default is 1. I never see packed(2) or whatever
 /// so I've never seriously thought through the implications...
 ///
@@ -348,8 +348,6 @@ pub enum PunSelector {
 #[derive(Debug, Clone)]
 pub struct PunEnv {
     /// The target language
-    ///
-    /// TODO: make this an enum?
     pub lang: String,
     // compiler: String,
     // os: String,
@@ -1013,7 +1011,6 @@ impl Parser<'_> {
                         help: Some("remove this?".to_owned()),
                     })?;
                 }
-                // TODO: deny any other members of `entries`
                 self.no_children(var)?;
                 Ok(EnumVariant { name, val })
             })
@@ -1041,8 +1038,6 @@ impl Parser<'_> {
     }
 
     /// Parse this node's name as a possibly-positional variable name
-    ///
-    /// TODO: probably want this `Option<Ident>` to be its own special enum?
     fn var_name_decl(&mut self, var: &KdlNode) -> Result<Option<Ident>> {
         let name = var.name();
         let name = if name.value() == "_" {
@@ -1056,7 +1051,7 @@ impl Parser<'_> {
 
     /// Parse a [`Tydent`][] from this String.
     fn tydent(&mut self, input: &Spanned<String>) -> Result<Spanned<Tydent>> {
-        let (_, ty_ref) = all_consuming(context("a type", tydent))(input)
+        let (_, mut ty_ref) = all_consuming(context("a type", tydent))(input)
             .finish()
             .map_err(|_e| KdlScriptParseError {
                 message: String::from("couldn't parse type"),
@@ -1064,6 +1059,9 @@ impl Parser<'_> {
                 span: Spanned::span(input),
                 help: None,
             })?;
+
+        // Inherit spans
+        inherit_spans(&mut ty_ref, input);
         Ok(ty_ref)
     }
 
@@ -1113,6 +1111,24 @@ impl Parser<'_> {
     }
 }
 
+fn inherit_spans(tydent: &mut Spanned<Tydent>, input: &Spanned<String>) {
+    Spanned::clone_span_from(tydent, input);
+    match &mut **tydent {
+        Tydent::Name(ident) => {
+            Spanned::clone_span_from(&mut ident.val, input);
+        }
+        Tydent::Array(elem_tydent, _) => {
+            inherit_spans(elem_tydent, input);
+        }
+        Tydent::Ref(pointee_tydent) => {
+            inherit_spans(pointee_tydent, input);
+        }
+        Tydent::Empty => {
+            // noop
+        }
+    }
+}
+
 // A fuckton of nom parsing for sub-syntax like Tydents.
 
 type NomResult<I, O> = IResult<I, O, VerboseError<I>>;
@@ -1128,7 +1144,6 @@ fn tydent_ref(input: &str) -> NomResult<&str, Spanned<Tydent>> {
         tag("&"),
         context("pointee type", cut(preceded(many0(unicode_space), tydent))),
     )(input)?;
-    // TODO: properly setup this span!
     Ok((input, Spanned::from(Tydent::Ref(Box::new(pointee_ty)))))
 }
 
@@ -1149,8 +1164,6 @@ fn tydent_array(input: &str) -> NomResult<&str, Spanned<Tydent>> {
         )),
         tag("]"),
     )(input)?;
-
-    // TODO: properly setup these spans!
     Ok((
         input,
         Spanned::from(Tydent::Array(Box::new(elem_ty), array_len)),
@@ -1165,7 +1178,6 @@ fn array_len(input: &str) -> NomResult<&str, u64> {
 /// Matches the empty tuple
 fn tydent_empty_tuple(input: &str) -> NomResult<&str, Spanned<Tydent>> {
     let (input, _tup) = tag("()")(input)?;
-    // TODO: properly setup this span!
     Ok((input, Spanned::from(Tydent::Empty)))
 }
 
@@ -1186,7 +1198,6 @@ fn tydent_named(input: &str) -> NomResult<&str, Spanned<Tydent>> {
     if let Some(_generics) = generics {
         panic!("generics aren't yet implemented!");
     }
-    // TODO: properly setup this span!
     Ok((
         input,
         Spanned::from(Tydent::Name(Ident {
@@ -1231,7 +1242,7 @@ fn unicode_space(input: &str) -> NomResult<&str, &str> {
 
 /// An integer expression (literal)
 ///
-/// TODO: this should actually defer deserializing into an integer
+/// FIXME: this should actually defer deserializing into an integer
 /// so that it can be some huge type like `u256`. Not sure who/where
 /// would be responsible for validating that the value fits in the
 /// expected range for where it's placed!

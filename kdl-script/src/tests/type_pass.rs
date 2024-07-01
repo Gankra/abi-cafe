@@ -72,7 +72,7 @@ fn c_enum_literals2() -> Result<(), miette::Report> {
 
 #[test]
 fn c_enum_literals3() -> Result<(), miette::Report> {
-    // TODO: this one might be dubious? Check what C/C++ allow with puns here
+    // FIXME: this one might be dubious? Check what C/C++ allow with puns here
     let program = r##"
         enum "Cases" {
             A 8

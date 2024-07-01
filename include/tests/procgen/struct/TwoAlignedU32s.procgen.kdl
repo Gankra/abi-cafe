@@ -3,7 +3,7 @@
 // https://github.com/rust-lang/rust/issues/80127
 
 @align 16
-struct "TwoU32s" {
+struct "TwoAlignedU32s" {
     a "u32"
     b "u32"
 }

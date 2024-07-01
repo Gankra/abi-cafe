@@ -19,7 +19,7 @@ use std::error::Error;
 use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use vals::ValueGeneratorKind;
 
 pub type SortedMap<K, V> = std::collections::BTreeMap<K, V>;
@@ -96,10 +96,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|(test, test_file)| harness::spawn_read_test(&rt, test, test_file));
 
     // We could async pipeline this harder but it's nice to know all the tests upfront
-    let tests = read_tasks
-        .filter_map(|task| rt.block_on(task).expect("failed to join on task").ok())
-        .map(|test| (test.name.clone(), test))
-        .collect();
+    // Also we want it to be a hard error for any test to fail to load, as this indicates
+    // an abi-cafe developer error
+    let mut tests = SortedMap::new();
+    let mut test_read_fails = false;
+    for task in read_tasks {
+        let res = rt.block_on(task).expect("failed to join on task");
+        match res {
+            Ok(test) => {
+                tests.insert(test.name.clone(), test);
+            }
+            Err(e) => {
+                test_read_fails = true;
+                error!("{:?}", miette::Report::new(e));
+            }
+        }
+    }
+    if test_read_fails {
+        Err(TestsFailed {})?;
+    }
     let mut harness = TestHarness::new(tests, cfg.paths.clone());
 
     harness.add_abi_impl(

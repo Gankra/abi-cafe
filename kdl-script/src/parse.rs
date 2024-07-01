@@ -218,10 +218,29 @@ pub enum Repr {
     Transparent,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize)]
 pub enum LangRepr {
     Rust,
     C,
+}
+impl std::fmt::Display for LangRepr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            LangRepr::Rust => "rust",
+            LangRepr::C => "c",
+        };
+        s.fmt(f)
+    }
+}
+impl std::str::FromStr for LangRepr {
+    type Err = String;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "rust" => Ok(Self::Rust),
+            "c" => Ok(Self::C),
+            _ => Err(format!("unknown lang repr {s}")),
+        }
+    }
 }
 
 /// An attribute to passthrough to the target language.

@@ -163,7 +163,7 @@ impl RustcAbiImpl {
             // Nominal types we need to emit a decl for
             Ty::Struct(struct_ty) => {
                 // Emit an actual struct decl
-                self.generate_repr_attr(f, &struct_ty.attrs, "struct")?;
+                self.generate_repr_attr(f, state, &struct_ty.attrs, "struct")?;
                 if has_borrows {
                     writeln!(f, "struct {}<'a> {{", struct_ty.name)?;
                 } else {
@@ -184,7 +184,7 @@ impl RustcAbiImpl {
             }
             Ty::Union(union_ty) => {
                 // Emit an actual union decl
-                self.generate_repr_attr(f, &union_ty.attrs, "union")?;
+                self.generate_repr_attr(f, state, &union_ty.attrs, "union")?;
                 if has_borrows {
                     writeln!(f, "union {}<'a> {{", union_ty.name)?;
                 } else {
@@ -205,7 +205,7 @@ impl RustcAbiImpl {
             }
             Ty::Enum(enum_ty) => {
                 // Emit an actual enum decl
-                self.generate_repr_attr(f, &enum_ty.attrs, "enum")?;
+                self.generate_repr_attr(f, state, &enum_ty.attrs, "enum")?;
                 writeln!(f, "#[derive(Debug, Copy, Clone, PartialEq)]")?;
                 writeln!(f, "enum {} {{", enum_ty.name)?;
                 f.add_indent(1);
@@ -218,7 +218,7 @@ impl RustcAbiImpl {
             }
             Ty::Tagged(tagged_ty) => {
                 // Emit an actual enum decl
-                self.generate_repr_attr(f, &tagged_ty.attrs, "tagged")?;
+                self.generate_repr_attr(f, state, &tagged_ty.attrs, "tagged")?;
                 if has_borrows {
                     writeln!(f, "enum {}<'a> {{", tagged_ty.name)?;
                 } else {
@@ -306,10 +306,12 @@ impl RustcAbiImpl {
     pub fn generate_repr_attr(
         &self,
         f: &mut Fivemat,
+        state: &TestState,
         attrs: &[Attr],
         _ty_style: &str,
     ) -> Result<(), GenerateError> {
-        let mut default_c_repr = true;
+        let mut default_lang_repr = true;
+        let mut lang_repr = None;
         let mut repr_attrs = vec![];
         let mut other_attrs = vec![];
         for attr in attrs {
@@ -324,8 +326,8 @@ impl RustcAbiImpl {
                     other_attrs.push(attr.to_string());
                 }
                 Attr::Repr(AttrRepr { reprs }) => {
+                    default_lang_repr = false;
                     // Any explicit repr attributes disables default C
-                    default_c_repr = false;
                     for repr in reprs {
                         let val = match repr {
                             Repr::Primitive(prim) => match prim {
@@ -352,8 +354,13 @@ impl RustcAbiImpl {
                                     )))?;
                                 }
                             },
-                            Repr::Lang(LangRepr::C) => "C",
-                            Repr::Lang(LangRepr::Rust) => {
+                            Repr::Lang(repr) => {
+                                if let Some(old_repr) = lang_repr {
+                                    return Err(UnsupportedError::Other(format!(
+                                        "multiple lang reprs on one type ({old_repr}, {repr})"
+                                    )))?;
+                                }
+                                lang_repr = Some(*repr);
                                 continue;
                             }
                             Repr::Transparent => "transparent",
@@ -363,19 +370,26 @@ impl RustcAbiImpl {
                 }
             }
         }
-        if default_c_repr {
-            repr_attrs.push("C".to_owned());
+        if default_lang_repr && lang_repr.is_none() {
+            lang_repr = Some(state.options.repr);
         }
-        write!(f, "#[repr(")?;
-        let mut multi = false;
-        for repr in repr_attrs {
-            if multi {
-                write!(f, ", ")?;
+        if let Some(lang_repr) = lang_repr {
+            if let Some(attr) = self.lang_repr_decl(lang_repr)? {
+                repr_attrs.push(attr.to_owned());
             }
-            multi = true;
-            write!(f, "{repr}")?;
         }
-        writeln!(f, ")]")?;
+        if !repr_attrs.is_empty() {
+            write!(f, "#[repr(")?;
+            let mut multi = false;
+            for repr in repr_attrs {
+                if multi {
+                    write!(f, ", ")?;
+                }
+                multi = true;
+                write!(f, "{repr}")?;
+            }
+            writeln!(f, ")]")?;
+        }
         for attr in other_attrs {
             writeln!(f, "{}", attr)?;
         }
@@ -413,6 +427,14 @@ impl RustcAbiImpl {
         Ok(())
     }
 
+    pub fn lang_repr_decl(&self, repr: LangRepr) -> Result<Option<&'static str>, GenerateError> {
+        let s = match repr {
+            LangRepr::Rust => None,
+            LangRepr::C => Some("C"),
+        };
+        Ok(s)
+    }
+
     pub fn convention_decl(
         &self,
         convention: CallingConvention,
@@ -421,6 +443,7 @@ impl RustcAbiImpl {
 
         let conv = match convention {
             CallingConvention::C => "C",
+            CallingConvention::Rust => "Rust",
             CallingConvention::System => "system",
             CallingConvention::Win64 => "win64",
             CallingConvention::Sysv64 => "sysv64",

@@ -13,6 +13,7 @@ use abis::*;
 use error::*;
 use files::Paths;
 use harness::*;
+use kdl_script::parse::LangRepr;
 use report::*;
 use std::error::Error;
 use std::process::Command;
@@ -65,6 +66,7 @@ pub struct Config {
     pub output_format: OutputFormat,
     pub procgen_tests: bool,
     pub run_conventions: Vec<CallingConvention>,
+    pub run_reprs: Vec<LangRepr>,
     pub run_impls: Vec<String>,
     pub run_pairs: Vec<(String, String)>,
     pub run_tests: Vec<String>,
@@ -150,36 +152,40 @@ fn main() -> Result<(), Box<dyn Error>> {
                         // Don't bother with a convention if the test doesn't use it.
                         return Vec::new();
                     }
-                    // Create versions of the test for each "X calls Y" pair we care about.
-                    cfg.run_pairs
+                    cfg.run_reprs
                         .iter()
-                        .filter_map(|(caller_id, callee_id)| {
-                            if !cfg.run_impls.is_empty()
-                                && !cfg.run_impls.iter().any(|x| x == caller_id)
-                                && !cfg.run_impls.iter().any(|x| &**x == callee_id)
-                            {
-                                return None;
-                            }
+                        .flat_map(|repr| {
+                            // Create versions of the test for each "X calls Y" pair we care about.
+                            cfg.run_pairs.iter().filter_map(|(caller_id, callee_id)| {
+                                if !cfg.run_impls.is_empty()
+                                    && !cfg.run_impls.iter().any(|x| x == caller_id)
+                                    && !cfg.run_impls.iter().any(|x| &**x == callee_id)
+                                {
+                                    return None;
+                                }
 
-                            // Run the test!
-                            let test_key = TestKey {
-                                test: test.name.to_owned(),
-                                caller: caller_id.to_owned(),
-                                callee: callee_id.to_owned(),
-                                options: TestOptions {
-                                    convention: *convention,
-                                    functions: FunctionSelector::All,
-                                    val_writer: cfg.write_impl,
-                                    val_generator: cfg.val_generator,
-                                },
-                            };
-                            let rules = harness.get_test_rules(&test_key);
-                            let task =
-                                harness
-                                    .clone()
-                                    .spawn_test(&rt, rules.clone(), test_key.clone());
+                                // Run the test!
+                                let test_key = TestKey {
+                                    test: test.name.to_owned(),
+                                    caller: caller_id.to_owned(),
+                                    callee: callee_id.to_owned(),
+                                    options: TestOptions {
+                                        convention: *convention,
+                                        repr: *repr,
+                                        functions: FunctionSelector::All,
+                                        val_writer: cfg.write_impl,
+                                        val_generator: cfg.val_generator,
+                                    },
+                                };
+                                let rules = harness.get_test_rules(&test_key);
+                                let task = harness.clone().spawn_test(
+                                    &rt,
+                                    rules.clone(),
+                                    test_key.clone(),
+                                );
 
-                            Some(task)
+                                Some(task)
+                            })
                         })
                         .collect()
                 })

@@ -147,9 +147,7 @@ The optional integer values specify what value that variant should "have" in its
 
 Just like struct fields, enum variants can have "positional" naming with `_` which will get autonaming like `Case0`, `Case1`, etc.
 
-TODO: is it ok to have multiple variants with the same value? Whose responsibility is it to bounds check them to the underlying type, especially in the default case where it's "probably" a fuzzy `c_int`?
-
-TODO: add an attribute for specifying the underlying integer type. (`@tag`?)
+FIXME: is it ok to have multiple variants with the same value? Whose responsibility is it to bounds check them to the underlying type, especially in the default case where it's "probably" a fuzzy `c_int`?
 
 
 
@@ -165,8 +163,6 @@ union "FloatOrInt" {
 ```
 
 Just like struct fields, union variants can have "positional" naming with `_` which will get autonaming like `Case0`, `Case1`, etc.
-
-TODO: should we allow inline struct decls like C/C++ does, or require the user to define the structs separately?
 
 
 
@@ -209,11 +205,7 @@ The `repr(C)` layout is the *most* obvious lowering to a `struct` containing a c
 
 The `repr(u8)` layout (also `repr(u32)`, etc.) is similar but the `enum` specifically has that integer type, and instead of being stored in a wrapper struct it's stored as the first field of every variant of the `union`. This is a more compact layout because space doesn't need to be wasted for padding between the `enum` and the `union`. Also it's more reliable because C refuses to specify what the backing integer of a normal enum *is* so rustc just guesses based on the platform.
 
-TODO: should payload-less variants allow for integer values like `enum` variants do?
-
-TODO: figure out how exactly to specify you really want `repr(rust)` or `repr(u8)` or `repr(C, u8)` layouts.
-
-TODO: if we ever add support for Swift or whatever there will need to be A Reckoning because it has its own ABI/layouts for enums that are way more complex and guaranteed for more complicated cases! For now, we punt!
+FIXME: should payload-less variants allow for integer values like `enum` variants do?
 
 
 
@@ -261,10 +253,6 @@ Potentially Supported In The Future:
 * `all { selector1; selector2; }`
 * `not { selector; }`
 
-TODO: should we allow pun blocks to have other types defined in the block that are "private" from the rest of the program but used in the final type?
-
-TODO: figure out how to talk about "language-native types" in much the same way the above example uses "language-native annotations".
-
 
 
 ### Structural Types
@@ -274,11 +262,7 @@ A KDLScript user is allowed to use the following kinds of structural types
 * `&T` - a transparent reference to T
 * `[T; N]` - a fixed-length array of T (length N)
 * `()` - the empty tuple (I just like adding this cuz it's cute!!!)
-
-TODO: figure out if we want to bake in Rust's `Option` type here, if only for `Option<&T>`.
-
-TODO: figure out if there's any point in non-empty tuples
-
+    * [non-empty tuples could be added](https://github.com/Gankra/abi-cafe/issues/48)
 
 
 #### Reference Types
@@ -287,12 +271,8 @@ The "value" of a reference type `&T` is its pointee for the purposes of [abi-caf
 
 Reference types may appear in other composite types, indicating that the caller is responsible for allocating variables for each one and then storing pointers to them in the composite type.
 
-When used in the outputs of a function, a reference type is sugar for an out-param that the caller is responsible for allocating
-and the callee is responsible for initializing. Out-params should appear after all normal inputs but before varargs.
+> Currently theoretical and probably will never be implemented: When used in the outputs of a function, a reference type is sugar for an out-param that the caller is responsible for allocating and the callee is responsible for initializing. Out-params should appear after all normal inputs but before varargs.
 
-TODO: think through if the caller has any need to initialize an out-param (Currently irrelevant as we only suppport POD)
-
-TODO: think through what it means to have an out-param of `[&u32; 4]`! (We should conservatively reject it for now.)
 
 
 
@@ -329,7 +309,6 @@ fn "blah" {
 }
 ```
 
-TODO: does anything special need to be said about empty arrays? Or do backends just YOLO the obvious lowering? (yes?)
 
 
 
@@ -346,7 +325,6 @@ There are various builtin primitives, such as:
 
 In the future there will probably be language-specific primitives like `c_long`.
 
-TODO: figure out if `ptr` should be nullable or not by default. Relevant to whether we want to have Option and if Rust code should lower it to `*mut ()`.
 
 
 
@@ -376,6 +354,8 @@ fn "my_func" {
 
 Functions can have arbitrarily many inputs and outputs with either named or "positional" names (which will get autonaming like `arg0`, `arg1` and `out0`, `out1`, etc.).
 
+<details>
+<summary> not implemented distracting ramblings about outparams </summary>
 As discussed in the section on "Reference Types", references in outputs are sugar for out-params, which should appear after the inputs and before outputs. So the above would lower to something like the following in Rust (values chosen arbitrarily here, and we wouldn't use asserts in practice, but instead record the values for comparison):
 
 ```rust ,ignore
@@ -420,47 +400,44 @@ fn my_func_caller() {
 ```
 
 > God writing that sucked ass, and it wasn't even the "proper" value checking! This is why I built all this complicated crap to automate it!
+>
+> Update: actually even automating this was miserable, and also outparams aren't really substantial ABI-wise right now, so I'm not sure I'll ever implement outparams. It's more complexity than it's worth!
 
-TODO: what does it mean if you have multiple non-out-param outputs? Return a tuple? Error out on all known backends?
+</details>
 
-TODO: contemplate if named args should be the equivalent of Swift named args, where the inner and outer name can vary, but the outer name is like, part of the function name itself (and/or ABI)?
+Currently there is no meaning ascribed to multiple outputs, every backend refuses to implement them. Note that "returning a tuple" or any other composite is still one output. We would need to like, support Go or something to make this a meaningful expression.
 
-TODO: contemplate varargs support
+Named args [*could* be the equivalent of Swift named args](https://github.com/Gankra/abi-cafe/issues/32), where the inner and outer name can vary, but the outer name is like, part of the function name itself (and/or ABI)?
 
-Strawman varargs syntax for saying there's varargs but that you want to test this particular set of values passed in them:
-
-```kdl
-func "blah" {
-    inputs {
-        x "u32"
-        "..." {
-            _ "f32"
-            _ "f32"
-        }
-    }
-}
-```
-
-SUB TODO: figure out if varargs should allow for specifying what the callee and caller think is happening as different
-
-SUB TODO: figure out if we should try to support that fucked up thing where Swift supports multiple named varargs lists
-
+[Varargs support is also TBD but has a sketch](https://github.com/Gankra/abi-cafe/issues/1#issuecomment-2200345710).
 
 
 ## Attributes
 
-Attributes start with `@` and apply to the next item (function or type) that follows them. This is only kinda stubbed out and not really impl'd.
+Attributes start with `@` and apply to the next item (function or type) that follows them. There are currently 3 major classes of attributes:
 
-TODO: add attributes:
+* repr attrs
+    * lang reprs
+        * `@repr "rust"` - use rust's native struct layout
+        * `@repr "c"` - use C-compatible struct layout
+    * primitive reprs - for any enums, use the given primitive as its type
+        * `@repr "u8"`
+        * `@repr "f32"`
+        * ...
+    * transparent repr - equivalent of rust's `repr(transparent)`
+        * `@repr "transparent"`
+* modifier attrs
+    * `@align 16` - align to N
+    * `@packed` - pack fields to eliminate padding
+* passthrough attrs -
+    * `@ "literally anything here"
 
-* `@ "whatever you want here"` - passthrough attrs to underlying language
-* `@tag "u32"` - setting the backing type on an `enum`'s tag
-* `@packed N?` - making a type packed
-* `@align N` - making a type aligned
+The significance of repr attributes is that providing *any* explicit `repr` attribute is considered an opt-out from the default automatic repr all user-defined types recieve.
 
-TODO: should fields/args be able to have attributes?
+When we generate tests we will typically generate both a `repr(rust)` version and a `repr(C)` version. In these versions any user-defined type gets (an equivalent of) those attributes applied to it.
 
-TODO: at what level should attributes be validated/processed? The parser? Type checker? Backends?
+This means that applying `@align 16` still leaves a struct eligible to have the rust layout and c layout tested, while applying `@repr "u8"` to a tagged union does not (if you want to test `repr(C, u8)`, you need to set `@repr "C" "u8"`).
+
 
 
 

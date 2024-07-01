@@ -333,7 +333,7 @@ impl FullReport {
                 continue;
             }
             let pretty_test_name = harness.full_test_name(&test.key);
-            write!(f, "{pretty_test_name:<40} ")?;
+            write!(f, "{pretty_test_name:<64} ")?;
             match (&test.conclusion, &test.rules.check) {
                 (Skipped, _) => {
                     // Don't mention these, too many
@@ -401,7 +401,7 @@ impl FullReport {
             green
         };
         let summary = format!(
-            "{} tests run - {} passed, {} busted, {} failed, {} skipped",
+            "{} test sets run - {} passed, {} busted, {} failed, {} skipped",
             self.summary.num_tests,
             self.summary.num_passed,
             self.summary.num_busted,

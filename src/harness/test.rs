@@ -1,34 +1,14 @@
-pub mod c;
-pub mod rust;
-pub mod vals;
+use std::sync::Arc;
 
-pub use c::CcAbiImpl;
-pub use rust::RustcAbiImpl;
-
-use std::{collections::HashMap, fmt::Write, sync::Arc};
-
-use camino::Utf8Path;
-use kdl_script::{
-    parse::LangRepr,
-    types::{FuncIdx, TyIdx},
-    DefinitionGraph, PunEnv, TypedProgram,
-};
+use crate::harness::vals::{ValueGeneratorKind, ValueTree};
+use crate::toolchains::*;
+use kdl_script::{parse::LangRepr, types::FuncIdx, DefinitionGraph, PunEnv, TypedProgram};
 use serde::Serialize;
-use vals::{ValueGeneratorKind, ValueTree};
 
-use crate::{
-    error::{BuildError, GenerateError},
-    CliParseError,
-};
+use crate::{error::GenerateError, CliParseError};
 
-pub type AbiImplId = String;
+pub type ToolchainId = String;
 pub type TestId = String;
-
-pub static ABI_IMPL_RUSTC: &str = "rustc";
-pub static ABI_IMPL_CC: &str = "cc";
-pub static ABI_IMPL_GCC: &str = "gcc";
-pub static ABI_IMPL_CLANG: &str = "clang";
-pub static ABI_IMPL_MSVC: &str = "msvc";
 
 pub static ALL_CONVENTIONS: &[CallingConvention] = &[
     // C!
@@ -190,8 +170,8 @@ impl std::fmt::Display for CallSide {
 
 /// A test case, specialized to a specific ABI (PunEnv)
 ///
-/// This refines a [`Test`][] with a specific [`AbiImpl`][] like "Rust (rustc)" or "C (gcc)".
-/// The [`PunEnv`][] describes how the AbiImpl wishes to resolve any "Pun Types".
+/// This refines a [`Test`][] with a specific [`Toolchain`][] like "Rust (rustc)" or "C (gcc)".
+/// The [`PunEnv`][] describes how the Toolchain wishes to resolve any "Pun Types".
 ///
 /// The [`DefinitionGraph`][] provides a DAG of the type/function
 /// definitions that result from applying the PunEnv to the Program.
@@ -200,18 +180,18 @@ impl std::fmt::Display for CallSide {
 ///
 /// This DAG is queried with a list of functions we're interested
 /// in generating code for, producing a topological sort of the type
-/// and function declarations so each [`AbiImpl`][] doesn't need to work that out.
+/// and function declarations so each [`Toolchain`][] doesn't need to work that out.
 ///
 /// Typically the query is "all functions", because we want to test everything.
 /// However if a test fails we can requery with "just this one failing function"
 /// to generate a minimized test-case for debugging/reporting.
 #[derive(Debug, Clone)]
-pub struct TestWithAbi {
+pub struct TestWithToolchain {
     pub inner: Arc<TestWithVals>,
     pub env: Arc<PunEnv>,
     pub defs: Arc<DefinitionGraph>,
 }
-impl std::ops::Deref for TestWithAbi {
+impl std::ops::Deref for TestWithToolchain {
     type Target = TestWithVals;
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -220,7 +200,7 @@ impl std::ops::Deref for TestWithAbi {
 
 /// A test case, fully specialized to specify:
 ///
-/// * What [`AbiImpl`][] (compiler/language) we're using
+/// * What [`Toolchain`][] (compiler/language) we're using
 /// * What [`CallingConvention`] we're using
 /// * Which functions we're generating (usually "all of them")
 /// * How to [display/report][`WriteImpl`] values (callbacks vs print vs noop)
@@ -229,11 +209,11 @@ impl std::ops::Deref for TestWithAbi {
 /// This also contains some utilities for interning compute type names/expressions.
 #[derive(Debug, Clone)]
 pub struct TestImpl {
-    pub inner: Arc<TestWithAbi>,
+    pub inner: Arc<TestWithToolchain>,
     pub options: TestOptions,
 }
 impl std::ops::Deref for TestImpl {
-    type Target = TestWithAbi;
+    type Target = TestWithToolchain;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
@@ -271,28 +251,6 @@ impl std::fmt::Display for WriteImpl {
     }
 }
 
-/// ABI is probably a bad name for this... it's like, a language/compiler impl. idk.
-pub trait AbiImpl {
-    fn lang(&self) -> &'static str;
-    fn src_ext(&self) -> &'static str;
-    fn pun_env(&self) -> Arc<PunEnv>;
-    fn generate_callee(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError>;
-    fn generate_caller(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError>;
-
-    fn compile_callee(
-        &self,
-        src_path: &Utf8Path,
-        out_dir: &Utf8Path,
-        lib_name: &str,
-    ) -> Result<String, BuildError>;
-    fn compile_caller(
-        &self,
-        src_path: &Utf8Path,
-        out_dir: &Utf8Path,
-        lib_name: &str,
-    ) -> Result<String, BuildError>;
-}
-
 impl Test {
     pub fn has_convention(&self, _convention: CallingConvention) -> bool {
         true
@@ -311,13 +269,13 @@ impl Test {
 }
 
 impl TestWithVals {
-    pub async fn with_abi(
+    pub async fn with_toolchain(
         self: &Arc<Self>,
-        abi: &(dyn AbiImpl + Send + Sync),
-    ) -> Result<Arc<TestWithAbi>, GenerateError> {
-        let env = abi.pun_env();
+        toolchain: &(dyn Toolchain + Send + Sync),
+    ) -> Result<Arc<TestWithToolchain>, GenerateError> {
+        let env = toolchain.pun_env();
         let defs = Arc::new(self.types.definition_graph(&env)?);
-        Ok(Arc::new(TestWithAbi {
+        Ok(Arc::new(TestWithToolchain {
             inner: self.clone(),
             env,
             defs,
@@ -325,7 +283,7 @@ impl TestWithVals {
     }
 }
 
-impl TestWithAbi {
+impl TestWithToolchain {
     pub fn with_options(self: &Arc<Self>, options: TestOptions) -> Result<TestImpl, GenerateError> {
         Ok(TestImpl {
             inner: self.clone(),

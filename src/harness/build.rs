@@ -5,6 +5,7 @@ use camino::Utf8Path;
 use tracing::info;
 
 use crate::error::*;
+use crate::harness::test::*;
 use crate::report::*;
 use crate::*;
 
@@ -35,7 +36,7 @@ impl TestHarness {
         src_path: &Utf8Path,
         out_dir: &Utf8Path,
     ) -> Result<String, BuildError> {
-        let abi_impl = self.abi_by_test_key(key, call_side);
+        let toolchain = self.toolchain_by_test_key(key, call_side);
         let lib_name = self.static_lib_name(key, call_side);
         // Briefly lock this map to insert/acquire a OnceCell and then release the lock
         let once = self
@@ -54,7 +55,7 @@ impl TestHarness {
                     .await
                     .expect("failed to acquire concurrency limit semaphore");
                 info!("compiling   {lib_name}");
-                build_static_lib(src_path, abi_impl, call_side, out_dir, &lib_name).await
+                build_static_lib(src_path, toolchain, call_side, out_dir, &lib_name).await
             })
             .await?
             .clone();
@@ -90,14 +91,14 @@ impl TestHarness {
 
 async fn build_static_lib(
     src_path: &Utf8Path,
-    abi: Arc<dyn AbiImpl + Send + Sync>,
+    toolchain: Arc<dyn Toolchain + Send + Sync>,
     call_side: CallSide,
     out_dir: &Utf8Path,
     static_lib_name: &str,
 ) -> Result<String, BuildError> {
     let lib_name = match call_side {
-        CallSide::Callee => abi.compile_callee(src_path, out_dir, static_lib_name)?,
-        CallSide::Caller => abi.compile_caller(src_path, out_dir, static_lib_name)?,
+        CallSide::Callee => toolchain.compile_callee(src_path, out_dir, static_lib_name)?,
+        CallSide::Caller => toolchain.compile_caller(src_path, out_dir, static_lib_name)?,
     };
 
     Ok(lib_name)

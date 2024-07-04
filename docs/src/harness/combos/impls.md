@@ -1,7 +1,7 @@
 # impls (pairing compilers!)
 
 "ABI Implementations" refer to a specific compiler or language which claims to implement some ABIs.
-The currently supported AbiImpls are:
+The currently supported Toolchains are:
 
 * rustc - uses the rustc on your PATH
 * cc - gets the "system" C compiler via the CC crate (supports msvc on windows)
@@ -18,14 +18,14 @@ By default, we test the following pairings:
 
 In theory other implementations aren't *too bad* to add. You just need to:
 
-* Add an implementation of abis::AbiImpl
+* Add an implementation of abis::Toolchain
     * Specify the language and source-file extension
     * Specify how to generate source for a caller from a signature
     * Specify how to generate source for a callee from a signature
     * Specify how to compile a source file to a static lib
-* Register it in the `abi_impls` map in `fn main`
+* Register it in the `toolchains` map in `fn main`
 * (Optional) Register what you want it paired with by default in `DEFAULT_TEST_PAIRS`
-    * i.e. (ABI_IMPL_YOU, ABI_IMPL_CC) will have the harness test you calling into C
+    * i.e. (TOOLCHAIN_YOU, TOOLCHAIN_CC) will have the harness test you calling into C
 
 The bulk of the work is specifying how to generate source code, which can be done
 incrementally by return UnimplementedError to indicate unsupported features. This

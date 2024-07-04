@@ -1,26 +1,39 @@
-# introduction
+# ABI Cafe
 
-> Not sure if your compilers have matching ABIs? Then put them through the ultimate compatibility crucible and pair them up on a shift at The ABI Café! Find out if your one true pairing fastcalls for each other or are just another slowburn disaster. (Maid outfits optional but recommended.)
+> *Not sure if your compilers have matching ABIs? Then put them through the ultimate compatibility crucible and pair them up on a shift at The ABI Cafe! Find out if your one true pairing fastcalls for each other or are just another slowburn disaster. (Maid outfits optional but recommended.)*
 
-abi-cafe automates testing that two languages/compilers agree on ABIs for the purposes of FFI.
 
-The principle of the tool is as follows:
+## Quickstart
 
-* Define a function signature that one impl should call the other with
-* Generate both impls' versions (of both sides) of the interface
-* Have each side report what it thinks the values are with global callbacks
-* Compile both sides as static libs, and link into a dynamic lib harness
-* Load that dynamic lib in, pass in the callbacks, and run it
-* Check that both sides reported the same values
-* Generate minimized/simplified versions of any found failures
+To run ABI Cafe, just [checkout the repository](https://github.com/Gankra/abi-cafe) and `cargo run`!
 
-By running this natively on whatever platform you care about, this will tell you what FFI interfaces do and don't currently work. Ideally all you need to do is `cargo run`, but we're dealing with native toolchains so, expect toolchain bugs!
+([`cargo install` TBD...](https://github.com/Gankra/abi-cafe/issues/49))
 
-By default we will:
 
-* run all tests
-* under every possible calling convention
-* for a selection of reasonable "impl calls impl" pairings (e.g. rustc_calls_cc)
 
-But you can the CLI interface lets you override these defaults. This is especially useful for --pairs because it lets you access *more* specific pairings, like if you really want to specifically test gcc_calls_clang.
+## What Is This
 
+ABI Cafe automates testing that two languages/compilers agree on their ABIs.
+
+**ABI Cafe is essentially an ABI fuzzer**, which:
+
+* [Creates a header file describing an interface](./kdl-script/index.md)
+* [Generates source code for a *user* and *implementation* of that interface](./harness/generate.md)
+* [Builds and runs the resulting program](./harness/run.md)
+* [Checks that both sides saw the same values](./harness/check.md)
+
+If they agree, great!
+
+If they don't agree, even better, we just learned something! **Try to diagnose why they disagreed, and generate a minimized version that a human can inspect and report!**
+
+Now do this [a bajillion times](./harness/combos.md) and suddenly we're learning a whole lot! Alternatively, you can [hand-craft any type or function signature you're interested in](./kdl-script/index.md), and explore its interoperability between different toolchains.
+
+ABI Cafe is purely *descriptive*. It has no preconceived notion of what *should* work, and it doesn't trust any damn thing anyone says about it. We don't analyze assembly or metadata, and we'll gleefully create programs riddled with Undefined Behaviour. We're here to *learn* not *lecture*.
+
+This design is based on a fundamental belief that **ABIs exist only through sheer force of will**. The spec if often "read GCC's source code", and damn if that ain't an error-prone process. Also GCC doesn't even know you exist, and you're only going to keep interoperating with them if you check and maintain your work. So here's a tool for checking and maintaining your work!
+
+
+
+## Choose Your Own Adventure
+
+* I want... TODO

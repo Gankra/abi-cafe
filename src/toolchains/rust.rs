@@ -1,12 +1,13 @@
-//! C codegen backend backend
+//! Rust(c) codegen backend backend
 
 mod declare;
 mod init;
 mod write;
 
 use camino::Utf8Path;
-use kdl_script::types::{Func, FuncIdx};
+use kdl_script::types::*;
 use kdl_script::PunEnv;
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -25,7 +26,8 @@ pub struct TestState {
     pub inner: TestImpl,
     // interning state
     pub desired_funcs: Vec<FuncIdx>,
-    pub tynames: HashMap<TyIdx, (String, String)>,
+    pub tynames: HashMap<TyIdx, String>,
+    pub borrowed_tynames: HashMap<TyIdx, String>,
 }
 impl std::ops::Deref for TestState {
     type Target = TestImpl;
@@ -40,21 +42,16 @@ impl TestState {
             inner,
             desired_funcs,
             tynames: Default::default(),
+            borrowed_tynames: Default::default(),
         }
     }
 }
 
-pub struct CcAbiImpl {
-    cc_flavor: CCFlavor,
+#[allow(dead_code)]
+pub struct RustcToolchain {
+    is_nightly: bool,
     platform: Platform,
-    mode: &'static str,
-}
-
-#[derive(PartialEq)]
-enum CCFlavor {
-    Clang,
-    Gcc,
-    Msvc,
+    codegen_backend: Option<String>,
 }
 
 #[derive(PartialEq)]
@@ -63,32 +60,43 @@ enum Platform {
     Unixy,
 }
 
-impl AbiImpl for CcAbiImpl {
+impl Toolchain for RustcToolchain {
     fn lang(&self) -> &'static str {
-        "c"
+        "rust"
     }
     fn src_ext(&self) -> &'static str {
-        "c"
+        "rs"
     }
-
     fn pun_env(&self) -> Arc<PunEnv> {
         Arc::new(kdl_script::PunEnv {
-            lang: "c".to_string(),
+            lang: "rust".to_string(),
         })
     }
-
     fn compile_callee(
         &self,
         src_path: &Utf8Path,
         out_dir: &Utf8Path,
         lib_name: &str,
     ) -> Result<String, BuildError> {
-        match self.mode {
-            "cc" => self.compile_cc(src_path, out_dir, lib_name),
-            "gcc" => self.compile_gcc(src_path, out_dir, lib_name),
-            "clang" => self.compile_clang(src_path, out_dir, lib_name),
-            "msvc" => self.compile_msvc(src_path, out_dir, lib_name),
-            _ => unimplemented!("unknown c compiler"),
+        let mut cmd = Command::new("rustc");
+        cmd.arg("--crate-type")
+            .arg("staticlib")
+            .arg("--out-dir")
+            .arg(out_dir)
+            .arg("--target")
+            .arg(built_info::TARGET)
+            .arg(format!("-Cmetadata={lib_name}"))
+            .arg(src_path);
+        if let Some(codegen_backend) = &self.codegen_backend {
+            cmd.arg(format!("-Zcodegen-backend={codegen_backend}"));
+        }
+        debug!("running: {:?}", cmd);
+        let out = cmd.output()?;
+
+        if !out.status.success() {
+            Err(BuildError::RustCompile(out))
+        } else {
+            Ok(String::from(lib_name))
         }
     }
 
@@ -98,13 +106,8 @@ impl AbiImpl for CcAbiImpl {
         out_dir: &Utf8Path,
         lib_name: &str,
     ) -> Result<String, BuildError> {
-        match self.mode {
-            "cc" => self.compile_cc(src_path, out_dir, lib_name),
-            "gcc" => self.compile_gcc(src_path, out_dir, lib_name),
-            "clang" => self.compile_clang(src_path, out_dir, lib_name),
-            "msvc" => self.compile_msvc(src_path, out_dir, lib_name),
-            _ => unimplemented!("unknown c compiler"),
-        }
+        // Currently no need to be different
+        self.compile_callee(src_path, out_dir, lib_name)
     }
 
     fn generate_callee(&self, f: &mut dyn Write, test: TestImpl) -> Result<(), GenerateError> {
@@ -120,7 +123,7 @@ impl AbiImpl for CcAbiImpl {
     }
 }
 
-impl CcAbiImpl {
+impl RustcToolchain {
     pub fn generate_caller_impl(
         &self,
         f: &mut Fivemat,
@@ -132,13 +135,11 @@ impl CcAbiImpl {
         self.generate_caller_externs(f, state)?;
 
         // Generate the test function the harness will call
-        writeln!(f, "void do_test(void) {{")?;
-        f.add_indent(1);
+        writeln!(f, "#[no_mangle]\npub extern \"C\" fn do_test() {{")?;
         for &func in &state.desired_funcs {
             // Generate the individual function calls
             self.generate_caller_body(f, state, func)?;
         }
-        f.sub_indent(1);
         writeln!(f, "}}")?;
 
         Ok(())
@@ -150,7 +151,7 @@ impl CcAbiImpl {
         state: &TestState,
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
-        writeln!(f, "{{")?;
+        writeln!(f, "unsafe {{")?;
         f.add_indent(1);
         let function = state.types.realize_func(func);
 
@@ -190,9 +191,8 @@ impl CcAbiImpl {
 
         // make sure the outputs aren't weird
         self.check_returns(state, function)?;
-        if let Some(arg) = function.outputs.first() {
-            let (pre, post) = &state.tynames[&arg.ty];
-            write!(f, "{pre}{}{post} = ", arg.name)?;
+        if let Some(output) = function.outputs.first() {
+            write!(f, "let {} = ", output.name)?;
         }
 
         // Call the function
@@ -211,7 +211,7 @@ impl CcAbiImpl {
     }
 }
 
-impl CcAbiImpl {
+impl RustcToolchain {
     pub fn generate_callee_impl(
         &self,
         f: &mut Fivemat,
@@ -234,8 +234,13 @@ impl CcAbiImpl {
         func: FuncIdx,
     ) -> Result<(), GenerateError> {
         let function = state.types.realize_func(func);
+        let convention_decl = self.convention_decl(state.options.convention)?;
+        writeln!(f, "#[no_mangle]")?;
+        write!(f, "pub unsafe extern \"{convention_decl}\" ")?;
         self.generate_signature(f, state, func)?;
         writeln!(f, " {{")?;
+        f.add_indent(1);
+        writeln!(f, "unsafe {{")?;
         f.add_indent(1);
 
         // Report the inputs
@@ -259,27 +264,18 @@ impl CcAbiImpl {
         // Return the outputs
         self.check_returns(state, function)?;
         if let Some(arg) = function.outputs.first() {
-            writeln!(f, "return {};", arg.name)?;
+            writeln!(f, "{}", arg.name)?;
         }
+        f.sub_indent(1);
+        writeln!(f, "}}")?;
         f.sub_indent(1);
         writeln!(f, "}}")?;
         Ok(())
     }
 }
 
-impl CcAbiImpl {
-    pub fn new(_system_info: &Config, mode: &'static str) -> Self {
-        let compiler = cc::Build::new().get_compiler();
-        let cc_flavor = if compiler.is_like_msvc() {
-            CCFlavor::Msvc
-        } else if compiler.is_like_gnu() {
-            CCFlavor::Gcc
-        } else if compiler.is_like_clang() {
-            CCFlavor::Clang
-        } else {
-            panic!("Unknown compiler flavour for CC");
-        };
-
+impl RustcToolchain {
+    pub fn new(_system_info: &Config, codegen_backend: Option<String>) -> Self {
         let platform = if cfg!(target_os = "windows") {
             Platform::Windows
         } else {
@@ -287,99 +283,10 @@ impl CcAbiImpl {
         };
 
         Self {
-            cc_flavor,
             platform,
-            mode,
+            is_nightly: built_info::RUSTC_VERSION.contains("nightly"),
+            codegen_backend,
         }
-    }
-
-    fn compile_cc(
-        &self,
-        src_path: &Utf8Path,
-        out_dir: &Utf8Path,
-        lib_name: &str,
-    ) -> Result<String, BuildError> {
-        /*
-        let out_sub = src_path.parent().unwrap();
-        let ensure_out = out_dir.join(out_sub);
-        std::fs::create_dir_all(ensure_out).unwrap();
-        info!("out: {}", out_dir);
-        info!("lib: {}", lib_name);
-         */
-        cc::Build::new()
-            .file(src_path)
-            .opt_level(0)
-            .cargo_metadata(false)
-            .target(built_info::TARGET)
-            .out_dir(out_dir)
-            // .warnings_into_errors(true)
-            .try_compile(lib_name)?;
-        Ok(String::from(lib_name))
-    }
-
-    fn compile_clang(
-        &self,
-        src_path: &Utf8Path,
-        out_dir: &Utf8Path,
-        lib_name: &str,
-    ) -> Result<String, BuildError> {
-        let obj_path = out_dir.join(format!("{lib_name}.o"));
-        let lib_path = out_dir.join(format!("lib{lib_name}.a"));
-        Command::new("clang")
-            .arg("-ffunction-sections")
-            .arg("-fdata-sections")
-            .arg("-fPIC")
-            .arg("-o")
-            .arg(&obj_path)
-            .arg("-c")
-            .arg(src_path)
-            .status()
-            .unwrap();
-        Command::new("ar")
-            .arg("cq")
-            .arg(&lib_path)
-            .arg(&obj_path)
-            .status()
-            .unwrap();
-        Command::new("ar").arg("s").arg(&lib_path).status().unwrap();
-        Ok(String::from(lib_name))
-    }
-
-    fn compile_gcc(
-        &self,
-        src_path: &Utf8Path,
-        out_dir: &Utf8Path,
-        lib_name: &str,
-    ) -> Result<String, BuildError> {
-        let obj_path = out_dir.join(format!("{lib_name}.o"));
-        let lib_path = out_dir.join(format!("lib{lib_name}.a"));
-        Command::new("gcc")
-            .arg("-ffunction-sections")
-            .arg("-fdata-sections")
-            .arg("-fPIC")
-            .arg("-o")
-            .arg(&obj_path)
-            .arg("-c")
-            .arg(src_path)
-            .status()
-            .unwrap();
-        Command::new("ar")
-            .arg("cq")
-            .arg(&lib_path)
-            .arg(&obj_path)
-            .status()
-            .unwrap();
-        Command::new("ar").arg("s").arg(&lib_path).status().unwrap();
-        Ok(String::from(lib_name))
-    }
-
-    fn compile_msvc(
-        &self,
-        _src_path: &Utf8Path,
-        _out_dir: &Utf8Path,
-        _lib_name: &str,
-    ) -> Result<String, BuildError> {
-        unimplemented!()
     }
 
     fn check_returns(&self, state: &TestState, function: &Func) -> Result<(), GenerateError> {

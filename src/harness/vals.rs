@@ -3,7 +3,8 @@ use rand::Rng;
 use rand_core::{RngCore, SeedableRng};
 use serde::Serialize;
 
-use crate::{CliParseError, GenerateError, TestOptions};
+use crate::error::*;
+use crate::harness::test::*;
 
 type RngImpl = rand_pcg::Pcg64;
 

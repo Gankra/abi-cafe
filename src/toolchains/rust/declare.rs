@@ -3,7 +3,7 @@ use kdl_script::parse::{Attr, AttrAligned, AttrPacked, AttrPassthrough, AttrRepr
 use kdl_script::types::{AliasTy, ArrayTy, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use std::fmt::Write;
 
-impl RustcAbiImpl {
+impl RustcToolchain {
     pub fn generate_caller_externs(
         &self,
         f: &mut Fivemat,

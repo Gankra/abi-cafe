@@ -6,8 +6,8 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::info;
 
-use crate::abis::*;
 use crate::error::*;
+use crate::harness::test::*;
 use crate::*;
 
 impl TestHarness {
@@ -30,8 +30,8 @@ impl TestHarness {
         let test = self
             .test_with_vals(&key.test, key.options.val_generator)
             .await?;
-        let abi_id = key.abi_id(call_side).to_owned();
-        let test_with_abi = self.test_with_abi_impl(test, abi_id).await?;
+        let toolchain_id = key.toolchain_id(call_side).to_owned();
+        let test_with_toolchain = self.test_with_toolchain(test, toolchain_id).await?;
         let src_path = self.src_path(key, call_side);
 
         // Briefly lock this map to insert/acquire a OnceCell and then release the lock
@@ -45,37 +45,43 @@ impl TestHarness {
         // Either acquire the cached result, or make it
         let _ = once
             .get_or_try_init(|| {
-                let abi_impl = self.abi_by_test_key(key, call_side);
+                let toolchain = self.toolchain_by_test_key(key, call_side);
                 let options = key.options.clone();
                 info!("generating  {}", &src_path);
-                generate_src(&src_path, abi_impl, test_with_abi, call_side, options)
+                generate_src(
+                    &src_path,
+                    toolchain,
+                    test_with_toolchain,
+                    call_side,
+                    options,
+                )
             })
             .await?;
         Ok(src_path)
     }
 
     fn src_path(&self, key: &TestKey, call_side: CallSide) -> Utf8PathBuf {
-        let abi_id = key.abi_id(call_side);
-        let abi = self.abi_by_test_key(key, call_side);
+        let toolchain_id = key.toolchain_id(call_side);
+        let toolchain = self.toolchain_by_test_key(key, call_side);
         let mut output = self.base_id(key, Some(call_side), "_");
         output.push('.');
-        output.push_str(abi.src_ext());
-        self.paths.generated_src_dir.join(abi_id).join(output)
+        output.push_str(toolchain.src_ext());
+        self.paths.generated_src_dir.join(toolchain_id).join(output)
     }
 }
 
 async fn generate_src(
     src_path: &Utf8Path,
-    abi: Arc<dyn AbiImpl + Send + Sync>,
-    test_with_abi: Arc<TestWithAbi>,
+    toolchain: Arc<dyn Toolchain + Send + Sync>,
+    test_with_toolchain: Arc<TestWithToolchain>,
     call_side: CallSide,
     options: TestOptions,
 ) -> Result<(), GenerateError> {
     let mut output_string = String::new();
-    let test = test_with_abi.with_options(options)?;
+    let test = test_with_toolchain.with_options(options)?;
     match call_side {
-        CallSide::Callee => abi.generate_callee(&mut output_string, test)?,
-        CallSide::Caller => abi.generate_caller(&mut output_string, test)?,
+        CallSide::Callee => toolchain.generate_callee(&mut output_string, test)?,
+        CallSide::Caller => toolchain.generate_caller(&mut output_string, test)?,
     }
 
     // Write the result to disk

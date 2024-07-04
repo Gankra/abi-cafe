@@ -1,11 +1,10 @@
 # Summary
 
 - [introduction](./intro.md)
-- [quick start](./quick-start.md)
 
-# abi-cafe
+# ABI Cafe
 
-- [abi-cafe](./harness/index.md)
+- [ABI Cafe](./harness/index.md)
 - [test files](./harness/read.md)
 - [the runtime](./harness/run.md)
 - [code generation](./harness/generate.md)

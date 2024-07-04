@@ -1,18 +1,20 @@
-mod abis;
 mod cli;
 mod error;
 mod files;
 mod fivemat;
 mod harness;
 mod log;
+mod toolchains;
 
-mod procgen;
 mod report;
 
-use abis::*;
 use error::*;
 use files::Paths;
+use harness::test::*;
+use harness::vals::*;
 use harness::*;
+use toolchains::*;
+
 use kdl_script::parse::LangRepr;
 use report::*;
 use std::error::Error;
@@ -20,7 +22,6 @@ use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::{debug, error, info};
-use vals::ValueGeneratorKind;
 
 pub type SortedMap<K, V> = std::collections::BTreeMap<K, V>;
 
@@ -117,31 +118,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let mut harness = TestHarness::new(tests, cfg.paths.clone());
 
-    harness.add_abi_impl(
-        ABI_IMPL_RUSTC.to_owned(),
-        abis::RustcAbiImpl::new(&cfg, None),
+    harness.add_toolchain(
+        TOOLCHAIN_RUSTC.to_owned(),
+        toolchains::RustcToolchain::new(&cfg, None),
     );
-    harness.add_abi_impl(
-        ABI_IMPL_CC.to_owned(),
-        abis::CcAbiImpl::new(&cfg, ABI_IMPL_CC),
+    harness.add_toolchain(
+        TOOLCHAIN_CC.to_owned(),
+        toolchains::CcToolchain::new(&cfg, TOOLCHAIN_CC),
     );
-    harness.add_abi_impl(
-        ABI_IMPL_GCC.to_owned(),
-        abis::CcAbiImpl::new(&cfg, ABI_IMPL_GCC),
+    harness.add_toolchain(
+        TOOLCHAIN_GCC.to_owned(),
+        toolchains::CcToolchain::new(&cfg, TOOLCHAIN_GCC),
     );
-    harness.add_abi_impl(
-        ABI_IMPL_CLANG.to_owned(),
-        abis::CcAbiImpl::new(&cfg, ABI_IMPL_CLANG),
+    harness.add_toolchain(
+        TOOLCHAIN_CLANG.to_owned(),
+        toolchains::CcToolchain::new(&cfg, TOOLCHAIN_CLANG),
     );
-    harness.add_abi_impl(
-        ABI_IMPL_MSVC.to_owned(),
-        abis::CcAbiImpl::new(&cfg, ABI_IMPL_MSVC),
+    harness.add_toolchain(
+        TOOLCHAIN_MSVC.to_owned(),
+        toolchains::CcToolchain::new(&cfg, TOOLCHAIN_MSVC),
     );
 
     for (name, path) in &cfg.rustc_codegen_backends {
-        harness.add_abi_impl(
+        harness.add_toolchain(
             name.to_owned(),
-            abis::RustcAbiImpl::new(&cfg, Some(path.to_owned())),
+            toolchains::RustcToolchain::new(&cfg, Some(path.to_owned())),
         );
     }
 

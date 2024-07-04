@@ -1,6 +1,6 @@
 use miette::Diagnostic;
 
-use crate::TestId;
+use crate::harness::test::TestId;
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum CliParseError {

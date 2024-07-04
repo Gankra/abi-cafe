@@ -1,10 +1,13 @@
-use crate::{abis::*, files::Paths, Config, OutputFormat};
+use crate::harness::test::*;
+use crate::harness::vals::*;
+use crate::toolchains::*;
+use crate::{files::Paths, Config, OutputFormat};
+
 use camino::Utf8PathBuf;
 use clap::Parser;
 use kdl_script::parse::LangRepr;
 use tracing::warn;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-use vals::ValueGeneratorKind;
 
 #[derive(Parser)]
 struct Cli {
@@ -35,10 +38,10 @@ struct Cli {
 pub fn make_app() -> Config {
     /// The pairings of impls to run. LHS calls RHS.
     static DEFAULT_TEST_PAIRS: &[(&str, &str)] = &[
-        (ABI_IMPL_RUSTC, ABI_IMPL_RUSTC), // Rust calls Rust
-        (ABI_IMPL_RUSTC, ABI_IMPL_CC),    // Rust calls C
-        (ABI_IMPL_CC, ABI_IMPL_RUSTC),    // C calls Rust
-        (ABI_IMPL_CC, ABI_IMPL_CC),       // C calls C
+        (TOOLCHAIN_RUSTC, TOOLCHAIN_RUSTC), // Rust calls Rust
+        (TOOLCHAIN_RUSTC, TOOLCHAIN_CC),    // Rust calls C
+        (TOOLCHAIN_CC, TOOLCHAIN_RUSTC),    // C calls Rust
+        (TOOLCHAIN_CC, TOOLCHAIN_CC),       // C calls C
     ];
 
     let config = Cli::parse();

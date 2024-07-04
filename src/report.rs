@@ -3,16 +3,14 @@ use console::Style;
 use serde::Serialize;
 use serde_json::json;
 
-use crate::abis::*;
 use crate::error::*;
-use crate::AbiImplId;
-use crate::TestHarness;
-use crate::TestId;
-use crate::WriteBuffer;
+use crate::harness::test::*;
+use crate::toolchains::*;
+use crate::*;
 
 /// These are the builtin test-expectations, edit these if there are new rules!
 #[allow(unused_variables)]
-pub fn get_test_rules(test: &TestKey, caller: &dyn AbiImpl, callee: &dyn AbiImpl) -> TestRules {
+pub fn get_test_rules(test: &TestKey, caller: &dyn Toolchain, callee: &dyn Toolchain) -> TestRules {
     use TestCheckMode::*;
     use TestRunMode::*;
 
@@ -197,12 +195,12 @@ pub struct TestSummary {
 #[derive(Debug, Clone, Serialize)]
 pub struct TestKey {
     pub test: TestId,
-    pub caller: AbiImplId,
-    pub callee: AbiImplId,
+    pub caller: ToolchainId,
+    pub callee: ToolchainId,
     pub options: TestOptions,
 }
 impl TestKey {
-    pub(crate) fn abi_id(&self, call_side: CallSide) -> &str {
+    pub(crate) fn toolchain_id(&self, call_side: CallSide) -> &str {
         match call_side {
             CallSide::Caller => &self.caller,
             CallSide::Callee => &self.callee,

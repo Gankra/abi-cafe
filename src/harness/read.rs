@@ -1,3 +1,5 @@
+mod procgen;
+
 use std::{
     fs::File,
     io::{BufReader, Read},
@@ -8,7 +10,10 @@ use std::{
 use camino::{Utf8Path, Utf8PathBuf};
 use tracing::warn;
 
-use crate::{error::*, files::Paths, SortedMap, Test, TestId};
+use crate::error::*;
+use crate::files::Paths;
+use crate::harness::test::*;
+use crate::*;
 
 #[derive(Debug, Clone)]
 pub enum TestFile {
@@ -112,7 +117,7 @@ async fn read_test_inner(test: &TestId, test_file: TestFile) -> Result<Arc<Test>
     let (test_file, input) = match test_file {
         TestFile::KdlProcgen(test_file) => {
             let ty_def = read_file_to_string(&test_file)?;
-            let input = crate::procgen::procgen_test_for_ty_string(test, Some(&ty_def));
+            let input = procgen::procgen_test_for_ty_string(test, Some(&ty_def));
             (test_file, input)
         }
         TestFile::Kdl(test_file) => {

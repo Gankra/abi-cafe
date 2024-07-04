@@ -1,9 +1,9 @@
 use super::*;
+use crate::harness::vals::Value;
 use kdl_script::types::{Ty, TyIdx};
 use std::fmt::Write;
-use vals::Value;
 
-impl CcAbiImpl {
+impl RustcToolchain {
     /// Every test should start by loading in the harness' "header"
     /// and forward-declaring any structs that will be used.
     pub fn write_harness_prefix(
@@ -11,19 +11,19 @@ impl CcAbiImpl {
         f: &mut Fivemat,
         state: &TestState,
     ) -> Result<(), GenerateError> {
-        // Always need includes for things like int8_t
-        writeln!(f, "{}", crate::files::get_file("harness/c/test_prefix.h"))?;
         // No extra harness gunk if not needed
         if state.options.val_writer != WriteImpl::HarnessCallback {
             return Ok(());
+        }
+        if state.options.convention == CallingConvention::Vectorcall {
+            writeln!(f, "#![feature(abi_vectorcall)]")?;
         }
         // Load test harness "headers"
         writeln!(
             f,
             "{}",
-            crate::files::get_file("harness/c/harness_prefix.h")
+            crate::files::get_file("harness/rust/harness_prefix.rs")
         )?;
-
         writeln!(f)?;
 
         Ok(())
@@ -105,11 +105,7 @@ impl CcAbiImpl {
                     self.write_fields(f, state, to, &base, field.ty, vals)?;
                 }
             }
-            Ty::Tagged(_tagged_ty) => {
-                return Err(UnsupportedError::Other(
-                    "c doesn't have tagged unions impled yet".to_owned(),
-                ))?;
-                /*
+            Ty::Tagged(tagged_ty) => {
                 // Process the implicit "tag" value
                 let tag_generator = vals.next_val();
                 let tag_idx = tag_generator.generate_idx(tagged_ty.variants.len());
@@ -178,7 +174,6 @@ impl CcAbiImpl {
                         writeln!(f, "}}")?;
                     }
                 }
-                */
             }
             Ty::Ref(ref_ty) => {
                 // Add a deref, and recurse into the pointee
@@ -215,18 +210,18 @@ impl CcAbiImpl {
             WriteImpl::HarnessCallback => {
                 // Convenience for triggering test failures
                 if path.contains("abicafepoison") && to.contains(VAR_CALLEE_INPUTS) {
-                    writeln!(f, "write_field({to}, (uint32_t)0x12345678);")?;
+                    writeln!(f, "write_field({to}, &0x12345678u32);")?;
                 } else {
-                    writeln!(f, "write_field({to}, {path});")?;
+                    writeln!(f, "write_field({to}, &{path});")?;
                 }
             }
             WriteImpl::Assert => {
-                write!(f, "assert_eq({path}, ")?;
+                write!(f, "assert_eq!({path}, ")?;
                 self.init_leaf_value(f, state, val.ty, val, None)?;
                 writeln!(f, ");")?;
             }
             WriteImpl::Print => {
-                writeln!(f, "printf(\"%d\", {path});")?;
+                writeln!(f, "println!(\"{{:?}}\", {path});")?;
             }
             WriteImpl::Noop => {
                 // Noop, do nothing
@@ -244,12 +239,7 @@ impl CcAbiImpl {
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "{{")?;
-                f.add_indent(1);
-                writeln!(f, "uint32_t _temp = {};", variant_idx)?;
-                writeln!(f, "write_field({to}, _temp);")?;
-                f.sub_indent(1);
-                writeln!(f, "}}")?;
+                writeln!(f, "write_field({to}, &{}u32);", variant_idx)?;
             }
             WriteImpl::Assert => {
                 // Noop, do nothing
@@ -264,7 +254,6 @@ impl CcAbiImpl {
         Ok(())
     }
 
-    #[allow(dead_code)]
     pub fn write_error_tag_field(
         &self,
         f: &mut Fivemat,
@@ -273,15 +262,10 @@ impl CcAbiImpl {
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "{{")?;
-                f.add_indent(1);
-                writeln!(f, "uint32_t _temp = {};", u32::MAX)?;
-                writeln!(f, "write_field({to}, _temp);")?;
-                f.sub_indent(1);
-                writeln!(f, "}}")?;
+                writeln!(f, "write_field({to}, &{}u32);", u32::MAX)?;
             }
             WriteImpl::Assert | WriteImpl::Print => {
-                writeln!(f, r#"unreachable("enum had unexpected variant!?")"#)?;
+                writeln!(f, r#"unreachable!("enum had unexpected variant!?")"#)?;
             }
             WriteImpl::Noop => {
                 // Noop, do nothing

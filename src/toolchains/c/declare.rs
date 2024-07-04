@@ -3,7 +3,7 @@ use kdl_script::parse::Attr;
 use kdl_script::types::{AliasTy, ArrayTy, FuncIdx, PrimitiveTy, RefTy, Ty, TyIdx};
 use std::fmt::Write;
 
-impl CcAbiImpl {
+impl CcToolchain {
     pub fn generate_caller_externs(
         &self,
         f: &mut Fivemat,

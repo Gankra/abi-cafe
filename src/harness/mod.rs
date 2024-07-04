@@ -6,13 +6,10 @@
 //! 4. running the test impls
 //! 5. checking the test results
 
-use crate::{
-    files::Paths, get_test_rules, vals::ValueGeneratorKind, AbiImpl, AbiImplId, ArgSelector,
-    CallSide, FunctionSelector, GenerateError, SortedMap, Test, TestId, TestKey, TestOptions,
-    TestRules, TestRunMode, TestRunResults, TestWithAbi, TestWithVals, ValSelector, WriteImpl,
-};
+use crate::*;
 use camino::Utf8PathBuf;
 use std::sync::{Arc, Mutex};
+use test::*;
 use tokio::sync::{OnceCell, Semaphore};
 use tracing::warn;
 
@@ -21,6 +18,8 @@ mod check;
 mod generate;
 mod read;
 mod run;
+pub mod test;
+pub mod vals;
 
 pub use read::{find_tests, spawn_read_test};
 pub use run::WriteBuffer;
@@ -29,10 +28,11 @@ pub type Memoized<K, V> = Mutex<SortedMap<K, Arc<OnceCell<V>>>>;
 
 pub struct TestHarness {
     paths: Paths,
-    abi_impls: SortedMap<AbiImplId, Arc<dyn AbiImpl + Send + Sync>>,
+    toolchains: SortedMap<ToolchainId, Arc<dyn Toolchain + Send + Sync>>,
     tests: SortedMap<TestId, Arc<Test>>,
     tests_with_vals: Memoized<(TestId, ValueGeneratorKind), Arc<TestWithVals>>,
-    tests_with_abi_impl: Memoized<(TestId, ValueGeneratorKind, AbiImplId), Arc<TestWithAbi>>,
+    tests_with_toolchain:
+        Memoized<(TestId, ValueGeneratorKind, ToolchainId), Arc<TestWithToolchain>>,
     generated_sources: Memoized<Utf8PathBuf, ()>,
     built_static_libs: Memoized<String, String>,
     concurrency_limiter: tokio::sync::Semaphore,
@@ -43,25 +43,29 @@ impl TestHarness {
         Self {
             paths,
             tests,
-            abi_impls: Default::default(),
+            toolchains: Default::default(),
             tests_with_vals: Default::default(),
-            tests_with_abi_impl: Default::default(),
+            tests_with_toolchain: Default::default(),
             generated_sources: Default::default(),
             built_static_libs: Default::default(),
             concurrency_limiter: Semaphore::new(128),
         }
     }
-    pub fn add_abi_impl<A: AbiImpl + Send + Sync + 'static>(&mut self, id: AbiImplId, abi_impl: A) {
-        let old = self.abi_impls.insert(id.clone(), Arc::new(abi_impl));
-        assert!(old.is_none(), "duplicate abi impl id: {}", id);
+    pub fn add_toolchain<A: Toolchain + Send + Sync + 'static>(
+        &mut self,
+        id: ToolchainId,
+        toolchain: A,
+    ) {
+        let old = self.toolchains.insert(id.clone(), Arc::new(toolchain));
+        assert!(old.is_none(), "duplicate toolchain id: {}", id);
     }
-    pub fn abi_by_test_key(
+    pub fn toolchain_by_test_key(
         &self,
         key: &TestKey,
         call_side: CallSide,
-    ) -> Arc<dyn AbiImpl + Send + Sync> {
-        let abi_id = key.abi_id(call_side);
-        self.abi_impls[abi_id].clone()
+    ) -> Arc<dyn Toolchain + Send + Sync> {
+        let toolchain_id = key.toolchain_id(call_side);
+        self.toolchains[toolchain_id].clone()
     }
     pub fn all_tests(&self) -> Vec<Arc<Test>> {
         self.tests.values().cloned().collect()
@@ -87,32 +91,32 @@ impl TestHarness {
         let output = once.get_or_try_init(|| test.with_vals(vals)).await?.clone();
         Ok(output)
     }
-    pub async fn test_with_abi_impl(
+    pub async fn test_with_toolchain(
         &self,
         test: Arc<TestWithVals>,
-        abi_id: AbiImplId,
-    ) -> Result<Arc<TestWithAbi>, GenerateError> {
+        toolchain_id: ToolchainId,
+    ) -> Result<Arc<TestWithToolchain>, GenerateError> {
         let test_id = test.name.clone();
         let vals = test.vals.generator_kind;
-        let abi_impl = self.abi_impls[&abi_id].clone();
+        let toolchain = self.toolchains[&toolchain_id].clone();
         // Briefly lock this map to insert/acquire a OnceCell and then release the lock
         let once = self
-            .tests_with_abi_impl
+            .tests_with_toolchain
             .lock()
             .unwrap()
-            .entry((test_id, vals, abi_id.clone()))
+            .entry((test_id, vals, toolchain_id.clone()))
             .or_insert_with(|| Arc::new(OnceCell::new()))
             .clone();
         // Either acquire the cached result, or make it
         let output = once
-            .get_or_try_init(|| test.with_abi(&*abi_impl))
+            .get_or_try_init(|| test.with_toolchain(&*toolchain))
             .await?
             .clone();
         Ok(output)
     }
     pub fn get_test_rules(&self, test_key: &TestKey) -> TestRules {
-        let caller = self.abi_impls[&test_key.caller].clone();
-        let callee = self.abi_impls[&test_key.callee].clone();
+        let caller = self.toolchains[&test_key.caller].clone();
+        let callee = self.toolchains[&test_key.callee].clone();
 
         get_test_rules(test_key, &*caller, &*callee)
     }

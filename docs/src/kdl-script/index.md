@@ -1,19 +1,40 @@
-# kdl-script
+# KDLScript
 
-kdl-script is the Compiler for KDLScript, the [KDL][]-based programming language!
+KDLScript, the [KDL](https://kdl.dev/)-based programming language!
 
-KDLScript is a "fake" scripting language that actually just exists to declare
-type/function definitions in a language-agnostic way to avoid getting muddled
-in the details of each language when trying to talk about All Languages In Reality.
-It exists to be used by [abi-cafe](./harness/index.md).
+KDLScript ("Cuddle Script") is a "fake" scripting language that actually just exists to declare type/function signatures without tying ourselves to any particular language's semantics. It exists to be used by [Abi Cafe](../index.md).
 
-Basically, KDLScript is a header format we can make as weird as we want for our own usecase.
+Basically, KDLScript is a header format we can make as weird as we want for our own usecase:
+
+
+```kdl
+struct "Point3" {
+    x "f32"
+    y "f32"
+    z "f32"
+}
+
+fn "print" {
+    inputs { _ "Point3"; }
+}
+
+fn "scale" {
+    inputs { _ "Point3"; factor "f32"; }
+    outputs { _ "Point3"; }
+}
+
+fn "add" {
+    inputs { _ "Point3"; _ "Point3"; }
+    outputs { _ "Point3"; }
+}
+```
+
 
 Ultimately the syntax and concepts are heavily borrowed from Rust, for a few reasons:
 
 * The author is very comfortable with Rust
-* This (and [abi-cafe][]) were originally created to find bugs in rustc
-* Rust is genuinely just a solid language for expressing ABIs! (Better than C/C++)
+* This (and [abi-cafe](./harness/index.md)) were originally created to find bugs in rustc
+* Rust is genuinely just a solid language for interfaces! (Better than C/C++)
 
 The ultimate goal of this is to test that languages can properly communicate over
 FFI by declaring the types/interface once and generating the Rust/C/C++/... versions

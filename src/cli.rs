@@ -9,57 +9,133 @@ use kdl_script::parse::LangRepr;
 use tracing::warn;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+static DEFAULT_TOOLCHAINS: &[&str] = &[TOOLCHAIN_CC, TOOLCHAIN_RUSTC];
+static DEFAULT_REPRS: &[LangRepr] = &[LangRepr::Rust, LangRepr::C];
+static DEFAULT_PAIRERS: &[&str] = &[TOOLCHAIN_RUSTC, TOOLCHAIN_CC];
+static DEFAULT_CONVENTIONS: &[CallingConvention] = &[
+    // C!
+    CallingConvention::C,
+    CallingConvention::Cdecl,
+    CallingConvention::Stdcall,
+    CallingConvention::Fastcall,
+    CallingConvention::Vectorcall,
+    // Rust!
+    CallingConvention::Rust,
+];
+
+/// Pair your toolchains at the Abi Cafe!
+///
+/// When run, we will generate, build, run, and check the crossproduct of:
+///
+/// --tests --conventions --reprs --pairs --gen-vals --write-vals --select-vals
+///
+/// Most of these combinations will end up marked as "skipped", because e.g.
+/// the cc codegen backend will refuse to try to generate repr(Rust) structs,
+/// or becuase fastcall doesn't exist on linux, etc.
+///
+/// Some of the combinations will end up marked as "busted" or "random" because
+/// they're known to be gibberish or broken, and that's ok! We're here to find those things!
 #[derive(Parser)]
 struct Cli {
-    #[clap(long)]
-    procgen_tests: bool,
-    #[clap(long)]
-    conventions: Vec<CallingConvention>,
-    #[clap(long)]
-    reprs: Vec<LangRepr>,
-    #[clap(long)]
-    impls: Vec<String>,
-    #[clap(long)]
-    pairs: Vec<String>,
-    #[clap(long)]
+    /// which test files to run (SimpleStruct, MetersU32, ...)
+    ///
+    /// default: (all of them)
+    #[clap(long, short)]
     tests: Vec<String>,
-    #[clap(long)]
-    add_rustc_codegen_backend: Vec<String>,
+
+    /// calling conventions to try for each test (c, rust, fastcall, ...)
+    #[clap(long, short)]
+    #[clap(default_values_t = DEFAULT_CONVENTIONS.to_owned())]
+    conventions: Vec<CallingConvention>,
+
+    /// type reprs to try for each test (c, rust, ...)
+    #[clap(long, short)]
+    #[clap(default_values_t = DEFAULT_REPRS.to_owned())]
+    reprs: Vec<LangRepr>,
+
+    /// which toolchains should be available for pairing (cc, rustc, gcc, ...)
+    #[clap(long, short = 'l', alias = "impls")]
+    #[clap(default_values_t = DEFAULT_TOOLCHAINS.iter().map(|s| s.to_string()).collect::<Vec<_>>())]
+    toolchains: Vec<String>,
+
+    /// which toolchain pairings to run for each test (cc_calls_rustc, rustc_calls_rustc, ..)
+    ///
+    /// default: all enabled toolchains will call themselves,
+    /// and call/be-called-by rustc and cc (if those are enabled)
+    #[clap(long, short)]
+    pairs: Vec<String>,
+
+    /// which values to try for each test (graffiti, random1, random17, ...)
+    ///
+    /// "graffiti" prefers patterning the bytes of values in a way that you
+    /// can identify which byte of which field each recorded value was.
+    ///
+    /// "randomN" seeds an RNG with N to make random (repetable) values with.
+    #[clap(long, short)]
+    #[clap(default_values_t = vec![ValueGeneratorKind::Graffiti])]
+    gen_vals: Vec<ValueGeneratorKind>,
+
+    /// which value wrting/reporting styles to generate for each test (harness, print, assert, noop)
+    ///
+    /// "harness" uses callbacks to report the values back to the abi cafe test harness
+    /// "print" uses println/printf
+    /// "assert" uses asserts against the expected value
+    /// "noop" emits no printing
+    ///
+    /// Note that only "harness" mode can actually be *checked*. The other modes
+    /// exist for exporting the programs into a form that can be inspected/reported.
+    #[clap(long, short)]
+    #[clap(default_values_t = vec![WriteImpl::HarnessCallback])]
+    write_vals: Vec<WriteImpl>,
+
+    /// UNIMPLEMENTED: which of the values in a test to write (see --write-vals)
+    ///
+    /// This is an internal feature of abi-cafe, and used in minimization (see --minimize-vals),
+    /// but is not currently exposed as a thing you can actually ask for, pending a syntax.
+    #[clap(long, short)]
+    select_vals: Option<Vec<String>>,
+
+    /// when a test fails, and we regenerate a minimized value,
+    /// replace the --write-vals selection with this one (presumably cleaner/prettier)
+    #[clap(long, short)]
+    #[clap(default_value_t = WriteImpl::Print)]
+    minimize_vals: WriteImpl,
+
+    /// UNIMPLEMENTED: sugar for selecting all the test combo settings at once using
+    /// the test key syntax. i.e. "mytest::conv_rust::repr_rust::rustc_calls_cc::random3"
+    ///
+    /// See <https://github.com/Gankra/abi-cafe/issues/37>
+    #[clap(long, short)]
+    key: Option<Vec<String>>,
+
+    /// final report output format (human, json)
     #[clap(long, default_value_t = OutputFormat::Human)]
     output_format: OutputFormat,
+
+    /// add a rustc_codegen_backend, with the syntax "toolchain_name:path/to/backend"
+    ///
+    /// toolchain_name here is an arbitrary id that will be used to uniquely identify
+    /// the backend as a toolchain, for the purposes of --toolchains and --pairs
     #[clap(long)]
-    gen_vals: Option<ValueGeneratorKind>,
-    #[clap(long)]
-    write_vals: Option<WriteImpl>,
-    #[clap(long)]
-    minimize_vals: Option<WriteImpl>,
+    add_rustc_codegen_backend: Vec<String>,
+
+    /// deprecated, does nothing (we always procgen now)
+    #[clap(long, hide = true)]
+    procgen_tests: bool,
 }
 
 pub fn make_app() -> Config {
-    /// The pairings of impls to run. LHS calls RHS.
-    static DEFAULT_TEST_PAIRS: &[(&str, &str)] = &[
-        (TOOLCHAIN_RUSTC, TOOLCHAIN_RUSTC), // Rust calls Rust
-        (TOOLCHAIN_RUSTC, TOOLCHAIN_CC),    // Rust calls C
-        (TOOLCHAIN_CC, TOOLCHAIN_RUSTC),    // C calls Rust
-        (TOOLCHAIN_CC, TOOLCHAIN_CC),       // C calls C
-    ];
+    let cli = Cli::parse();
 
-    let config = Cli::parse();
-    let procgen_tests = config.procgen_tests;
-    let run_conventions = if config.conventions.is_empty() {
-        ALL_CONVENTIONS.to_vec()
-    } else {
-        config.conventions
-    };
-    let run_reprs = if config.reprs.is_empty() {
-        ALL_REPRS.to_vec()
-    } else {
-        config.reprs
-    };
+    let run_toolchains = cli.toolchains;
+    let run_conventions = cli.conventions;
+    let run_reprs = cli.reprs;
+    let run_values = cli.gen_vals;
+    let run_writers = cli.write_vals;
+    let run_selections = vec![FunctionSelector::All];
+    let minimizing_write_impl = cli.minimize_vals;
 
-    let run_impls = config.impls;
-
-    let mut run_pairs: Vec<_> = config
+    let mut run_pairs: Vec<_> = cli
         .pairs
         .iter()
         .map(|pair| {
@@ -68,15 +144,24 @@ pub fn make_app() -> Config {
         })
         .map(|(a, b)| (String::from(a), String::from(b)))
         .collect();
-    if run_pairs.is_empty() {
-        run_pairs = DEFAULT_TEST_PAIRS
-            .iter()
-            .map(|&(a, b)| (String::from(a), String::from(b)))
-            .collect()
-    }
-    let run_tests = config.tests;
 
-    let rustc_codegen_backends: Vec<(String, String)> = config
+    // If no pairs specified, add default ones
+    if run_pairs.is_empty() {
+        let mut pairs = std::collections::BTreeSet::new();
+        for toolchain in &run_toolchains {
+            // have it call itself
+            pairs.insert((toolchain.clone(), toolchain.clone()));
+            // have it call/be-called-by all default pairers
+            for pairer in DEFAULT_PAIRERS {
+                pairs.insert((toolchain.clone(), pairer.to_string()));
+                pairs.insert((pairer.to_string(), toolchain.clone()));
+            }
+        }
+        run_pairs = pairs.into_iter().collect();
+    }
+    let run_tests = cli.tests;
+
+    let rustc_codegen_backends: Vec<(String, String)> = cli
         .add_rustc_codegen_backend
         .iter()
         .map(|pair| {
@@ -96,11 +181,7 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
         }
     }
 
-    let val_generator = config.gen_vals.unwrap_or(ValueGeneratorKind::Graffiti);
-    let minimizing_write_impl = config.minimize_vals.unwrap_or(WriteImpl::Print);
-    let write_impl = config.write_vals.unwrap_or(WriteImpl::HarnessCallback);
-
-    let output_format = config.output_format;
+    let output_format = cli.output_format;
 
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))
@@ -124,15 +205,15 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
     };
     Config {
         output_format,
-        procgen_tests,
         run_conventions,
         run_reprs,
-        run_impls,
+        run_toolchains,
         run_tests,
         run_pairs,
         rustc_codegen_backends,
-        val_generator,
-        write_impl,
+        run_values,
+        run_writers,
+        run_selections,
         minimizing_write_impl,
         paths,
     }

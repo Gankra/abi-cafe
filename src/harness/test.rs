@@ -10,23 +10,6 @@ use crate::{error::GenerateError, CliParseError};
 pub type ToolchainId = String;
 pub type TestId = String;
 
-pub static ALL_CONVENTIONS: &[CallingConvention] = &[
-    // C!
-    CallingConvention::C,
-    CallingConvention::Cdecl,
-    CallingConvention::Stdcall,
-    CallingConvention::Fastcall,
-    CallingConvention::Vectorcall,
-    // Rust!
-    CallingConvention::Rust,
-    // Note sure if these have a purpose, so omitting them for now
-    // CallingConvention::System,
-    // CallingConvention::Win64,
-    // CallingConvention::Sysv64,
-    // CallingConvention::Aapcs,
-];
-pub static ALL_REPRS: &[LangRepr] = &[LangRepr::Rust, LangRepr::C];
-
 /// A test case, fully abstract.
 ///
 /// An abi-cafe Test is essentially a series of function signatures

@@ -65,16 +65,16 @@ impl std::str::FromStr for OutputFormat {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub output_format: OutputFormat,
-    pub procgen_tests: bool,
     pub run_conventions: Vec<CallingConvention>,
     pub run_reprs: Vec<LangRepr>,
-    pub run_impls: Vec<String>,
+    pub run_toolchains: Vec<String>,
     pub run_pairs: Vec<(String, String)>,
     pub run_tests: Vec<String>,
-    pub rustc_codegen_backends: Vec<(String, String)>,
-    pub val_generator: ValueGeneratorKind,
-    pub write_impl: WriteImpl,
+    pub run_values: Vec<ValueGeneratorKind>,
+    pub run_writers: Vec<WriteImpl>,
+    pub run_selections: Vec<FunctionSelector>,
     pub minimizing_write_impl: WriteImpl,
+    pub rustc_codegen_backends: Vec<(String, String)>,
     pub paths: Paths,
 }
 
@@ -153,44 +153,39 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Run the tests
     use TestConclusion::*;
 
-    let tasks = harness
-        .all_tests()
-        .into_iter()
-        .flat_map(|test| {
-            // If the cli has test filters, apply those
-            if !cfg.run_tests.is_empty() && !cfg.run_tests.contains(&test.name) {
-                return Vec::new();
-            }
-            cfg.run_conventions
-                .iter()
-                .flat_map(|convention| {
-                    if !test.has_convention(*convention) {
-                        // Don't bother with a convention if the test doesn't use it.
-                        return Vec::new();
-                    }
-                    cfg.run_reprs
-                        .iter()
-                        .flat_map(|repr| {
-                            // Create versions of the test for each "X calls Y" pair we care about.
-                            cfg.run_pairs.iter().filter_map(|(caller_id, callee_id)| {
-                                if !cfg.run_impls.is_empty()
-                                    && !cfg.run_impls.iter().any(|x| x == caller_id)
-                                    && !cfg.run_impls.iter().any(|x| &**x == callee_id)
-                                {
-                                    return None;
-                                }
+    let mut tasks = vec![];
 
+    // The cruel bastard that is combinatorics... THE GOD LOOPS
+    for test in harness.all_tests() {
+        if !cfg.run_tests.is_empty() && !cfg.run_tests.contains(&test.name) {
+            continue;
+        }
+        for &convention in &cfg.run_conventions {
+            if !test.has_convention(convention) {
+                continue;
+            }
+            for (caller_id, callee_id) in &cfg.run_pairs {
+                if !cfg.run_toolchains.is_empty()
+                    && !cfg.run_toolchains.iter().any(|x| x == caller_id)
+                    && !cfg.run_toolchains.iter().any(|x| &**x == callee_id)
+                {
+                    continue;
+                }
+                for &repr in &cfg.run_reprs {
+                    for &val_generator in &cfg.run_values {
+                        for &val_writer in &cfg.run_writers {
+                            for functions in &cfg.run_selections {
                                 // Run the test!
                                 let test_key = TestKey {
                                     test: test.name.to_owned(),
                                     caller: caller_id.to_owned(),
                                     callee: callee_id.to_owned(),
                                     options: TestOptions {
-                                        convention: *convention,
-                                        repr: *repr,
-                                        functions: FunctionSelector::All,
-                                        val_writer: cfg.write_impl,
-                                        val_generator: cfg.val_generator,
+                                        convention,
+                                        repr,
+                                        val_writer,
+                                        val_generator,
+                                        functions: functions.clone(),
                                     },
                                 };
                                 let rules = harness.get_test_rules(&test_key);
@@ -200,15 +195,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     test_key.clone(),
                                 );
 
-                                Some(task)
-                            })
-                        })
-                        .collect()
-                })
-                .collect()
-        })
-        .collect::<Vec<_>>();
-
+                                tasks.push(task);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     // Join on all the tasks, and compute their results
     let reports = tasks
         .into_iter()

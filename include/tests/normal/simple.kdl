@@ -1,22 +1,26 @@
 // This is a simple little test case to demonstrate a basic normal
 // abi-cafe test that includes some custom types and functions
 
-struct "Point3" {
+struct "Point" {
     x "f32"
     y "f32"
-    z "f32"
+}
+
+enum "ScaleMode" {
+    Width
+    Height
 }
 
 fn "print" {
-    inputs { _ "Point3"; }
+    inputs { _ "Point"; }
 }
 
 fn "scale" {
-    inputs { _ "Point3"; factor "f32"; }
-    outputs { _ "Point3"; }
+    inputs { _ "Point"; factor "f32"; scalemode "ScaleMode"; }
+    outputs { _ "Point"; }
 }
 
-fn "add" {
-    inputs { _ "Point3"; _ "Point3"; }
-    outputs { _ "Point3"; }
+fn "sum" {
+    inputs { _ "&[Point; 4]"; }
+    outputs { _ "Point"; }
 }

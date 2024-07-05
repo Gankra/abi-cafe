@@ -75,6 +75,7 @@ pub struct Config {
     pub run_selections: Vec<FunctionSelector>,
     pub minimizing_write_impl: WriteImpl,
     pub rustc_codegen_backends: Vec<(String, String)>,
+    pub disable_builtin_tests: bool,
     pub paths: Paths,
 }
 
@@ -91,7 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _handle = rt.enter();
 
     // Grab all the tests
-    let test_sources = harness::find_tests(&cfg.paths)?;
+    let test_sources = harness::find_tests(&cfg)?;
     let read_tasks = test_sources
         .into_iter()
         .map(|(test, test_file)| harness::spawn_read_test(&rt, test, test_file));

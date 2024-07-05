@@ -13,11 +13,13 @@ pub mod rust;
 pub use c::CcToolchain;
 pub use rust::RustcToolchain;
 
-pub static TOOLCHAIN_RUSTC: &str = "rustc";
-pub static TOOLCHAIN_CC: &str = "cc";
-pub static TOOLCHAIN_GCC: &str = "gcc";
-pub static TOOLCHAIN_CLANG: &str = "clang";
-pub static TOOLCHAIN_MSVC: &str = "msvc";
+pub const TOOLCHAIN_RUSTC: &str = "rustc";
+pub const TOOLCHAIN_CC: &str = "cc";
+pub const TOOLCHAIN_GCC: &str = "gcc";
+pub const TOOLCHAIN_CLANG: &str = "clang";
+pub const TOOLCHAIN_MSVC: &str = "msvc";
+
+const C_TOOLCHAINS: &[&str] = &[TOOLCHAIN_CC, TOOLCHAIN_GCC, TOOLCHAIN_CLANG, TOOLCHAIN_MSVC];
 
 /// A compiler/language toolchain!
 pub trait Toolchain {
@@ -48,37 +50,26 @@ pub type Toolchains = SortedMap<String, Arc<dyn Toolchain + Send + Sync>>;
 pub(crate) fn create_toolchains(cfg: &crate::Config) -> Toolchains {
     let mut toolchains = Toolchains::default();
 
+    // Add rust toolchains
     add_toolchain(
         &mut toolchains,
         TOOLCHAIN_RUSTC,
         RustcToolchain::new(cfg, None),
     );
-    add_toolchain(
-        &mut toolchains,
-        TOOLCHAIN_CC,
-        CcToolchain::new(cfg, TOOLCHAIN_CC),
-    );
-    add_toolchain(
-        &mut toolchains,
-        TOOLCHAIN_GCC,
-        CcToolchain::new(cfg, TOOLCHAIN_GCC),
-    );
-    add_toolchain(
-        &mut toolchains,
-        TOOLCHAIN_CLANG,
-        CcToolchain::new(cfg, TOOLCHAIN_CLANG),
-    );
-    add_toolchain(
-        &mut toolchains,
-        TOOLCHAIN_MSVC,
-        CcToolchain::new(cfg, TOOLCHAIN_MSVC),
-    );
-
     for (name, path) in &cfg.rustc_codegen_backends {
         add_toolchain(
             &mut toolchains,
             name,
             RustcToolchain::new(cfg, Some(path.to_owned())),
+        );
+    }
+
+    // Add c toolchains
+    for &name in C_TOOLCHAINS {
+        add_toolchain(
+            &mut toolchains,
+            name,
+            CcToolchain::new(cfg, name),
         );
     }
 

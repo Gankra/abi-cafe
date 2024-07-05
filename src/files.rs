@@ -12,7 +12,7 @@ pub struct Paths {
     pub target_dir: Utf8PathBuf,
     pub out_dir: Utf8PathBuf,
     pub generated_src_dir: Utf8PathBuf,
-    pub runtime_test_input_dir: Utf8PathBuf,
+    pub runtime_test_input_dir: Option<Utf8PathBuf>,
 }
 impl Paths {
     pub fn harness_main_file(&self) -> Utf8PathBuf {

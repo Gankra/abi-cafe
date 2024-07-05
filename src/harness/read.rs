@@ -3,7 +3,6 @@ mod procgen;
 use std::{
     fs::File,
     io::{BufReader, Read},
-    path::Path,
     sync::Arc,
 };
 
@@ -11,7 +10,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 use tracing::warn;
 
 use crate::error::*;
-use crate::files::Paths;
 use crate::harness::test::*;
 use crate::*;
 
@@ -34,19 +32,21 @@ impl Pathish {
     }
 }
 
-pub fn find_tests(paths: &Paths) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
-    let mut tests = find_tests_runtime(paths.runtime_test_input_dir.as_std_path())?;
-    let mut more_tests = find_tests_static()?;
+pub fn find_tests(cfg: &Config) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
+    let mut tests = find_tests_runtime(cfg.paths.runtime_test_input_dir.as_deref())?;
+    let mut more_tests = find_tests_static(cfg.disable_builtin_tests)?;
     tests.append(&mut more_tests);
     Ok(tests)
 }
 
-pub fn find_tests_runtime(start_dir: &Path) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
+pub fn find_tests_runtime(
+    start_dir: Option<&Utf8Path>,
+) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
     let mut tests = SortedMap::new();
-    if !start_dir.exists() {
+    let Some(start_dir) = start_dir else {
         return Ok(tests);
-    }
-    let mut dirs = vec![start_dir.to_owned()];
+    };
+    let mut dirs = vec![start_dir.as_std_path().to_owned()];
     while let Some(dir) = dirs.pop() {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
@@ -69,8 +69,14 @@ pub fn find_tests_runtime(start_dir: &Path) -> Result<SortedMap<TestId, TestFile
     Ok(tests)
 }
 
-pub fn find_tests_static() -> Result<SortedMap<TestId, TestFile>, GenerateError> {
+pub fn find_tests_static(
+    disable_builtin_tests: bool,
+) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
     let mut tests = SortedMap::new();
+    if disable_builtin_tests {
+        return Ok(tests);
+    }
+
     let mut dirs = vec![crate::files::tests()];
     while let Some(dir) = dirs.pop() {
         for entry in dir.entries() {

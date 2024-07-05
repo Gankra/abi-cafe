@@ -24,7 +24,7 @@ ABI Cafe automates testing that two languages/compilers agree on their ABIs.
 
 If they agree, great!
 
-If they don't agree, even better, we just learned something! **Try to diagnose why they disagreed, and generate a minimized version that a human can inspect and report!**
+If they don't agree, even better, we just learned something! **We then try to diagnose why they disagreed, and generate a minimized version that a human can inspect and report!**
 
 Now do this [a bajillion times](./harness/combos.md) and suddenly we're learning a whole lot! Alternatively, you can [hand-craft any type or function signature you're interested in](./kdl-script/index.md), and explore its interoperability between different toolchains.
 
@@ -36,4 +36,7 @@ This design is based on a fundamental belief that **ABIs exist only through shee
 
 ## Choose Your Own Adventure
 
-* I want... TODO
+* [I want to use ABI Cafe in my compiler's testsuite](./harness/combos.md)
+* [I want to add support for my compiler/language to ABI Cafe](./harness/combos/toolchains.md)
+* [I want to add a test to ABI Cafe](./harness/combos/tests.md)
+* [I want to add a new kind of type to ABI Cafe](./kdl-script/types/index.md)

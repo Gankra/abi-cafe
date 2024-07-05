@@ -1,110 +1,89 @@
-struct "Simple" {
-    a "i32"
+// This file is intended to be a big complicated mess to show of all sorts of features
+// of KDLScript test files, and really stress out codegen backends.
+
+// Structs and attributes!
+@align 16
+struct "DataPoint" {
+    // Arrays!
+    point "[MeterCoordinate; 2]"
+    data "Data"
 }
 
-alias "Simple2" "Simple"
-
-struct "Complex" {
-    elems1 "[Simple;10]"
-    elems2 "[Simple;9]"
-    val "Simple"
-    opaque "ptr"
-    flag "bool"
+// Enums!
+enum "Fanciness" {
+    Boring -1
+    Stylish 17
+    Fancy
+    TooMuch 23
 }
 
-enum "ErrorCode" {
-    Ok 0
-    FileNotFound 1
-    Bad -3
+// Tagged unions!
+tagged "Data" {
+    // Can omit names of fields for auto-naming / tupleness
+    Simple { _ "f64"; }
+    Complex {
+        fancy "Fanciness"
+        value "u32"
+    }
+    Empty
 }
 
-tagged "OptionI32" {
-    None
-    Some { _ "i32"; }
+// Untagged Unions!
+union "DangerousData" {
+    // We *don't* support C's inline anonymous structs, have to name a type per case!
+    Int "i32"
+    Float "f64"
 }
 
-tagged "MyResult" {
-    Ok { _ "[u32;3]"; }
-    Err { _ "ErrorCode"; }
+// Cross-language type puns!
+pun "MeterCoordinate" {
+    // Rust promises that this...
+    lang "rust" {
+        @repr "transparent"
+        struct "MeterCoordinate" {
+            _ "f32"
+        }
+    }
+    // Is equivalent to this
+    lang "c" "cpp" {
+        // Aliases!
+        alias "MeterCoordinate" "f32"
+    }
 }
 
-tagged "MyDeepResult" {
-    Ok { _ "MyResult"; }
-    Err { _ "OptionI32"; }
-    FileNotFound { x "bool"; y "Simple"; }
+struct "RawDataSet" {
+    // References! In types!
+    raw "&[DangerousData; 8]"
+    fancy "Fanciness"
 }
 
-union "Life" {
-   simple "Simple"
-   complex "OptionI32"
-   empty "()"
+struct "FullDataSet" {
+    data "[DataPoint; 8]"
 }
 
-struct "ContainsRefs" {
-    valued "i32"
-    reffed "&i32"
-    deep_reffed "InnerContainsRefs"
-}
 
-tagged "InnerContainsRefs" {
-    A { x "&u64"; y "&u8"; }
-    B { z "&i16"; }
-    C { w "bool"; }
-}
 
-fn "func1" {
-    inputs { a "Complex"; b "Simple"; }
-    outputs { out "()"; }
-}
-
-fn "func2" {
+// Functions!
+fn "process_raw_data" {
     inputs {
-        a "[Complex;2]"
-        b "[Simple;10]"
-        c "()"
-        d "f64"
+        data "RawDataSet"
+        timeout "u32"
     }
     outputs {
-        out "Complex"
+        _ "FullDataSet"
     }
 }
 
-fn "arraytime" {
+// Can exclude output
+fn "report_data" {
     inputs {
-        a "[i32;4]"
-        b "[[i32;4];5]"
-        c "[[[&Simple;1];2];3]"
+        _ "DataPoint"
     }
 }
 
-fn "enumtime" {
-    inputs {
-        a "OptionI32"
-        b "MyResult"
-        c "MyDeepResult"
-    }
-}
-
-fn "uniontime" {
-    inputs {
-        a "Life"
-        b "[Life; 3]"
-        c "&Life"
-    }
-}
-
-fn "reftime" {
-    inputs {
-        a "i32"
-        b "&i32"
-        c "&Simple"
-        d "ContainsRefs"
-    }
-}
-
-fn "simple" {
-    inputs {
-        a "i32"
-        b "i32"
+// Or exclude input
+fn "get_raw_data_point" {
+    outputs {
+        _ "DangerousData"
     }
 }

@@ -18,7 +18,7 @@ Attributes start with `@` and apply to the next item (function or type) that fol
 * passthrough attrs
     * `@ "literally anything here"
 
-The significance of repr attributes is that providing *any* explicit `repr` attribute is considered an opt-out from the default automatic repr all user-defined types recieve.
+The significance of repr attributes is that providing *any* explicit `repr` attribute is considered an opt-out from the default automatic repr all user-defined types receive.
 
 When we generate tests we will typically generate both a `repr(rust)` version and a `repr(C)` version. In these versions any user-defined type gets (an equivalent of) those attributes applied to it.
 

@@ -22,6 +22,25 @@ const VAR_CALLEE_INPUTS: &str = "CALLEE_INPUTS";
 const VAR_CALLEE_OUTPUTS: &str = "CALLEE_OUTPUTS";
 const INDENT: &str = "    ";
 
+pub struct CcToolchain {
+    cc_flavor: CCFlavor,
+    platform: Platform,
+    mode: &'static str,
+}
+
+#[derive(PartialEq)]
+enum CCFlavor {
+    Clang,
+    Gcc,
+    Msvc,
+}
+
+#[derive(PartialEq)]
+enum Platform {
+    Windows,
+    Unixy,
+}
+
 pub struct TestState {
     pub inner: TestImpl,
     // interning state
@@ -43,25 +62,6 @@ impl TestState {
             tynames: Default::default(),
         }
     }
-}
-
-pub struct CcToolchain {
-    cc_flavor: CCFlavor,
-    platform: Platform,
-    mode: &'static str,
-}
-
-#[derive(PartialEq)]
-enum CCFlavor {
-    Clang,
-    Gcc,
-    Msvc,
-}
-
-#[derive(PartialEq)]
-enum Platform {
-    Windows,
-    Unixy,
 }
 
 impl Toolchain for CcToolchain {
@@ -122,7 +122,7 @@ impl Toolchain for CcToolchain {
 }
 
 impl CcToolchain {
-    pub fn generate_caller_impl(
+    fn generate_caller_impl(
         &self,
         f: &mut Fivemat,
         state: &mut TestState,
@@ -213,7 +213,7 @@ impl CcToolchain {
 }
 
 impl CcToolchain {
-    pub fn generate_callee_impl(
+    fn generate_callee_impl(
         &self,
         f: &mut Fivemat,
         state: &mut TestState,

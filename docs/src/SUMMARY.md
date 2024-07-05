@@ -1,27 +1,21 @@
 # Summary
 
-- [introduction](./intro.md)
-
 # ABI Cafe
 
-- [ABI Cafe](./harness/index.md)
-- [test files](./harness/read.md)
-- [the runtime](./harness/run.md)
-- [code generation](./harness/generate.md)
-- [checking](./harness/check.md)
-- [minimized exports](./harness/minimize.md)
-- [configuration](./harness/combos.md)
-    - [tests](./harness/combos/tests.md)
+- [introduction](./intro.md)
+- [usage](./harness/combos.md)
+    - [test files](./harness/combos/tests.md)
     - [calling conventions](./harness/combos/conventions.md)
     - [type reprs](./harness/combos/reprs.md)
-    - [toolchains and pairings](./harness/combos/toolchains.md)
-    - [value generation (randomizing!)](./harness/combos/values.md)
-    - [value selection (minimizing!)](./harness/combos/filters.md)
-    - [value writes (exporting!)](./harness/combos/writes.md)
+    - [toolchain pairings](./harness/combos/toolchains.md)
+    - [value generators](./harness/combos/values.md)
+    - [value selectors)](./harness/combos/selectors.md)
+    - [value writers](./harness/combos/writers.md)
+- [trophycase](./trophies.md)
 
-# kdl-script
+# KDLScript
 
-- [kdl-script](./kdl-script/index.md)
+- [introduction](./kdl-script/index.md)
 - [attributes](./kdl-script/attributes.md)
 - [functions](./kdl-script/functions/index.md)
     - [signatures](kdl-script/functions/signatures.md)

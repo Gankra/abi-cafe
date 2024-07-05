@@ -1,8 +1,8 @@
 use std::fmt::Write;
 use std::sync::Arc;
 
-use crate::error::*;
 use crate::harness::test::*;
+use crate::{error::*, SortedMap};
 
 use camino::Utf8Path;
 use kdl_script::PunEnv;
@@ -39,4 +39,59 @@ pub trait Toolchain {
         out_dir: &Utf8Path,
         lib_name: &str,
     ) -> Result<String, BuildError>;
+}
+
+/// All the toolchains
+pub type Toolchains = SortedMap<String, Arc<dyn Toolchain + Send + Sync>>;
+
+/// Create all the toolchains
+pub(crate) fn create_toolchains(cfg: &crate::Config) -> Toolchains {
+    let mut toolchains = Toolchains::default();
+
+    add_toolchain(
+        &mut toolchains,
+        TOOLCHAIN_RUSTC,
+        RustcToolchain::new(cfg, None),
+    );
+    add_toolchain(
+        &mut toolchains,
+        TOOLCHAIN_CC,
+        CcToolchain::new(cfg, TOOLCHAIN_CC),
+    );
+    add_toolchain(
+        &mut toolchains,
+        TOOLCHAIN_GCC,
+        CcToolchain::new(cfg, TOOLCHAIN_GCC),
+    );
+    add_toolchain(
+        &mut toolchains,
+        TOOLCHAIN_CLANG,
+        CcToolchain::new(cfg, TOOLCHAIN_CLANG),
+    );
+    add_toolchain(
+        &mut toolchains,
+        TOOLCHAIN_MSVC,
+        CcToolchain::new(cfg, TOOLCHAIN_MSVC),
+    );
+
+    for (name, path) in &cfg.rustc_codegen_backends {
+        add_toolchain(
+            &mut toolchains,
+            name,
+            RustcToolchain::new(cfg, Some(path.to_owned())),
+        );
+    }
+
+    toolchains
+}
+
+/// Register a toolchain
+fn add_toolchain<A: Toolchain + Send + Sync + 'static>(
+    toolchains: &mut Toolchains,
+    id: impl Into<ToolchainId>,
+    toolchain: A,
+) {
+    let id = id.into();
+    let old = toolchains.insert(id.clone(), Arc::new(toolchain));
+    assert!(old.is_none(), "duplicate toolchain id: {}", id);
 }

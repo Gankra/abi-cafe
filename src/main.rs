@@ -116,40 +116,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     if test_read_fails {
         Err(TestsFailed {})?;
     }
-    let mut harness = TestHarness::new(tests, cfg.paths.clone());
-
-    harness.add_toolchain(
-        TOOLCHAIN_RUSTC.to_owned(),
-        toolchains::RustcToolchain::new(&cfg, None),
-    );
-    harness.add_toolchain(
-        TOOLCHAIN_CC.to_owned(),
-        toolchains::CcToolchain::new(&cfg, TOOLCHAIN_CC),
-    );
-    harness.add_toolchain(
-        TOOLCHAIN_GCC.to_owned(),
-        toolchains::CcToolchain::new(&cfg, TOOLCHAIN_GCC),
-    );
-    harness.add_toolchain(
-        TOOLCHAIN_CLANG.to_owned(),
-        toolchains::CcToolchain::new(&cfg, TOOLCHAIN_CLANG),
-    );
-    harness.add_toolchain(
-        TOOLCHAIN_MSVC.to_owned(),
-        toolchains::CcToolchain::new(&cfg, TOOLCHAIN_MSVC),
-    );
-
-    for (name, path) in &cfg.rustc_codegen_backends {
-        harness.add_toolchain(
-            name.to_owned(),
-            toolchains::RustcToolchain::new(&cfg, Some(path.to_owned())),
-        );
-    }
-
-    debug!("configured ABIs!");
-    let harness = Arc::new(harness);
-
     debug!("loaded tests!");
+
+    let harness = Arc::new(TestHarness::new(tests, &cfg));
+    debug!("initialized test harness!");
+
     // Run the tests
     use TestConclusion::*;
 

@@ -28,7 +28,7 @@ pub type Memoized<K, V> = Mutex<SortedMap<K, Arc<OnceCell<V>>>>;
 
 pub struct TestHarness {
     paths: Paths,
-    toolchains: SortedMap<ToolchainId, Arc<dyn Toolchain + Send + Sync>>,
+    toolchains: Toolchains,
     tests: SortedMap<TestId, Arc<Test>>,
     tests_with_vals: Memoized<(TestId, ValueGeneratorKind), Arc<TestWithVals>>,
     tests_with_toolchain:
@@ -39,11 +39,12 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    pub fn new(tests: SortedMap<TestId, Arc<Test>>, paths: Paths) -> Self {
+    pub fn new(tests: SortedMap<TestId, Arc<Test>>, cfg: &Config) -> Self {
+        let toolchains = toolchains::create_toolchains(cfg);
         Self {
-            paths,
+            paths: cfg.paths.clone(),
             tests,
-            toolchains: Default::default(),
+            toolchains,
             tests_with_vals: Default::default(),
             tests_with_toolchain: Default::default(),
             generated_sources: Default::default(),
@@ -51,14 +52,7 @@ impl TestHarness {
             concurrency_limiter: Semaphore::new(128),
         }
     }
-    pub fn add_toolchain<A: Toolchain + Send + Sync + 'static>(
-        &mut self,
-        id: ToolchainId,
-        toolchain: A,
-    ) {
-        let old = self.toolchains.insert(id.clone(), Arc::new(toolchain));
-        assert!(old.is_none(), "duplicate toolchain id: {}", id);
-    }
+
     pub fn toolchain_by_test_key(
         &self,
         key: &TestKey,
@@ -67,6 +61,7 @@ impl TestHarness {
         let toolchain_id = key.toolchain_id(call_side);
         self.toolchains[toolchain_id].clone()
     }
+
     pub fn all_tests(&self) -> Vec<Arc<Test>> {
         self.tests.values().cloned().collect()
     }

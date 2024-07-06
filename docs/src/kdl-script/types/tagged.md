@@ -1,4 +1,4 @@
-# KDLScript tagged types
+# tagged types
 
 A KDLScript `tagged` type is the equivalent of Rust's `enum`: a tagged union where variants have fields, which has no "obvious" C/C++ analog. Variant bodies may either be missing (indicating no payload) or have the syntax of a `struct` body. [For c-like enums, see enum types](./enum.md). [For c-like untagged unions, see union types](./union.md).
 
@@ -46,7 +46,7 @@ tagged "MyOptionU32" {
 
 If no explicit `@repr` attribute is applied (the default, which is recommended), the struct will be [eligible for repr combinatorics](../../harness/combos/reprs.md). Basically, we'll generate a version of the test where it's set to `#[repr(C)]` and version where it's set to `#[repr(Rust)]`, improving your test coverage.
 
-It's up to each [compiler / language](../../harness/combos/impls.md) to implement these attributes [however they see fit](../../harness/generate.md). But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.
+It's up to each [compiler / language](../../harness/combos/toolchains.md) to implement these attributes [however they see fit](../../harness/combos/toolchains.md). But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.
 
 Note that `repr(u32)` and friends are *not* currently eligible for repr combinatorics. If you want to test that, set it explicitly.
 

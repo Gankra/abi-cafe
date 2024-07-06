@@ -1,6 +1,6 @@
-# KDLScript primitive types
+# primitive types
 
-There are various builtin primitives, such as:
+There are various builtin primitives in KDLScript, such as:
 
 * integers - fixed width integers
     * `i8`, `i16`, `i32`, `i64`, `i128`, `i256`

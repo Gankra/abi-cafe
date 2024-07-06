@@ -2,7 +2,7 @@
 
 Toolchains refer to a specific compiler (or configuration of a compiler). The entire purpose of ABI Cafe is to take two compilers and pair them up, checking that code built with one can properly call into code built by the other.
 
-Within ABI Cafe, each Toolchain also comes with a [code generation backend](../generate.md), which can take [a header file describing some types and functions](../../kdl-script/index.md) and generate either an implementation of those functions, or a caller of those functions.
+Within ABI Cafe, each Toolchain also comes with a [code generation backend](../combos/toolchains.md), which can take [a header file describing some types and functions](../../kdl-script/index.md) and generate either an implementation of those functions, or a caller of those functions.
 
 
 ## `--toolchains`

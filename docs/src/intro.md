@@ -18,9 +18,9 @@ ABI Cafe automates testing that two languages/compilers agree on their ABIs.
 **ABI Cafe is essentially an ABI fuzzer**, which:
 
 * [Creates a header file describing an interface](./kdl-script/index.md)
-* [Generates source code for a *user* and *implementation* of that interface](./harness/generate.md)
-* [Builds and runs the resulting program](./harness/run.md)
-* [Checks that both sides saw the same values](./harness/check.md)
+* [Generates source code for a *user* and *implementation* of that interface](./harness/combos/toolchains.md)
+* [Builds and runs the resulting program](./harness/combos.md)
+* [Checks that both sides saw the same values](./harness/combos/values.md)
 
 If they agree, great!
 

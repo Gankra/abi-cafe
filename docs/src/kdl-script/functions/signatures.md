@@ -1,13 +1,6 @@
-# KDLScript function signatures
+# function signatures
 
-
-Functions are where the Actually Useful *library* version of KDLScript and the Just A Meme *application* version of KDLScript diverge. This difference is configured by the `eval` feature.
-
-In library form KDLScript only has function *signature declarations*, and it's the responsibility of the [abi-cafe][] backend using KDLScript to figure out what the body should be. In binary form you can actually fill in the body with some hot garbage I hacked up.
-
-For now we'll only document declaration.
-
-Here is a fairly complicated/contrived example function:
+Here is a fairly complicated/contrived example function signature:
 
 ```kdl
 fn "my_func" {
@@ -17,13 +10,21 @@ fn "my_func" {
         _ "&bool"
     }
     outputs {
-        _ "bool"
-        _ "&ErrorCode"
+        _ "ErrorCode"
     }
 }
 ```
 
-Functions can have arbitrarily many inputs and outputs with either named or "positional" names (which will get autonaming like `arg0`, `arg1` and `out0`, `out1`, etc.).
+Functions can have arbitrarily many inputs and outputs with either named or "positional" (`_`) names which will get autonaming like `arg0` and `out0`.
+
+Currently there is no meaning ascribed to multiple outputs, every backend refuses to implement them. Note that "returning a tuple" or any other composite is still one output. We would need to like, support Go or something to make this a meaningful expression.
+
+Named args [*could* be the equivalent of Swift named args](https://github.com/Gankra/abi-cafe/issues/32), where the inner and outer name can vary, but the outer name is like, part of the function name itself (and/or ABI)?
+
+[Varargs support is also TBD but has a sketch](https://github.com/Gankra/abi-cafe/issues/1#issuecomment-2200345710).
+
+
+# Outparams
 
 <details>
 <summary> not implemented distracting ramblings about outparams </summary>
@@ -75,9 +76,3 @@ fn my_func_caller() {
 > Update: actually even automating this was miserable, and also outparams aren't really substantial ABI-wise right now, so I'm not sure I'll ever implement outparams. It's more complexity than it's worth!
 
 </details>
-
-Currently there is no meaning ascribed to multiple outputs, every backend refuses to implement them. Note that "returning a tuple" or any other composite is still one output. We would need to like, support Go or something to make this a meaningful expression.
-
-Named args [*could* be the equivalent of Swift named args](https://github.com/Gankra/abi-cafe/issues/32), where the inner and outer name can vary, but the outer name is like, part of the function name itself (and/or ABI)?
-
-[Varargs support is also TBD but has a sketch](https://github.com/Gankra/abi-cafe/issues/1#issuecomment-2200345710).

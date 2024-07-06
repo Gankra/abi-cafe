@@ -2,7 +2,7 @@
 
 KDLScript, the [KDL](https://kdl.dev/)-based programming language!
 
-KDLScript ("Cuddle Script") is a "fake" scripting language that actually just exists to declare type/function signatures without tying ourselves to any particular language's semantics. It exists to be used by [ABI Cafe](../index.md).
+KDLScript ("Cuddle Script") is a "fake" scripting language that actually just exists to declare type/function signatures without tying ourselves to any particular language's semantics. It exists to be used by [ABI Cafe](../intro.md).
 
 Basically, KDLScript is a header format we can make as weird as we want for our own usecase:
 
@@ -36,7 +36,7 @@ fn "sum" {
 Ultimately the syntax and concepts are heavily borrowed from Rust, for a few reasons:
 
 * The author is very comfortable with Rust
-* This (and [abi-cafe](./harness/index.md)) were originally created to find bugs in rustc
+* This (and [ABI Cafe](../intro.md)) were originally created to find bugs in rustc
 * Rust is genuinely just a solid language for interfaces! (Better than C/C++)
 
 The ultimate goal of this is to test that languages can properly communicate over

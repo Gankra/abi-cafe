@@ -1,6 +1,6 @@
-# KDLScript attributes
+# attributes
 
-Attributes start with `@` and apply to the next item (function or type) that follows them. There are currently 3 major classes of attributes:
+KDLScript Attributes start with `@` and apply to the next item (function or type) that follows them. There are currently 3 major classes of attributes:
 
 * repr attrs
     * lang reprs
@@ -16,7 +16,7 @@ Attributes start with `@` and apply to the next item (function or type) that fol
     * `@align 16` - align to N
     * `@packed` - pack fields to eliminate padding
 * passthrough attrs
-    * `@ "literally anything here"
+    * `@ "literally anything here"`
 
 The significance of repr attributes is that providing *any* explicit `repr` attribute is considered an opt-out from the default automatic repr all user-defined types receive.
 

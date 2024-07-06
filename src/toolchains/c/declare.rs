@@ -78,8 +78,88 @@ impl CcToolchain {
                     PrimitiveTy::U256 => {
                         Err(UnsupportedError::Other("c doesn't have u256?".to_owned()))?
                     }
-                    PrimitiveTy::F16 => "_Float16 ",
-                    PrimitiveTy::F128 => "__float128 ",
+                    PrimitiveTy::F16 => match &self.cc_flavor {
+                        CCFlavor::Gcc
+                            if cfg!(any(
+                                target_arch = "x86",
+                                target_arch = "x86_64",
+                                target_arch = "arm",
+                                target_arch = "aarch64",
+                                target_arch = "riscv32",
+                                target_arch = "riscv64",
+                            )) =>
+                        {
+                            "_Float16 "
+                        }
+                        CCFlavor::Gcc => Err(UnsupportedError::Other(
+                            "GCC isn't known to support f16 on this target".to_owned(),
+                        ))?,
+                        CCFlavor::Clang
+                            if cfg!(any(
+                                all(target_arch = "x86", target_feature = "sse2"),
+                                target_arch = "x86_64",
+                                target_arch = "arm",
+                                target_arch = "aarch64",
+                                target_arch = "riscv32",
+                                target_arch = "riscv64",
+                            )) =>
+                        {
+                            "_Float16 "
+                        }
+                        CCFlavor::Clang => Err(UnsupportedError::Other(
+                            "Clang isn't known to support f16 on this target".to_owned(),
+                        ))?,
+                        CCFlavor::Msvc => Err(UnsupportedError::Other(
+                            "MSVC doesn't support f16".to_owned(),
+                        ))?,
+                    },
+                    PrimitiveTy::F128 => {
+                        match &self.cc_flavor {
+                            CCFlavor::Gcc
+                                if cfg!(any(
+                                    target_arch = "x86",
+                                    target_arch = "x86_64",
+                                    target_arch = "aarch64",
+                                    target_arch = "riscv32",
+                                    target_arch = "riscv64",
+                                    target_arch = "loongarch64",
+                                    // GCC PowerPC support requires the VSX feature, which is only
+                                    // enabled by default on powerpc64le. Rust doesn't currently support
+                                    // `cfg(target_feature = "vsx").
+                                    all(target_arch = "powerpc64", target_endian = "little"),
+                                )) && !cfg!(target_vendor = "apple") =>
+                            {
+                                "_Float128 "
+                            }
+                            CCFlavor::Gcc => Err(UnsupportedError::Other(
+                                "GCC isn't known to support f128 on this target".to_owned(),
+                            ))?,
+                            CCFlavor::Clang
+                                if cfg!(any(
+                                    target_arch = "x86",
+                                    target_arch = "x86_64",
+                                    target_arch = "aarch64",
+                                    target_arch = "riscv32",
+                                    target_arch = "riscv64",
+                                    // Clang PowerPC support requires the VSX feature, which is only
+                                    // enabled by default on powerpc64le. Rust doesn't currently support
+                                    // `cfg(target_feature = "vsx").
+                                    all(target_arch = "powerpc64", target_endian = "little"),
+                                )) && !cfg!(any(
+                                    target_env = "msvc",
+                                    target_vendor = "apple",
+                                )) =>
+                            {
+                                "__float128 "
+                            }
+                            CCFlavor::Clang => Err(UnsupportedError::Other(
+                                "Clang isn't known to support f128 on this target".to_owned(),
+                            ))?,
+                            CCFlavor::Msvc => Err(UnsupportedError::Other(
+                                "MSVC doesn't support f128".to_owned(),
+                            ))?,
+                        }
+                    }
                 };
                 (name.to_owned(), None)
             }

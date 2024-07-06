@@ -270,15 +270,23 @@ impl CcToolchain {
 
 impl CcToolchain {
     pub fn new(_system_info: &Config, mode: &'static str) -> Self {
-        let compiler = cc::Build::new().get_compiler();
-        let cc_flavor = if compiler.is_like_msvc() {
-            CCFlavor::Msvc
-        } else if compiler.is_like_gnu() {
-            CCFlavor::Gcc
-        } else if compiler.is_like_clang() {
-            CCFlavor::Clang
-        } else {
-            panic!("Unknown compiler flavour for CC");
+        let cc_flavor = match mode {
+            TOOLCHAIN_GCC => CCFlavor::Gcc,
+            TOOLCHAIN_CLANG => CCFlavor::Clang,
+            TOOLCHAIN_MSVC => CCFlavor::Msvc,
+            TOOLCHAIN_CC => {
+                let compiler = cc::Build::new().get_compiler();
+                if compiler.is_like_msvc() {
+                    CCFlavor::Msvc
+                } else if compiler.is_like_gnu() {
+                    CCFlavor::Gcc
+                } else if compiler.is_like_clang() {
+                    CCFlavor::Clang
+                } else {
+                    panic!("Unknown compiler flavour for CC");
+                }
+            }
+            mode => panic!("Unknown CcToolchain mode {mode:?}"),
         };
 
         let platform = if cfg!(target_os = "windows") {
@@ -291,6 +299,16 @@ impl CcToolchain {
             cc_flavor,
             platform,
             mode,
+        }
+    }
+
+    fn extra_flags(&self) -> &[&str] {
+        match self.cc_flavor {
+            CCFlavor::Gcc if cfg!(target_arch = "arm") => &["-mfp16-format=ieee"],
+            CCFlavor::Clang if cfg!(all(target_arch = "powerpc64", target_endian = "little")) => {
+                &["-mfloat128"]
+            }
+            _ => &[],
         }
     }
 
@@ -307,7 +325,11 @@ impl CcToolchain {
         info!("out: {}", out_dir);
         info!("lib: {}", lib_name);
          */
-        cc::Build::new()
+        let mut build = cc::Build::new();
+        for flag in self.extra_flags() {
+            build.flag(flag);
+        }
+        build
             .file(src_path)
             .opt_level(0)
             .cargo_metadata(false)
@@ -326,8 +348,11 @@ impl CcToolchain {
     ) -> Result<String, BuildError> {
         let obj_path = out_dir.join(format!("{lib_name}.o"));
         let lib_path = out_dir.join(format!("lib{lib_name}.a"));
-        Command::new("clang")
-            .arg("-ffunction-sections")
+        let mut cmd = Command::new("clang");
+        for flag in self.extra_flags() {
+            cmd.arg(flag);
+        }
+        cmd.arg("-ffunction-sections")
             .arg("-fdata-sections")
             .arg("-fPIC")
             .arg("-o")
@@ -354,8 +379,11 @@ impl CcToolchain {
     ) -> Result<String, BuildError> {
         let obj_path = out_dir.join(format!("{lib_name}.o"));
         let lib_path = out_dir.join(format!("lib{lib_name}.a"));
-        Command::new("gcc")
-            .arg("-ffunction-sections")
+        let mut cmd = Command::new("gcc");
+        for flag in self.extra_flags() {
+            cmd.arg(flag);
+        }
+        cmd.arg("-ffunction-sections")
             .arg("-fdata-sections")
             .arg("-fPIC")
             .arg("-o")

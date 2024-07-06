@@ -36,7 +36,7 @@ Note that the ordering matches Rust's `type Alias = RealType;` syntax and not C/
 
 ## I'm Normal And Can Be Trusted With Codegen
 
-[The abi-cafe codegen backends](../../harness/generate.md) will go out of their way to "remember" that a type alias exists and use it when the alias was specified there. So for instance given this definition:
+[The abi-cafe codegen backends](../../harness/combos/toolchains.md) will go out of their way to "remember" that a type alias exists and use it when the alias was specified there. So for instance given this definition:
 
 ```kdl
 enum "ComplexLongName" {

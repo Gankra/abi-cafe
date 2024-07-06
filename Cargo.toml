@@ -5,6 +5,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 
 exclude = ["generated_impls/", "tests/"]
 
@@ -48,6 +49,7 @@ members = ["kdl-script"]
 resolver = "2"
 
 [workspace.package]
+homepage = "https://faultlore.com/abi-cafe/book"
 repository = "https://github.com/Gankra/abi-cafe"
 edition = "2021"
 license = "MIT OR Apache-2.0"

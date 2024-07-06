@@ -1,4 +1,4 @@
-# value generation (randomizing!)
+# value generators
 
 When generating the source for a program to test, we need to pick values which will be passed to all the functions. These values are baked into the program, with both sides statically knowing which values they *should* have, and the test harness also having that information available for checking and diagnostics.
 

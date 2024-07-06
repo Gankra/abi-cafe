@@ -1,4 +1,4 @@
-# value selection
+# value selectors
 
 When generating the source for a program to test, we want a way to identify which of the [values of the function arguments](./values.md) we actually care about [writing somewhere](./writers.md). This is specifically relevant when generating a minimized test case.
 

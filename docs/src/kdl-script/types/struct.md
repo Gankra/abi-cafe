@@ -1,4 +1,4 @@
-# KDLScript struct types
+# struct types
 
 A KDLScript `struct` type is just what you expect! This definition:
 
@@ -44,7 +44,7 @@ struct "MetersU32" {
 
 If no explicit `@repr` attribute is applied (the default, which is recommended), the struct will be [eligible for repr combinatorics](../../harness/combos/reprs.md). Basically, we'll generate a version of the test where it's set to `#[repr(C)]` and version where it's set to `#[repr(Rust)]`, improving your test coverage.
 
-It's up to each [compiler / language](../../harness/combos/impls.md) to implement these attributes [however they see fit](../../harness/generate.md). But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.
+It's up to each [compiler / language](../../harness/combos/toolchains.md) to implement these attributes [however they see fit](../../harness/combos/toolchains.md). But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.
 
 Note that repr(transparent) *is not* currently eligible for repr combinatorics. If you want to test that, set it explicitly.
 

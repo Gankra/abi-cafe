@@ -1,4 +1,4 @@
-# KDLScript enum types
+# enum types
 
 A KDLScript `enum` type is a C-like enum with no nest fields. [For a Rust-like enum (tagged union), see tagged types](./tagged.md).
 
@@ -50,7 +50,7 @@ enum "MyEnum" {
 
 If no explicit `@repr` attribute is applied (the default, which is recommended), the enum will be [eligible for repr combinatorics](../../harness/combos/reprs.md). Basically, we'll generate a version of the test where it's set to `#[repr(C)]` and version where it's set to `#[repr(Rust)]`, improving your test coverage.
 
-It's up to each [compiler / language](../../harness/combos/impls.md) to implement these attributes [however they see fit](../../harness/generate.md). But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.
+It's up to each [compiler / language](../../harness/combos/toolchains.md) to implement these attributes [however they see fit](../../harness/combos/toolchains.md). But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.
 
 Note that `repr(u32)` and friends are *not* currently eligible for repr combinatorics. If you want to test that, set it explicitly.
 
@@ -70,12 +70,12 @@ enum "IoError" {
 }
 ```
 
-It's up to each to each [compiler / language](../../harness/combos/impls.md) to implement these [however they see fit](../../harness/generate.md).
+It's up to each to each [compiler / language](../../harness/combos/toolchains.md) to implement these [however they see fit](../../harness/combos/toolchains.md).
 
 
 ## Value Initialization And Analysis
 
 When [initializing an instance of an enum](../../harness/combos/values.md), we will uniformly select a random variant to use (deterministically).
 
-When [checking the value of an enum](../../harness/check.md), we will just check its bytes. In the future [we may instead check it semantically with a match/switch](https://github.com/Gankra/abi-cafe/issues/34).
+When [checking the value of an enum](../../harness/combos/values.md), we will just check its bytes. In the future [we may instead check it semantically with a match/switch](https://github.com/Gankra/abi-cafe/issues/34).
 

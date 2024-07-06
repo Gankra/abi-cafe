@@ -1,6 +1,6 @@
-# KDLScript union types
+# union types
 
-A KDLScript union type is a C-like untagged union. [For rust-like tagged unions, see tagged types](./tagged.md).
+A KDLScript `union` type is a C-like untagged union. [For rust-like tagged unions, see tagged types](./tagged.md).
 
 This definition:
 

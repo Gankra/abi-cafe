@@ -1,6 +1,6 @@
-# KDLScript array types
+# array types
 
-Array types like `[u32; 4]` have the layout/repr you would expect from languages like C and Rust.
+KDLScript array types like `[u32; 4]` have the layout/repr you would expect from languages like C and Rust.
 
 But there's a problem with passing them by-value: C is supremely fucking weird about passing arrays by value if they're not wrapped in a struct.
 

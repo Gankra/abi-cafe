@@ -19,7 +19,7 @@ Suggested Examples:
 
 * [simple.kdl](https://github.com/Gankra/abi-cafe/blob/main/include/tests/normal/simple.kdl) - a little example of a "normal" test with explicitly defined functions to test
 * [SimpleStruct.procgen.kdl](https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/struct/SimpleStruct.procgen.kdl) - similar to simple.kdl, but procgen
-* [MetersU32.procgen.kdl](https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/pun/MetersU32.procgen.kdl) - an example of a ["pun type"](../kdl-script/types/pun.md), where different languages use different definitions
+* [MetersU32.procgen.kdl](https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/pun/MetersU32.procgen.kdl) - an example of a ["pun type"](../../kdl-script/types/pun.md), where different languages use different definitions
 * [IntrusiveList.procgen.kdl](https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/fancy/IntrusiveList.procgen.kdl) - an example of how we can procgen tests for self-referential types and tagged unions
 * [i8.procgen.kdl](https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/primitive/i8.procgen.kdl) - ok this one isn't instructive it's just funny that it can be a blank file because i8 is builtin so all the info needed is in the filename
 

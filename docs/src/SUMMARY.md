@@ -9,9 +9,9 @@
     - [type reprs](./harness/combos/reprs.md)
     - [toolchain pairings](./harness/combos/toolchains.md)
     - [value generators](./harness/combos/values.md)
-    - [value selectors)](./harness/combos/selectors.md)
+    - [value selectors](./harness/combos/selectors.md)
     - [value writers](./harness/combos/writers.md)
-- [trophycase](./trophies.md)
+- [trophy case](./trophies.md)
 
 # KDLScript
 

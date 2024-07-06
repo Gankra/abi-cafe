@@ -1,6 +1,6 @@
-# KDLScript reference types
+# reference types
 
-The "value" of a reference type `&T` is its pointee for the purposes of [abi-cafe](../../intro.md). In this regard it's similar to C++ references or Rust references, where most operations automagically talk about the pointee and not the pointer. Using a reference type lets you test that something can properly be passed-by-reference, as opposed to passed-by-value.
+The "value" of a KDLScript reference type `&T` is its pointee for the purposes of [abi-cafe](../../intro.md). In this regard it's similar to C++ references or Rust references, where most operations automagically talk about the pointee and not the pointer. Using a reference type lets you test that something can properly be passed-by-reference, as opposed to passed-by-value.
 
 Reference types may appear in other composite types, indicating that the caller is responsible for allocating variables for each one and then storing pointers to them in the composite type.
 

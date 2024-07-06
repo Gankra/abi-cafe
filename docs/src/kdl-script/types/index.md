@@ -1,4 +1,4 @@
-# KDLScript Types
+# types
 
 The following kinds of types exist in KDLScript.
 

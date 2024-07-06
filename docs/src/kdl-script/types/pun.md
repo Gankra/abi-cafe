@@ -1,6 +1,6 @@
-# KDLScript pun types
+# pun types
 
-A pun is the equivalent of an ifdef/cfg'd type, allowing us to declare that two wildly different declarations in different languages should in fact have the same layout and/or ABI. A pun type contains "selector blocks" which are sequentially matched on much like CSS. The first one to match wins. When lowering to a specific backend/config if no selector matches, then compilation fails.
+A KDLScript `pun` type is the equivalent of an ifdef/cfg'd type, allowing us to declare that two wildly different declarations in different languages should in fact have the same layout and/or ABI. A pun type contains "selector blocks" which are sequentially matched on much like CSS. The first one to match wins. When lowering to a specific backend/config if no selector matches, then compilation fails.
 
 Here is an example that claims that a Rust `repr(transparent)` newtype of a `u32` should match the ABI of a `uint32_t` in C/C++:
 

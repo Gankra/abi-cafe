@@ -42,12 +42,8 @@ impl RustcToolchain {
                 PrimitiveTy::U256 => {
                     Err(UnsupportedError::Other("rust doesn't have u256".to_owned()))?
                 }
-                PrimitiveTy::F16 => {
-                    Err(UnsupportedError::Other("rust doesn't have f16".to_owned()))?
-                }
-                PrimitiveTy::F128 => {
-                    Err(UnsupportedError::Other("rust doesn't have f128".to_owned()))?
-                }
+                PrimitiveTy::F16 => write!(f, "f16::from_bits({})", val.generate_u16())?,
+                PrimitiveTy::F128 => write!(f, "f128::from_bits({})", val.generate_u128())?,
             },
             Ty::Enum(enum_ty) => {
                 let name = alias.unwrap_or(&enum_ty.name);

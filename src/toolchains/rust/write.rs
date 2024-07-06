@@ -1,6 +1,6 @@
 use super::*;
 use crate::harness::vals::Value;
-use kdl_script::types::{Ty, TyIdx};
+use kdl_script::types::{PrimitiveTy, Ty, TyIdx};
 use std::fmt::Write;
 
 impl RustcToolchain {
@@ -17,6 +17,26 @@ impl RustcToolchain {
         }
         if state.options.convention == CallingConvention::Vectorcall {
             writeln!(f, "#![feature(abi_vectorcall)]")?;
+        }
+        let mut has_f16 = false;
+        let mut has_f128 = false;
+        for def in state.defs.definitions(state.desired_funcs.iter().copied()) {
+            match def {
+                kdl_script::Definition::DeclareTy(ty) | kdl_script::Definition::DefineTy(ty) => {
+                    match state.types.realize_ty(ty) {
+                        Ty::Primitive(PrimitiveTy::F16) => has_f16 = true,
+                        Ty::Primitive(PrimitiveTy::F128) => has_f128 = true,
+                        _ => {}
+                    }
+                }
+                kdl_script::Definition::DefineFunc(_) | kdl_script::Definition::DeclareFunc(_) => {}
+            }
+        }
+        if has_f16 {
+            writeln!(f, "#![feature(f16)]")?;
+        }
+        if has_f128 {
+            writeln!(f, "#![feature(f128)]")?;
         }
         // Load test harness "headers"
         writeln!(

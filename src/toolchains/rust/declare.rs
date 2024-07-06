@@ -85,10 +85,22 @@ impl RustcToolchain {
                         Err(UnsupportedError::Other("rust doesn't have u256".to_owned()))?
                     }
                     PrimitiveTy::F16 => {
-                        Err(UnsupportedError::Other("rust doesn't have f16".to_owned()))?
+                        if self.is_nightly {
+                            "f16"
+                        } else {
+                            return Err(UnsupportedError::Other(
+                                "f16 is an unstable rust feature, requires nightly".to_owned(),
+                            ))?;
+                        }
                     }
                     PrimitiveTy::F128 => {
-                        Err(UnsupportedError::Other("rust doesn't have f128".to_owned()))?
+                        if self.is_nightly {
+                            "f128"
+                        } else {
+                            return Err(UnsupportedError::Other(
+                                "f128 is an unstable rust feature, requires nightly".to_owned(),
+                            ))?;
+                        }
                     }
                 };
                 (name.to_owned(), None)

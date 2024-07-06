@@ -78,12 +78,8 @@ impl CcToolchain {
                     PrimitiveTy::U256 => {
                         Err(UnsupportedError::Other("c doesn't have u256?".to_owned()))?
                     }
-                    PrimitiveTy::F16 => {
-                        Err(UnsupportedError::Other("c doesn't have f16?".to_owned()))?
-                    }
-                    PrimitiveTy::F128 => {
-                        Err(UnsupportedError::Other("c doesn't have f128?".to_owned()))?
-                    }
+                    PrimitiveTy::F16 => "_Float16 ",
+                    PrimitiveTy::F128 => "__float128 ",
                 };
                 (name.to_owned(), None)
             }

@@ -72,9 +72,19 @@ impl CcToolchain {
                 PrimitiveTy::U256 => {
                     Err(UnsupportedError::Other("c doesn't have u256?".to_owned()))?
                 }
-                PrimitiveTy::F16 => Err(UnsupportedError::Other("c doesn't have f16?".to_owned()))?,
+                PrimitiveTy::F16 => write!(
+                    f,
+                    "(((union {{ uint16_t bits; _Float16 value; }}){{ .bits = {} }}).value)",
+                    val.generate_u16()
+                )?,
                 PrimitiveTy::F128 => {
-                    Err(UnsupportedError::Other("c doesn't have f128?".to_owned()))?
+                    let val = val.generate_u128();
+                    let lower = val & 0x0000_0000_0000_0000_FFFF_FFFF_FFFF_FFFF;
+                    let higher = (val & 0xFFFF_FFFF_FFFF_FFFF_0000_0000_0000_0000) >> 64;
+                    write!(
+                        f,
+                        "(((union {{ __uint128_t bits; __float128 value; }}){{ .bits = ((__uint128_t){lower:#X}ull) | (((__uint128_t){higher:#X}ull) << 64) }}).value)"
+                    )?
                 }
             },
             Ty::Enum(enum_ty) => {

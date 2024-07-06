@@ -66,11 +66,7 @@ pub(crate) fn create_toolchains(cfg: &crate::Config) -> Toolchains {
 
     // Add c toolchains
     for &name in C_TOOLCHAINS {
-        add_toolchain(
-            &mut toolchains,
-            name,
-            CcToolchain::new(cfg, name),
-        );
+        add_toolchain(&mut toolchains, name, CcToolchain::new(cfg, name));
     }
 
     toolchains

@@ -34,6 +34,11 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn Toolchain, callee: &dyn Toolc
         result.check = Random;
     }
 
+    // CI GCC is too old to support `_Float16`.
+    if cfg!(all(target_arch = "x86_64", target_os = "linux")) && is_c && test.test == "f16" {
+        result.check = Random;
+    }
+
     // FIXME: investigate why this is failing to build
     if cfg!(windows) && is_c && (test.test == "EmptyStruct" || test.test == "EmptyStructInside") {
         result.check = Busted(Build);

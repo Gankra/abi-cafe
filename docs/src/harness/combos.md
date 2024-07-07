@@ -19,4 +19,12 @@ When you run `abi-cafe` we will end up running the cross-product of all of these
 You can also run `--help` to get information on all the supported features.
 
 
+## As Part Of Your Testsuite
+
+We're still cleaning up the details of this usecase to make it nicer. If you would like to use abi-cafe in your testsuite, [please let us know what you'd need/want](https://github.com/Gankra/abi-cafe/issues/60)!
+
+For now, we can at least gesture to these two examples:
+
+* [abi-cafe's own CI (runs on various platforms with rustc stable and nightly)](https://github.com/Gankra/abi-cafe/blob/main/.github/workflows/cafe.yml)
+* [rustc_codegen_cranelift's CI (adds custom rustc codegen backend, configures toolchains)](https://github.com/rust-lang/rustc_codegen_cranelift/blob/master/.github/workflows/abi-cafe.yml)
 

@@ -57,7 +57,7 @@ version = "0.3.0"
 
 [workspace.dependencies]
 camino = { version = "1.1.7", features = ["serde1"] }
-cc = { version = "1.0.73", git = "https://github.com/Gankra/cc-rs" }
+cc = { version = "1.1.0" }
 clap = { version = "4.5.4", features = ["cargo", "wrap_help", "derive"] }
 console = "0.15.8"
 kdl = "4.6.0"

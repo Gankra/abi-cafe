@@ -8,7 +8,7 @@ version = "0.3.0"
 dependencies = [
  "built",
  "camino",
- "cc 1.0.73",
+ "cc",
  "clap",
  "console",
  "include_dir",
@@ -114,7 +114,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5cc23269a4f8976d0a4d2e7109211a419fe30e8d88d677cd60b6bc79c5732e0a"
 dependencies = [
  "addr2line",
- "cc 1.0.101",
+ "cc",
  "cfg-if",
  "libc",
  "miniz_oxide",
@@ -175,14 +175,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.73"
-source = "git+https://github.com/Gankra/cc-rs#0f6c1fdae918171fe1174272ad637d8929527863"
-
-[[package]]
-name = "cc"
-version = "1.0.101"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac367972e516d45567c7eafc73d24e1c193dcf200a8d94e9db7b3d38b349572d"
+checksum = "eaff6f8ce506b9773fa786672d63fc7a191ffea1be33f72bbd4aeacefca9ffc8"
 
 [[package]]
 name = "cfg-if"

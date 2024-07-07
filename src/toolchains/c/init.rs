@@ -58,7 +58,7 @@ impl CcToolchain {
                         write!(f, "{val}")?
                     }
                 }
-                PrimitiveTy::Bool => write!(f, "true")?,
+                PrimitiveTy::Bool => write!(f, "{}", val.generate_bool())?,
                 PrimitiveTy::Ptr => {
                     if true {
                         write!(f, "(void*){:#X}ull", val.generate_u64())?

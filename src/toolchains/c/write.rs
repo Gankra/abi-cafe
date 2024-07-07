@@ -65,6 +65,30 @@ impl CcToolchain {
         vals: &mut ArgValuesIter,
     ) -> Result<(), GenerateError> {
         match state.types.realize_ty(var_ty) {
+            Ty::Primitive(PrimitiveTy::Bool) => {
+                // bool is basically an enum with variants "false" (0) and "true" (1)
+                let tag_generator = vals.next_val();
+                let cond = tag_generator.generate_bool();
+                if tag_generator.should_write_val(&state.options) {
+                    writeln!(f, "if ({from}) {{")?;
+                    f.add_indent(1);
+                    if cond {
+                        self.write_tag_field(f, state, to, from, 1, &tag_generator)?;
+                    } else {
+                        self.write_error_tag_field(f, state, to, &tag_generator)?;
+                    }
+                    f.sub_indent(1);
+                    writeln!(f, "}} else {{")?;
+                    f.add_indent(1);
+                    if !cond {
+                        self.write_tag_field(f, state, to, from, 0, &tag_generator)?;
+                    } else {
+                        self.write_error_tag_field(f, state, to, &tag_generator)?;
+                    }
+                    f.sub_indent(1);
+                    writeln!(f, "}}")?;
+                }
+            }
             Ty::Primitive(_) => {
                 // Hey an actual leaf, report it (and burn a value)
                 let val = vals.next_val();

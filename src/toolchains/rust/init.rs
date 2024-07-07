@@ -28,7 +28,7 @@ impl RustcToolchain {
 
                 PrimitiveTy::F32 => write!(f, "f32::from_bits({})", val.generate_u32())?,
                 PrimitiveTy::F64 => write!(f, "f64::from_bits({})", val.generate_u64())?,
-                PrimitiveTy::Bool => write!(f, "true")?,
+                PrimitiveTy::Bool => write!(f, "{}", val.generate_bool())?,
                 PrimitiveTy::Ptr => {
                     if true {
                         write!(f, "{:#X}u64 as *mut ()", val.generate_u64())?

@@ -71,30 +71,6 @@ pub enum BuildError {
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum CheckFailure {
-    #[error("  {func_name} {arg_kind} count mismatch (expected: {expected_len}, caller: {}, callee: {})
-    caller: {caller:#02X?}
-    callee: {callee:#02X?}", caller.len(), callee.len())]
-    ArgCountMismatch {
-        func_idx: usize,
-        arg_kind: String,
-        func_name: String,
-        expected_len: usize,
-        caller: Vec<Vec<Vec<u8>>>,
-        callee: Vec<Vec<Vec<u8>>>,
-    },
-    #[error("  {func_name} {arg_kind} {arg_name} value count mismatch (expected: {expected_len}, caller: {}, callee: {})
-    caller: {caller:#02X?}
-    callee: {callee:#02X?}", caller.len(), callee.len())]
-    ValCountMismatch {
-        func_idx: usize,
-        arg_idx: usize,
-        arg_kind: String,
-        func_name: String,
-        arg_name: String,
-        expected_len: usize,
-        caller: Vec<Vec<u8>>,
-        callee: Vec<Vec<u8>>,
-    },
     #[error(
         "  {func_name} {arg_kind} differed:
     {arg_kind:<6}: {arg_name}: {arg_ty_name}
@@ -155,6 +131,8 @@ pub enum LinkError {
 pub enum RunError {
     #[error("test loading error (dynamic linking failed)\n{0}")]
     LoadError(#[from] libloading::Error),
-    #[error("wrong number of tests reported! \nExpected {0} \nGot (caller_in: {1}, caller_out: {2}, callee_in: {3}, callee_out: {4})")]
-    TestCountMismatch(usize, usize, usize, usize, usize),
+    #[error("test impl didn't call set_func before calling write_val")]
+    MissingSetFunc,
+    #[error("test impl called write_val on func {func} val {val} twice")]
+    DoubleWrite { func: usize, val: usize },
 }

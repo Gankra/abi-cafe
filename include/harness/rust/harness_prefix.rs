@@ -4,30 +4,24 @@ pub struct WriteBuffer(*mut ());
 unsafe impl Send for WriteBuffer {}
 unsafe impl Sync for WriteBuffer {}
 
-type WriteCallback = unsafe extern fn(WriteBuffer, *const u8, u32) -> ();
-type FinishedValCallback = unsafe extern fn(WriteBuffer) -> ();
-type FinishedFuncCallback = unsafe extern fn(WriteBuffer, WriteBuffer) -> ();
+type SetFuncCallback = unsafe extern fn(WriteBuffer, u32) -> ();
+type WriteValCallback = unsafe extern fn(WriteBuffer, u32, *const u8, u32) -> ();
 
 extern {
-    pub static mut CALLER_INPUTS: WriteBuffer;
-    pub static mut CALLER_OUTPUTS: WriteBuffer;
-    pub static mut CALLEE_INPUTS: WriteBuffer;
-    pub static mut CALLEE_OUTPUTS: WriteBuffer;
-    pub static mut WRITE_FIELD: Option<WriteCallback>;
-    pub static mut FINISHED_VAL: Option<FinishedValCallback>;
-    pub static mut FINISHED_FUNC: Option<FinishedFuncCallback>;
+    pub static mut CALLER_VALS: WriteBuffer;
+    pub static mut CALLEE_VALS: WriteBuffer;
+    pub static mut SET_FUNC: Option<SetFuncCallback>;
+    pub static mut WRITE_VAL: Option<WriteValCallback>;
 }
 
-unsafe fn write_field<T>(buffer: WriteBuffer, field: &T) {
-    WRITE_FIELD.unwrap()(
-        buffer,
-        field as *const T as *const u8,
-        core::mem::size_of_val(field) as u32
+unsafe fn write_val<T>(vals: WriteBuffer, val_idx: u32, val: &T) {
+    WRITE_VAL.unwrap()(
+        vals,
+        val_idx,
+        val as *const T as *const u8,
+        core::mem::size_of_val(val) as u32
     );
 }
-unsafe fn finished_val(buffer: WriteBuffer) {
-    FINISHED_VAL.unwrap()(buffer);
-}
-unsafe fn finished_func(inputs: WriteBuffer, outputs: WriteBuffer) {
-    FINISHED_FUNC.unwrap()(inputs, outputs);
+unsafe fn set_func(vals: WriteBuffer, func_idx: u32) {
+    SET_FUNC.unwrap()(vals, func_idx);
 }

@@ -1,14 +1,10 @@
 
 #define WriteBuffer void*
 
-extern WriteBuffer CALLER_INPUTS;
-extern WriteBuffer CALLER_OUTPUTS;
-extern WriteBuffer CALLEE_INPUTS;
-extern WriteBuffer CALLEE_OUTPUTS;
-extern void (*WRITE_FIELD)(WriteBuffer, char*, uint32_t);
-extern void (*FINISHED_VAL)(WriteBuffer);
-extern void (*FINISHED_FUNC)(WriteBuffer, WriteBuffer);
+extern WriteBuffer CALLER_VALS;
+extern WriteBuffer CALLEE_VALS;
+extern void (*WRITE_VAL)(WriteBuffer, uint32_t, char*, uint32_t);
+extern void (*SET_FUNC)(WriteBuffer, uint32_t);
 
-#define finished_val(buffer) FINISHED_VAL(buffer)
-#define finished_func(inputs, outputs) FINISHED_FUNC(inputs, outputs)
-#define write_field(buffer, field) WRITE_FIELD(buffer, (char*)&field, (uint32_t)sizeof(field))
+#define set_func(vals, func_idx) SET_FUNC(vals, func_idx);
+#define write_val(vals, val_idx, val) WRITE_VAL(vals, val_idx, (char*)&val, (uint32_t)sizeof(val))

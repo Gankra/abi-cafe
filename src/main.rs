@@ -246,19 +246,6 @@ fn generate_minimized_failures(
                     return None;
                 };
                 let functions = match *failure {
-                    CheckFailure::ArgCountMismatch { func_idx, .. } => FunctionSelector::One {
-                        idx: func_idx,
-                        args: ArgSelector::All,
-                    },
-                    CheckFailure::ValCountMismatch {
-                        func_idx, arg_idx, ..
-                    } => FunctionSelector::One {
-                        idx: func_idx,
-                        args: ArgSelector::One {
-                            idx: arg_idx,
-                            vals: ValSelector::All,
-                        },
-                    },
                     CheckFailure::ValMismatch {
                         func_idx,
                         arg_idx,

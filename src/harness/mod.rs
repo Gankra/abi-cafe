@@ -22,7 +22,7 @@ pub mod test;
 pub mod vals;
 
 pub use read::{find_tests, spawn_read_test};
-pub use run::WriteBuffer;
+pub use run::TestBuffer;
 
 pub type Memoized<K, V> = Mutex<SortedMap<K, Arc<OnceCell<V>>>>;
 

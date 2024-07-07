@@ -1,6 +1,5 @@
 use super::*;
-use crate::harness::vals::Value;
-use kdl_script::types::{PrimitiveTy, Ty, TyIdx};
+use kdl_script::types::{Ty, TyIdx};
 use std::fmt::Write;
 
 impl RustcToolchain {
@@ -71,11 +70,6 @@ impl RustcToolchain {
         };
         self.write_fields(f, state, to, var_name, var_ty, &mut vals)?;
 
-        // If doing full harness callbacks, signal we wrote all the fields of a variable
-        if let WriteImpl::HarnessCallback = state.options.val_writer {
-            writeln!(f, "finished_val({to});")?;
-            writeln!(f)?;
-        }
         Ok(())
     }
 
@@ -157,7 +151,7 @@ impl RustcToolchain {
                         let f = &mut Fivemat::new(&mut temp_out, INDENT);
                         f.add_indent(1);
                         if tag_generator.should_write_val(&state.options) {
-                            self.write_tag_field(f, state, to, tag_idx)?;
+                            self.write_tag_field(f, state, to, tag_idx, &tag_generator)?;
                         }
                         if let Some(fields) = &variant.fields {
                             for field in fields {
@@ -175,7 +169,7 @@ impl RustcToolchain {
                         let f = &mut Fivemat::new(&mut temp_out, INDENT);
                         f.add_indent(1);
                         if tag_generator.should_write_val(&state.options) {
-                            self.write_error_tag_field(f, state, to)?;
+                            self.write_error_tag_field(f, state, to, &tag_generator)?;
                         }
                         f.sub_indent(1);
                         temp_out
@@ -205,7 +199,7 @@ impl RustcToolchain {
                 let tag_generator = vals.next_val();
                 let tag_idx = tag_generator.generate_idx(union_ty.fields.len());
                 if tag_generator.should_write_val(&state.options) {
-                    self.write_tag_field(f, state, to, tag_idx)?;
+                    self.write_tag_field(f, state, to, tag_idx, &tag_generator)?;
                 }
                 if let Some(field) = union_ty.fields.get(tag_idx) {
                     let field_name = &field.ident;
@@ -224,16 +218,18 @@ impl RustcToolchain {
         state: &TestState,
         to: &str,
         path: &str,
-        val: &Value,
+        val: &ValueRef,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
+                let val_idx = val.absolute_val_idx;
                 // Convenience for triggering test failures
-                if path.contains("abicafepoison") && to.contains(VAR_CALLEE_INPUTS) {
-                    writeln!(f, "write_field({to}, &0x12345678u32);")?;
+                let rvalue = if path.contains("abicafepoison") && to.contains(CALLEE_VALS) {
+                    "0x12345678u32"
                 } else {
-                    writeln!(f, "write_field({to}, &{path});")?;
-                }
+                    path
+                };
+                writeln!(f, "write_val({to}, {val_idx}, &{rvalue});")?;
             }
             WriteImpl::Assert => {
                 write!(f, "assert_eq!({path}, ")?;
@@ -256,10 +252,12 @@ impl RustcToolchain {
         state: &TestState,
         to: &str,
         variant_idx: usize,
+        val: &ValueRef,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "write_field({to}, &{}u32);", variant_idx)?;
+                let val_idx = val.absolute_val_idx;
+                writeln!(f, "write_val({to}, {val_idx}, &{}u32);", variant_idx)?;
             }
             WriteImpl::Assert => {
                 // Noop, do nothing
@@ -279,10 +277,12 @@ impl RustcToolchain {
         f: &mut Fivemat,
         state: &TestState,
         to: &str,
+        val: &ValueRef,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "write_field({to}, &{}u32);", u32::MAX)?;
+                let val_idx = val.absolute_val_idx;
+                writeln!(f, "write_val({to}, {val_idx}, &{}u32);", u32::MAX)?;
             }
             WriteImpl::Assert | WriteImpl::Print => {
                 writeln!(f, r#"unreachable!("enum had unexpected variant!?")"#)?;
@@ -294,16 +294,16 @@ impl RustcToolchain {
         Ok(())
     }
 
-    pub fn write_end_function(
+    pub fn write_set_function(
         &self,
         f: &mut dyn Write,
         state: &TestState,
-        inputs: &str,
-        outputs: &str,
+        vals: &str,
+        idx: usize,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "finished_func({inputs}, {outputs});")?;
+                writeln!(f, "set_func({vals}, {idx});")?;
             }
             WriteImpl::Print | WriteImpl::Noop | WriteImpl::Assert => {
                 // Noop

@@ -72,12 +72,16 @@ pub enum BuildError {
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum CheckFailure {
     #[error(
-        "  {func_name} {arg_kind} differed:
-    {arg_kind:<6}: {arg_name}: {arg_ty_name}
-    field : {val_path}: {val_ty_name}
-    expect: {expected:02X?}
-    caller: {caller:02X?}
-    callee: {callee:02X?}"
+        "  func {func_name}'s values differed
+    values (native-endian hex bytes):
+      expect: {}
+      caller: {}
+      callee: {}
+    the value was {val_path}: {val_ty_name}
+    whose arg was {arg_name}: {arg_ty_name}",
+        fmt_bytes(expected),
+        fmt_bytes(caller),
+        fmt_bytes(callee)
     )]
     ValMismatch {
         func_idx: usize,
@@ -85,7 +89,6 @@ pub enum CheckFailure {
         val_idx: usize,
         func_name: String,
         arg_name: String,
-        arg_kind: String,
         arg_ty_name: String,
         val_path: String,
         val_ty_name: String,
@@ -94,12 +97,13 @@ pub enum CheckFailure {
         callee: Vec<u8>,
     },
     #[error(
-        "  {func_name} {arg_kind} had unexpected tagged variant:
-    {arg_kind:<6}: {arg_name}: {arg_ty_name}
-    field : {val_path}: {val_ty_name}
-    expect: {expected}
-    caller: {caller}
-    callee: {callee}"
+        "  func {func_name}'s value had unexpected variant
+    values:
+      expect: {expected}
+      caller: {caller}
+      callee: {callee}
+    the value was {val_path}: {val_ty_name}
+    whose arg was {arg_name}: {arg_ty_name}"
     )]
     TagMismatch {
         func_idx: usize,
@@ -107,7 +111,6 @@ pub enum CheckFailure {
         val_idx: usize,
         func_name: String,
         arg_name: String,
-        arg_kind: String,
         arg_ty_name: String,
         val_path: String,
         val_ty_name: String,
@@ -135,4 +138,12 @@ pub enum RunError {
     MissingSetFunc,
     #[error("test impl called write_val on func {func} val {val} twice")]
     DoubleWrite { func: usize, val: usize },
+}
+
+fn fmt_bytes(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }

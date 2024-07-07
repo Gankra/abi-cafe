@@ -306,12 +306,12 @@ pub struct CheckOutput {
     pub subtest_checks: Vec<Result<(), CheckFailure>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Copy, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TestConclusion {
     Skipped,
     Passed,
-    Failed,
     Busted,
+    Failed,
 }
 
 impl FullReport {
@@ -327,7 +327,9 @@ impl FullReport {
         let red = Style::new().red();
         let green = Style::new().green();
         let blue = Style::new().blue();
-        for test in &self.tests {
+        let mut sorted_tests = self.tests.iter().collect::<Vec<_>>();
+        sorted_tests.sort_by_key(|t| t.conclusion);
+        for test in sorted_tests {
             if let Skipped = test.conclusion {
                 continue;
             }
@@ -343,7 +345,51 @@ impl FullReport {
                 (Passed, Random) => write!(f, "passed (random, result ignored)")?,
                 (Passed, Fail(_)) => write!(f, "passed (failed as expected)")?,
 
-                (Failed, Pass(_)) => write!(f, "{}", red.apply_to("failed"))?,
+                (Failed, Pass(_)) => {
+                    write!(f, "{}", red.apply_to("failed"))?;
+                    if test.results.ran_to < TestRunMode::Check {
+                        let (msg, err) = match &test.results.ran_to {
+                            TestRunMode::Generate => (
+                                "generate source code",
+                                format!(
+                                    "{}",
+                                    test.results
+                                        .source
+                                        .as_ref()
+                                        .unwrap()
+                                        .as_ref()
+                                        .err()
+                                        .unwrap()
+                                ),
+                            ),
+                            TestRunMode::Build => (
+                                "compile source code",
+                                format!(
+                                    "{}",
+                                    test.results.build.as_ref().unwrap().as_ref().err().unwrap()
+                                ),
+                            ),
+                            TestRunMode::Link => (
+                                "link both sides together",
+                                format!(
+                                    "{}",
+                                    test.results.link.as_ref().unwrap().as_ref().err().unwrap()
+                                ),
+                            ),
+                            TestRunMode::Run => (
+                                "run the program",
+                                format!(
+                                    "{}",
+                                    test.results.run.as_ref().unwrap().as_ref().err().unwrap()
+                                ),
+                            ),
+                            TestRunMode::Skip | TestRunMode::Check => ("", String::new()),
+                        };
+                        write!(f, "{}", red.apply_to(" to "))?;
+                        writeln!(f, "{}", red.apply_to(msg))?;
+                        writeln!(f, "  {}", red.apply_to(err))?;
+                    }
+                }
                 (Failed, Random) => {
                     write!(f, "{}", red.apply_to("failed!? (failed but random!?)"))?
                 }
@@ -383,8 +429,9 @@ impl FullReport {
             for (subtest_name, result) in check_result.subtest_names.iter().zip(sub_results.iter())
             {
                 write!(f, "  {:width$} ", subtest_name, width = max_name_len)?;
-                if let Err(_e) = result {
-                    writeln!(f, "failed!")?;
+                if let Err(e) = result {
+                    writeln!(f, "{}", red.apply_to("failed!"))?;
+                    writeln!(f, "{}", red.apply_to(e))?;
                 } else {
                     writeln!(f)?;
                 }

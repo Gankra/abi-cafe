@@ -85,11 +85,32 @@ impl RustcToolchain {
         vals: &mut ArgValuesIter,
     ) -> Result<(), GenerateError> {
         match state.types.realize_ty(var_ty) {
-            Ty::Primitive(_) | Ty::Enum(_) => {
+            Ty::Primitive(_) => {
                 // Hey an actual leaf, report it (and burn a value)
                 let val = vals.next_val();
                 if val.should_write_val(&state.options) {
                     self.write_leaf_field(f, state, to, from, &val)?;
+                }
+            }
+            Ty::Enum(enum_ty) => {
+                // enums are leaves but we care about their semantic value (variant case)
+                // so don't just pass the raw bytes, treat this like a tag we match on
+                let tag_generator = vals.next_val();
+                let tag_idx = tag_generator.generate_idx(enum_ty.variants.len());
+                if let Some(variant) = enum_ty.variants.get(tag_idx) {
+                    let enum_name = &enum_ty.name;
+                    let variant_name = &variant.name;
+                    if tag_generator.should_write_val(&state.options) {
+                        writeln!(f, "if let {enum_name}::{variant_name} = &{from} {{")?;
+                        f.add_indent(1);
+                        self.write_tag_field(f, state, to, from, tag_idx, &tag_generator)?;
+                        f.sub_indent(1);
+                        writeln!(f, "}} else {{")?;
+                        f.add_indent(1);
+                        self.write_error_tag_field(f, state, to, &tag_generator)?;
+                        f.sub_indent(1);
+                        writeln!(f, "}}")?;
+                    }
                 }
             }
             Ty::Empty => {
@@ -151,7 +172,7 @@ impl RustcToolchain {
                         let f = &mut Fivemat::new(&mut temp_out, INDENT);
                         f.add_indent(1);
                         if tag_generator.should_write_val(&state.options) {
-                            self.write_tag_field(f, state, to, tag_idx, &tag_generator)?;
+                            self.write_tag_field(f, state, to, from, tag_idx, &tag_generator)?;
                         }
                         if let Some(fields) = &variant.fields {
                             for field in fields {
@@ -199,7 +220,7 @@ impl RustcToolchain {
                 let tag_generator = vals.next_val();
                 let tag_idx = tag_generator.generate_idx(union_ty.fields.len());
                 if tag_generator.should_write_val(&state.options) {
-                    self.write_tag_field(f, state, to, tag_idx, &tag_generator)?;
+                    self.write_tag_field(f, state, to, from, tag_idx, &tag_generator)?;
                 }
                 if let Some(field) = union_ty.fields.get(tag_idx) {
                     let field_name = &field.ident;
@@ -251,11 +272,16 @@ impl RustcToolchain {
         f: &mut Fivemat,
         state: &TestState,
         to: &str,
+        path: &str,
         variant_idx: usize,
         val: &ValueRef,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
+                // Convenience for triggering test failures
+                if path.contains("abicafepoison") && to.contains(CALLEE_VALS) {
+                    return self.write_error_tag_field(f, state, to, val);
+                }
                 let val_idx = val.absolute_val_idx;
                 writeln!(f, "write_val({to}, {val_idx}, &{}u32);", variant_idx)?;
             }

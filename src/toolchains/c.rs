@@ -274,7 +274,12 @@ impl CcToolchain {
             TOOLCHAIN_CLANG => CCFlavor::Clang,
             TOOLCHAIN_MSVC => CCFlavor::Msvc,
             TOOLCHAIN_CC => {
-                let compiler = cc::Build::new().get_compiler();
+                let compiler = cc::Build::new()
+                    .cargo_metadata(false)
+                    .cargo_debug(false)
+                    .cargo_warnings(false)
+                    .cargo_output(false)
+                    .get_compiler();
                 if compiler.is_like_msvc() {
                     CCFlavor::Msvc
                 } else if compiler.is_like_gnu() {
@@ -332,6 +337,9 @@ impl CcToolchain {
             .file(src_path)
             .opt_level(0)
             .cargo_metadata(false)
+            .cargo_debug(false)
+            .cargo_warnings(false)
+            .cargo_output(false)
             .target(built_info::TARGET)
             .out_dir(out_dir)
             // .warnings_into_errors(true)

@@ -43,11 +43,11 @@ impl TestHarness {
             .or_insert_with(|| Arc::new(OnceCell::new()))
             .clone();
         // Either acquire the cached result, or make it
+        info!("generating  {}", &src_path);
         let _ = once
             .get_or_try_init(|| {
                 let toolchain = self.toolchain_by_test_key(key, call_side);
                 let options = key.options.clone();
-                info!("generating  {}", &src_path);
                 generate_src(
                     &src_path,
                     toolchain,

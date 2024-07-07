@@ -1,5 +1,6 @@
 use console::Style;
 use harness::run::{FuncBuffer, ValBuffer};
+use kdl_script::types::PrimitiveTy;
 use kdl_script::types::Ty;
 use tracing::{error, info};
 
@@ -150,6 +151,17 @@ impl TestHarness {
                 let callee = enum_variant_name(enum_ty, callee_tag);
                 return Err(tag_error(types, &expected_val, expected, caller, callee));
             }
+        } else if let Ty::Primitive(PrimitiveTy::Bool) = types.realize_ty(expected_val.ty) {
+            let expected_tag = expected_val.generate_idx(2);
+            let caller_tag = load_tag(caller_val);
+            let callee_tag = load_tag(callee_val);
+
+            if caller_tag != expected_tag || callee_tag != expected_tag {
+                let expected = bool_variant_name(expected_tag, expected_tag);
+                let caller = bool_variant_name(expected_tag, caller_tag);
+                let callee = bool_variant_name(expected_tag, callee_tag);
+                return Err(tag_error(types, &expected_val, expected, caller, callee));
+            }
         } else if caller_val.bytes != callee_val.bytes {
             // General case, just get a pile of bytes to span both values
             let func = expected_val.func();
@@ -199,6 +211,25 @@ fn enum_variant_name(enum_ty: &kdl_script::types::EnumTy, tag: usize) -> String 
         .map(|v| v.name.as_str())
         .unwrap_or("<other variant>");
     format!("{enum_name}::{variant_name}")
+}
+
+fn bool_variant_name(expected_tag: usize, tag: usize) -> String {
+    // Because we're using the tag variant machinery, this code is a bit weird,
+    // because we essentially get passed Option<bool> for `tag`, where we get
+    // None when the wrong path is taken.
+    //
+    // So to figure out what variant a bool is supposed to have, we work out
+    // what variant the expected_tag has, and then either say "the same or opposite"
+    let bools = ["false", "true"];
+    let expected_bool = bools[expected_tag];
+    let unexpected_bool = bools[1 - expected_tag];
+
+    let res = if tag == expected_tag {
+        expected_bool
+    } else {
+        unexpected_bool
+    };
+    res.to_owned()
 }
 
 fn tag_error(

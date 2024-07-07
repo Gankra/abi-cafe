@@ -454,6 +454,10 @@ impl ValueGenerator {
         };
         rng.gen_range(0..len)
     }
+    pub fn generate_bool(&self) -> bool {
+        let idx = self.generate_idx(2);
+        idx == 1
+    }
     pub fn generate_u8(&self) -> u8 {
         let mut buf = [0; 1];
         self.fill_bytes(&mut buf);

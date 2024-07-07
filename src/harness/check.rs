@@ -87,8 +87,12 @@ impl TestHarness {
                         info!("Test {subtest_name:width$} passed", width = max_name_len);
                     }
                     Err(e) => {
-                        info!("Test {subtest_name:width$} failed!", width = max_name_len);
-                        info!("{}", e);
+                        let red = console::Style::new().red();
+                        let message = format!(
+                            "Test {subtest_name:width$} failed!\n{e}",
+                            width = max_name_len
+                        );
+                        info!("{}", red.apply_to(message));
                     }
                 }
             }
@@ -116,54 +120,40 @@ impl TestHarness {
         callee_val: &ValBuffer,
     ) -> Result<(), CheckFailure> {
         let types = &test.types;
-        let func = expected_val.func();
-        let arg = expected_val.arg();
+        // Enums and Taggeds are "fake" fields representing the semantic value (tag).
+        // In this case showing the bytes doesn't make sense, so show the Variant name
+        // (although we get bytes here they're the array index into the variant,
+        // a purely magical value that only makes sense to the harness itself!).
+        //
+        // Also we use u32::MAX to represent a poison "i dunno what it is, but it's
+        // definitely not the One variant we statically expected!", so most of the
+        // time we're here to print <other variant> and shrug.
         if let Ty::Tagged(tagged_ty) = types.realize_ty(expected_val.ty) {
-            // This value is "fake" and is actually the semantic tag of tagged union.
-            // In this case showing the bytes doesn't make sense, so show the Variant name
-            // (although we get bytes here they're the array index into the variant,
-            // a purely magical value that only makes sense to the harness itself!).
-            //
-            // Also we use u32::MAX to represent a poison "i dunno what it is, but it's
-            // definitely not the One variant we statically expected!", so most of the
-            // time we're here to print <other variant> and shrug.
             let expected_tag = expected_val.generate_idx(tagged_ty.variants.len());
-            let caller_tag =
-                u32::from_ne_bytes(<[u8; 4]>::try_from(&caller_val.bytes[..4]).unwrap()) as usize;
-            let callee_tag =
-                u32::from_ne_bytes(<[u8; 4]>::try_from(&callee_val.bytes[..4]).unwrap()) as usize;
+            let caller_tag = load_tag(caller_val);
+            let callee_tag = load_tag(callee_val);
 
             if caller_tag != expected_tag || callee_tag != expected_tag {
-                let expected = tagged_ty.variants[expected_tag].name.to_string();
-                let caller = tagged_ty
-                    .variants
-                    .get(caller_tag)
-                    .map(|v| v.name.as_str())
-                    .unwrap_or("<other variant>")
-                    .to_owned();
-                let callee = tagged_ty
-                    .variants
-                    .get(callee_tag)
-                    .map(|v| v.name.as_str())
-                    .unwrap_or("<other variant>")
-                    .to_owned();
-                return Err(CheckFailure::TagMismatch {
-                    func_idx: expected_val.func_idx,
-                    arg_idx: expected_val.arg_idx,
-                    val_idx: expected_val.val_idx,
-                    arg_kind: "argument".to_owned(),
-                    func_name: func.func_name.to_string(),
-                    arg_name: arg.arg_name.to_string(),
-                    arg_ty_name: types.format_ty(arg.ty),
-                    val_path: expected_val.path.to_string(),
-                    val_ty_name: types.format_ty(expected_val.ty),
-                    expected,
-                    caller,
-                    callee,
-                });
+                let expected = tagged_variant_name(tagged_ty, expected_tag);
+                let caller = tagged_variant_name(tagged_ty, caller_tag);
+                let callee = tagged_variant_name(tagged_ty, callee_tag);
+                return Err(tag_error(types, &expected_val, expected, caller, callee));
+            }
+        } else if let Ty::Enum(enum_ty) = types.realize_ty(expected_val.ty) {
+            let expected_tag = expected_val.generate_idx(enum_ty.variants.len());
+            let caller_tag = load_tag(caller_val);
+            let callee_tag = load_tag(callee_val);
+
+            if caller_tag != expected_tag || callee_tag != expected_tag {
+                let expected = enum_variant_name(enum_ty, expected_tag);
+                let caller = enum_variant_name(enum_ty, caller_tag);
+                let callee = enum_variant_name(enum_ty, callee_tag);
+                return Err(tag_error(types, &expected_val, expected, caller, callee));
             }
         } else if caller_val.bytes != callee_val.bytes {
             // General case, just get a pile of bytes to span both values
+            let func = expected_val.func();
+            let arg = expected_val.arg();
             let mut expected = vec![0; caller_val.bytes.len().max(callee_val.bytes.len())];
             expected_val.fill_bytes(&mut expected);
             // FIXME: this doesn't do the right thing for enums
@@ -172,7 +162,6 @@ impl TestHarness {
                 func_idx: expected_val.func_idx,
                 arg_idx: expected_val.arg_idx,
                 val_idx: expected_val.val_idx,
-                arg_kind: "argument".to_owned(),
                 func_name: func.func_name.to_string(),
                 arg_name: arg.arg_name.to_string(),
                 arg_ty_name: types.format_ty(arg.ty),
@@ -185,5 +174,53 @@ impl TestHarness {
         }
 
         Ok(())
+    }
+}
+
+fn load_tag(val: &ValBuffer) -> usize {
+    u32::from_ne_bytes(<[u8; 4]>::try_from(&val.bytes[..4]).unwrap()) as usize
+}
+
+fn tagged_variant_name(tagged_ty: &kdl_script::types::TaggedTy, tag: usize) -> String {
+    let tagged_name = &tagged_ty.name;
+    let variant_name = tagged_ty
+        .variants
+        .get(tag)
+        .map(|v| v.name.as_str())
+        .unwrap_or("<other variant>");
+    format!("{tagged_name}::{variant_name}")
+}
+
+fn enum_variant_name(enum_ty: &kdl_script::types::EnumTy, tag: usize) -> String {
+    let enum_name = &enum_ty.name;
+    let variant_name = enum_ty
+        .variants
+        .get(tag)
+        .map(|v| v.name.as_str())
+        .unwrap_or("<other variant>");
+    format!("{enum_name}::{variant_name}")
+}
+
+fn tag_error(
+    types: &kdl_script::TypedProgram,
+    expected_val: &ValueRef,
+    expected: String,
+    caller: String,
+    callee: String,
+) -> CheckFailure {
+    let func = expected_val.func();
+    let arg = expected_val.arg();
+    CheckFailure::TagMismatch {
+        func_idx: expected_val.func_idx,
+        arg_idx: expected_val.arg_idx,
+        val_idx: expected_val.val_idx,
+        func_name: func.func_name.to_string(),
+        arg_name: arg.arg_name.to_string(),
+        arg_ty_name: types.format_ty(arg.ty),
+        val_path: expected_val.path.to_string(),
+        val_ty_name: types.format_ty(expected_val.ty),
+        expected,
+        caller,
+        callee,
     }
 }

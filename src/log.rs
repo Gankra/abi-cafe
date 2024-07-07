@@ -11,8 +11,11 @@ use tracing_subscriber::Layer;
 
 use std::sync::{Arc, Mutex};
 
+use crate::fivemat::Fivemat;
+
 const TRACE_TEST_SPAN: &str = "test";
 const IGNORE_LIST: &[&str] = &[];
+const INDENT: &str = "  ";
 
 /// An in-memory logger that lets us view particular
 /// spans of the logs, and understands minidump-stackwalk's
@@ -155,24 +158,22 @@ impl MapLogger {
             write!(output, "{:indent$}", "", indent = depth * 4).unwrap();
         }
         fn print_span_recursive(
-            output: &mut String,
+            f: &mut Fivemat,
             sub_spans: &LinkedHashMap<SpanId, SpanEntry>,
-            depth: usize,
             span: &SpanEntry,
             range: Option<Range<usize>>,
         ) {
             if !span.name.is_empty() {
-                print_indent(output, depth);
                 let style = Style::new().blue();
-                write!(output, "{}", style.apply_to(&span.name)).unwrap();
+                write!(f, "{}", style.apply_to(&span.name)).unwrap();
                 for (key, val) in &span.fields {
                     if key == "id" {
-                        write!(output, " {}", style.apply_to(val)).unwrap();
+                        write!(f, " {}", style.apply_to(val)).unwrap();
                     } else {
-                        write!(output, "{key}: {val}").unwrap();
+                        write!(f, "{key}: {val}").unwrap();
                     }
                 }
-                writeln!(output).unwrap();
+                writeln!(f).unwrap();
             }
 
             let event_range = if let Some(range) = range {
@@ -180,25 +181,20 @@ impl MapLogger {
             } else {
                 &span.events[..]
             };
+            f.add_indent(1);
             for event in event_range {
                 match event {
                     EventEntry::Message(event) => {
                         if event.fields.contains_key("message") {
-                            print_indent(output, depth + 1);
-                            print_event(output, event);
+                            print_event(f, event);
                         }
                     }
                     EventEntry::Span(sub_span) => {
-                        print_span_recursive(
-                            output,
-                            sub_spans,
-                            depth + 1,
-                            &sub_spans[sub_span],
-                            None,
-                        );
+                        print_span_recursive(f, sub_spans, &sub_spans[sub_span], None);
                     }
                 }
             }
+            f.sub_indent(1);
         }
 
         let mut log = self.state.lock().unwrap();
@@ -209,16 +205,17 @@ impl MapLogger {
         }
         log.last_query = Some(query);
 
-        let mut output = String::new();
+        let mut output_buf = String::new();
+        let mut f = Fivemat::new(&mut output_buf, INDENT);
 
         let (span_to_print, range) = match query {
             Query::All => (&log.root_span, None),
             Query::Span(span_id) => (&log.sub_spans[&span_id], None),
         };
 
-        print_span_recursive(&mut output, &log.sub_spans, 0, span_to_print, range);
+        print_span_recursive(&mut f, &log.sub_spans, span_to_print, range);
 
-        let result = Arc::new(output);
+        let result = Arc::new(output_buf);
         log.cur_string = Some(result.clone());
         result
     }
@@ -226,11 +223,12 @@ impl MapLogger {
 
 fn immediate_event(event: &MessageEntry) {
     let mut output = String::new();
-    print_event(&mut output, event);
+    let mut f = Fivemat::new(&mut output, INDENT);
+    print_event(&mut f, event);
     eprintln!("{}", output);
 }
 
-fn print_event(output: &mut String, event: &MessageEntry) {
+fn print_event(f: &mut Fivemat, event: &MessageEntry) {
     use std::fmt::Write;
     if let Some(message) = event.fields.get("message") {
         let style = match event.level {
@@ -241,7 +239,7 @@ fn print_event(output: &mut String, event: &MessageEntry) {
             Level::TRACE => Style::new().green(),
         };
         // writeln!(output, "[{:5}] {}", event.level, message).unwrap();
-        writeln!(output, "{}", style.apply_to(message)).unwrap();
+        writeln!(f, "{}", style.apply_to(message)).unwrap();
     }
 }
 

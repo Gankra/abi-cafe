@@ -5,5 +5,10 @@
     },
     "build": {
         "path_prefix": "abi-cafe"
+    },
+    "components": {
+        "mdbook": {
+            "theme": false
+        }
     }
 }

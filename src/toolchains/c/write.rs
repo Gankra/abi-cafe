@@ -1,5 +1,4 @@
 use super::*;
-use crate::harness::vals::Value;
 use kdl_script::types::{Ty, TyIdx};
 use std::fmt::Write;
 
@@ -51,11 +50,6 @@ impl CcToolchain {
         };
         self.write_fields(f, state, to, var_name, var_ty, &mut vals)?;
 
-        // If doing full harness callbacks, signal we wrote all the fields of a variable
-        if let WriteImpl::HarnessCallback = state.options.val_writer {
-            writeln!(f, "finished_val({to});")?;
-            writeln!(f)?;
-        }
         Ok(())
     }
 
@@ -190,7 +184,7 @@ impl CcToolchain {
                 let tag_generator = vals.next_val();
                 let tag_idx = tag_generator.generate_idx(union_ty.fields.len());
                 if tag_generator.should_write_val(&state.options) {
-                    self.write_tag_field(f, state, to, tag_idx)?;
+                    self.write_tag_field(f, state, to, tag_idx, &tag_generator)?;
                 }
                 if let Some(field) = union_ty.fields.get(tag_idx) {
                     let field_name = &field.ident;
@@ -209,16 +203,18 @@ impl CcToolchain {
         state: &TestState,
         to: &str,
         path: &str,
-        val: &Value,
+        val: &ValueRef,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
+                let val_idx = val.absolute_val_idx;
                 // Convenience for triggering test failures
-                if path.contains("abicafepoison") && to.contains(VAR_CALLEE_INPUTS) {
-                    writeln!(f, "write_field({to}, (uint32_t)0x12345678);")?;
+                let rvalue = if path.contains("abicafepoison") && to.contains(CALLEE_VALS) {
+                    "(uint32_t)0x12345678"
                 } else {
-                    writeln!(f, "write_field({to}, {path});")?;
-                }
+                    path
+                };
+                writeln!(f, "write_val({to}, {val_idx}, {rvalue});")?;
             }
             WriteImpl::Assert => {
                 write!(f, "assert_eq({path}, ")?;
@@ -241,13 +237,15 @@ impl CcToolchain {
         state: &TestState,
         to: &str,
         variant_idx: usize,
+        val: &ValueRef,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
+                let val_idx = val.absolute_val_idx;
                 writeln!(f, "{{")?;
                 f.add_indent(1);
                 writeln!(f, "uint32_t _temp = {};", variant_idx)?;
-                writeln!(f, "write_field({to}, _temp);")?;
+                writeln!(f, "write_val({to}, {val_idx}, _temp);")?;
                 f.sub_indent(1);
                 writeln!(f, "}}")?;
             }
@@ -270,13 +268,15 @@ impl CcToolchain {
         f: &mut Fivemat,
         state: &TestState,
         to: &str,
+        val: &ValueRef,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
+                let val_idx = val.absolute_val_idx;
                 writeln!(f, "{{")?;
                 f.add_indent(1);
                 writeln!(f, "uint32_t _temp = {};", u32::MAX)?;
-                writeln!(f, "write_field({to}, _temp);")?;
+                writeln!(f, "write_va;({to}, {val_idx}, _temp);")?;
                 f.sub_indent(1);
                 writeln!(f, "}}")?;
             }
@@ -290,16 +290,16 @@ impl CcToolchain {
         Ok(())
     }
 
-    pub fn write_end_function(
+    pub fn write_set_function(
         &self,
         f: &mut dyn Write,
         state: &TestState,
-        inputs: &str,
-        outputs: &str,
+        vals: &str,
+        idx: usize,
     ) -> Result<(), GenerateError> {
         match state.options.val_writer {
             WriteImpl::HarnessCallback => {
-                writeln!(f, "finished_func({inputs}, {outputs});")?;
+                writeln!(f, "set_func({vals}, {idx});")?;
             }
             WriteImpl::Print | WriteImpl::Noop | WriteImpl::Assert => {
                 // Noop

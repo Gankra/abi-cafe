@@ -16,6 +16,7 @@ pub struct ValueTree {
 
 #[derive(Debug, Clone)]
 pub struct FuncValues {
+    pub func_name: String,
     pub args: Vec<ArgValues>,
 }
 
@@ -24,6 +25,7 @@ pub struct ArgValues {
     pub arg_name: String,
     pub ty: TyIdx,
     pub vals: Vec<Value>,
+    pub absolute_val_idx_start: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -43,10 +45,11 @@ pub struct ArgValuesIter<'a> {
 
 #[derive(Debug, Clone)]
 pub struct ValueRef<'a> {
-    tree: &'a ValueTree,
-    func_idx: usize,
-    arg_idx: usize,
-    val_idx: usize,
+    pub tree: &'a ValueTree,
+    pub func_idx: usize,
+    pub arg_idx: usize,
+    pub val_idx: usize,
+    pub absolute_val_idx: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -114,6 +117,8 @@ impl ValueTree {
             .all_funcs()
             .map(|func_idx| {
                 let func = types.realize_func(func_idx);
+                let func_name = func.name.to_string();
+                let mut absolute_val_idx_start = 0;
                 let args = func
                     .inputs
                     .iter()
@@ -122,14 +127,17 @@ impl ValueTree {
                         let mut vals = vec![];
                         let arg_name = arg.name.to_string();
                         generators.build_values(types, arg.ty, &mut vals, arg_name.clone())?;
-                        Ok(ArgValues {
+                        let res = ArgValues {
                             ty: arg.ty,
                             arg_name,
                             vals,
-                        })
+                            absolute_val_idx_start,
+                        };
+                        absolute_val_idx_start += res.vals.len();
+                        Ok(res)
                     })
                     .collect::<Result<Vec<_>, GenerateError>>()?;
-                Ok(FuncValues { args })
+                Ok(FuncValues { func_name, args })
             })
             .collect::<Result<Vec<_>, GenerateError>>()?;
 
@@ -174,6 +182,17 @@ impl<'a> FuncValuesIter<'a> {
         }
     }
 }
+impl<'a> Iterator for FuncValuesIter<'a> {
+    type Item = ArgValuesIter<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.arg_idx < self.tree.funcs[self.func_idx].args.len() {
+            Some(self.next_arg())
+        } else {
+            None
+        }
+    }
+}
 
 impl<'a> ArgValuesIter<'a> {
     #[track_caller]
@@ -194,6 +213,7 @@ impl<'a> ArgValuesIter<'a> {
             func_idx,
             arg_idx,
             val_idx,
+            absolute_val_idx: self.arg().absolute_val_idx_start + val_idx,
         }
     }
 
@@ -208,11 +228,29 @@ impl<'a> ArgValuesIter<'a> {
     }
 }
 
+impl<'a> Iterator for ArgValuesIter<'a> {
+    type Item = ValueRef<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.val_idx < self.tree.funcs[self.func_idx].args[self.arg_idx].vals.len() {
+            Some(self.next_val())
+        } else {
+            None
+        }
+    }
+}
+
 impl<'a> ValueRef<'a> {
     pub fn should_write_val(&self, options: &TestOptions) -> bool {
         options
             .functions
             .should_write_val(self.func_idx, self.arg_idx, self.val_idx)
+    }
+    pub fn arg(&self) -> &'a ArgValues {
+        &self.tree.funcs[self.func_idx].args[self.arg_idx]
+    }
+    pub fn func(&self) -> &'a FuncValues {
+        &self.tree.funcs[self.func_idx]
     }
 }
 impl<'a> std::ops::Deref for ValueRef<'a> {

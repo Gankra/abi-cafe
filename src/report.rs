@@ -104,13 +104,9 @@ impl Serialize for GenerateError {
 #[derive(Debug, Serialize)]
 pub struct RunOutput {
     #[serde(skip)]
-    pub caller_inputs: WriteBuffer,
+    pub caller_funcs: TestBuffer,
     #[serde(skip)]
-    pub caller_outputs: WriteBuffer,
-    #[serde(skip)]
-    pub callee_inputs: WriteBuffer,
-    #[serde(skip)]
-    pub callee_outputs: WriteBuffer,
+    pub callee_funcs: TestBuffer,
 }
 
 pub fn report_test(results: TestRunResults) -> TestReport {

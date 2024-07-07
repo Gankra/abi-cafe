@@ -13,46 +13,40 @@ uint64_t basic_val(MyStruct arg0, int32_t arg1);
 
 // The test harness will invoke your test through this symbol!
 void do_test(void) {
+    // Declare we're running the first function
+    set_func(CALLER_VALS, 0);
+
     // Initialize and report the inputs
     MyStruct arg0 = { 241, 1234.23 };
-    write_field(CALLER_INPUTS, arg0.field0);
-    write_filed(CALLER_INPUTS, arg0.field1);
-    finished_val(CALLER_INPUTS);
+    write_val(CALLER_VALS, 0, arg0.field0);
+    write_val(CALLER_VALS, 1, arg0.field1);
 
     int32_t arg1 = 5;
-    write_field(CALLER_INPUTS, arg1);
-    finished_val(CALLER_INPUTS);
+    write_val(CALLER_VALS, 2, arg1);
 
     // Do the call
     uint64_t output = basic_val(arg0, arg1);
 
     // Report the output
-    write_field(CALLER_OUTPUTS, output);
-    finished_val(CALLER_OUTPUTS);
-
-    // Declare that the test is complete on our side
-    finished_func(CALLER_INPUTS, CALLER_OUTPUTS);
+    write_val(CALLER_VALS, 3, output);
 }
 ```
 
 ```C
 // Callee Side
 uint64_t basic_val(MyStruct arg0, int32_t arg1) {
-    // Report the inputs
-    write_field(CALLEE_INPUTS, arg0.field0);
-    write_field(CALLEE_INPUTS, arg0.field1);
-    finished_val(CALLEE_INPUTS);
+    // Declare we're running the first function
+    set_func(CALLEE_VALS, 0);
 
-    write_field(CALLEE_INPUTS, arg1);
-    finished_val(CALLEE_INPUTS);
+    // Report the inputs
+    write_val(CALLEE_VALS, 0, arg0.field0);
+    write_val(CALLEE_VALS, 1, arg0.field1);
+
+    write_val(CALLEE_VALS, 2, arg1);
 
     // Initialize and report the output
     uint64_t output = 17;
-    write_field(CALLEE_OUTPUTS, output);
-    finished_val(CALLEE_OUTPUTS);
-
-    // Declare that the test is complete on our side
-    finished_func(CALLEE_INPUTS, CALLEE_OUTPUTS);
+    write_val(CALLEE_VALS, 3, output);
 
     // Actually return
     return output;
@@ -61,17 +55,17 @@ uint64_t basic_val(MyStruct arg0, int32_t arg1) {
 
 The high level idea is that each side:
 
-* Uses write_field to report individual fields of values (to avoid padding)
-* Uses finished_val to specify that all fields for a value have been written
-* Uses finished_func to specify that the current function is done (the caller will usually contain many subtests, FINISHED_FUNC delimits those)
+* Uses set_func to specify which function we're running
+* Uses write_val to report individual fields of args (to avoid padding)
 
-There are 4 buffers: CALLER_INPUTS, CALLER_OUTPUTS, CALLEE_INPUTS, CALLEE_OUTPUTS. Each side should only use its two buffers.
+There are 2 buffers: CALLER_VALS and CALLEE_VALS
 
 The signatures of the callbacks are as follows, but each language wraps these
 in functions/macros to keep the codegen readable:
 
-* `WRITE(Buffer buffer, char* input, uint32_t size_of_input)`
-* `FINISH_VAL(Buffer buffer)`
-* `FINISH_TEST(Buffer input_buffer, Buffer output_buffer)`
+```c
+SET_FUNC(Buffer buffer, uint32_t func_idx)`
+WRITE_VAL(Buffer buffer, uint32_t val_idx, char* input, uint32_t size_of_input)
+```
 
 Doing things in this very explicit way gives the test harness a better semantic understanding of what the implementations think is happening. This helps us emit better diagnostics and avoid cascading failures between subtests.

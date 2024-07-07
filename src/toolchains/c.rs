@@ -16,10 +16,8 @@ use super::*;
 use crate::fivemat::Fivemat;
 use crate::harness::vals::ArgValuesIter;
 
-const VAR_CALLER_INPUTS: &str = "CALLER_INPUTS";
-const VAR_CALLER_OUTPUTS: &str = "CALLER_OUTPUTS";
-const VAR_CALLEE_INPUTS: &str = "CALLEE_INPUTS";
-const VAR_CALLEE_OUTPUTS: &str = "CALLEE_OUTPUTS";
+const CALLER_VALS: &str = "CALLER_VALS";
+const CALLEE_VALS: &str = "CALLEE_VALS";
 const INDENT: &str = "    ";
 
 pub struct CcToolchain {
@@ -155,13 +153,16 @@ impl CcToolchain {
         f.add_indent(1);
         let function = state.types.realize_func(func);
 
+        // Report we're starting a function
+        self.write_set_function(f, state, CALLER_VALS, func)?;
+
         // Create vars for all the inputs
         let mut func_vals = state.vals.at_func(func);
         for arg in &function.inputs {
             let arg_vals: ArgValuesIter = func_vals.next_arg();
             // Create and report the input
             self.init_var(f, state, &arg.name, arg.ty, arg_vals.clone())?;
-            self.write_var(f, state, &arg.name, arg.ty, arg_vals, VAR_CALLER_INPUTS)?;
+            self.write_var(f, state, &arg.name, arg.ty, arg_vals, CALLER_VALS)?;
         }
 
         // Call the function
@@ -171,11 +172,9 @@ impl CcToolchain {
         for arg in &function.outputs {
             let arg_vals: ArgValuesIter = func_vals.next_arg();
 
-            self.write_var(f, state, &arg.name, arg.ty, arg_vals, VAR_CALLER_OUTPUTS)?;
+            self.write_var(f, state, &arg.name, arg.ty, arg_vals, CALLER_VALS)?;
         }
 
-        // Report the function is complete
-        self.write_end_function(f, state, VAR_CALLER_INPUTS, VAR_CALLER_OUTPUTS)?;
         f.sub_indent(1);
         writeln!(f, "}}")?;
         Ok(())
@@ -239,23 +238,23 @@ impl CcToolchain {
         writeln!(f, " {{")?;
         f.add_indent(1);
 
+        // Report we're starting a function
+        self.write_set_function(f, state, CALLEE_VALS, func)?;
+
         // Report the inputs
         let mut func_vals = state.vals.at_func(func);
         for arg in &function.inputs {
             let arg_vals = func_vals.next_arg();
             let arg_name = &arg.name;
-            self.write_var(f, state, arg_name, arg.ty, arg_vals, VAR_CALLEE_INPUTS)?;
+            self.write_var(f, state, arg_name, arg.ty, arg_vals, CALLEE_VALS)?;
         }
 
         // Create outputs and report them
         for arg in &function.outputs {
             let arg_vals = func_vals.next_arg();
             self.init_var(f, state, &arg.name, arg.ty, arg_vals.clone())?;
-            self.write_var(f, state, &arg.name, arg.ty, arg_vals, VAR_CALLEE_OUTPUTS)?;
+            self.write_var(f, state, &arg.name, arg.ty, arg_vals, CALLEE_VALS)?;
         }
-
-        // Report the function is complete
-        self.write_end_function(f, state, VAR_CALLEE_INPUTS, VAR_CALLEE_OUTPUTS)?;
 
         // Return the outputs
         self.check_returns(state, function)?;

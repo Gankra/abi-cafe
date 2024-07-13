@@ -17,6 +17,27 @@ pub struct Fivemat<'a> {
     out: &'a mut dyn Write,
 }
 
+pub struct FivematIndent<'a, 'b> {
+    inner: &'b mut Fivemat<'a>,
+    count: usize,
+}
+impl Drop for FivematIndent<'_, '_> {
+    fn drop(&mut self) {
+        self.inner.sub_indent(self.count);
+    }
+}
+impl<'a, 'b> std::ops::Deref for FivematIndent<'a, 'b> {
+    type Target = Fivemat<'a>;
+    fn deref(&self) -> &Fivemat<'a> {
+        self.inner
+    }
+}
+impl<'a, 'b> std::ops::DerefMut for FivematIndent<'a, 'b> {
+    fn deref_mut(&mut self) -> &mut Fivemat<'a> {
+        self.inner
+    }
+}
+
 impl<'a> Fivemat<'a> {
     pub fn new(out: &'a mut dyn Write, indent_text: impl Into<String>) -> Self {
         Fivemat {
@@ -26,6 +47,14 @@ impl<'a> Fivemat<'a> {
             out,
         }
     }
+    pub fn indent<'b>(&'b mut self) -> FivematIndent<'a, 'b> {
+        self.indent_many(1)
+    }
+    pub fn indent_many<'b>(&'b mut self, count: usize) -> FivematIndent<'a, 'b> {
+        self.add_indent(count);
+        FivematIndent { inner: self, count }
+    }
+
     pub fn add_indent(&mut self, count: usize) {
         self.indent += count;
     }

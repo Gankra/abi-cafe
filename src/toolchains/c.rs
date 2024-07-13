@@ -322,13 +322,6 @@ impl CcToolchain {
         out_dir: &Utf8Path,
         lib_name: &str,
     ) -> Result<String, BuildError> {
-        /*
-        let out_sub = src_path.parent().unwrap();
-        let ensure_out = out_dir.join(out_sub);
-        std::fs::create_dir_all(ensure_out).unwrap();
-        info!("out: {}", out_dir);
-        info!("lib: {}", lib_name);
-         */
         let mut build = cc::Build::new();
         for flag in self.extra_flags() {
             build.flag(flag);
@@ -366,15 +359,13 @@ impl CcToolchain {
             .arg(&obj_path)
             .arg("-c")
             .arg(src_path)
-            .status()
-            .unwrap();
+            .status()?;
         Command::new("ar")
             .arg("cq")
             .arg(&lib_path)
             .arg(&obj_path)
-            .status()
-            .unwrap();
-        Command::new("ar").arg("s").arg(&lib_path).status().unwrap();
+            .status()?;
+        Command::new("ar").arg("s").arg(&lib_path).status()?;
         Ok(String::from(lib_name))
     }
 
@@ -397,15 +388,13 @@ impl CcToolchain {
             .arg(&obj_path)
             .arg("-c")
             .arg(src_path)
-            .status()
-            .unwrap();
+            .status()?;
         Command::new("ar")
             .arg("cq")
             .arg(&lib_path)
             .arg(&obj_path)
-            .status()
-            .unwrap();
-        Command::new("ar").arg("s").arg(&lib_path).status().unwrap();
+            .status()?;
+        Command::new("ar").arg("s").arg(&lib_path).status()?;
         Ok(String::from(lib_name))
     }
 

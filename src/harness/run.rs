@@ -118,7 +118,10 @@ fn run_dynamic_test(test_dylib: &LinkOutput, _full_test_name: &str) -> Result<Ru
     let mut callee_vals = TestBuffer::new();
 
     unsafe {
-        info!("running     {}", test_dylib.test_bin.file_name().unwrap());
+        info!(
+            "running     {}",
+            test_dylib.test_bin.file_name().unwrap_or_default()
+        );
         // Load the dylib of the test, and get its test_start symbol
         debug!("loading     {}", &test_dylib.test_bin);
         let lib = libloading::Library::new(&test_dylib.test_bin)?;

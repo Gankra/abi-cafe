@@ -216,7 +216,7 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
 
     let filter_layer = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new("info"))
-        .unwrap();
+        .expect("failed to initialize logger");
 
     let logger = crate::log::MapLogger::new();
     tracing_subscriber::registry()

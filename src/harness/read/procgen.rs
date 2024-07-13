@@ -1,6 +1,6 @@
 pub fn procgen_test_for_ty_string(ty_name: &str, ty_def: Option<&str>) -> String {
     let mut test_body = String::new();
-    procgen_test_for_ty_impl(&mut test_body, ty_name, ty_def).unwrap();
+    procgen_test_for_ty_impl(&mut test_body, ty_name, ty_def).expect("failed to format procgen!?");
     test_body
 }
 

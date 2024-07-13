@@ -262,29 +262,83 @@ impl TestHarness {
             WriteImpl::HarnessCallback => {
                 // Do nothing, implicit default
             }
-            WriteImpl::Print => {
+            other => {
                 output.push_str(separator);
-                output.push_str("print");
-            }
-            WriteImpl::Assert => {
-                output.push_str(separator);
-                output.push_str("assert");
-            }
-            WriteImpl::Noop => {
-                output.push_str(separator);
-                output.push_str("noop");
+                output.push_str(&other.to_string())
             }
         }
         match val_generator {
             ValueGeneratorKind::Graffiti => {
                 // Do nothing, implicit default
             }
-            ValueGeneratorKind::Random { seed } => {
+            other => {
                 output.push_str(separator);
-                output.push_str(&format!("random{seed}"));
+                output.push_str(&other.to_string())
             }
         }
         output
+    }
+
+    pub fn parse_test_key(&self, input: &str) -> Result<TestKey, String> {
+        let separator = "::";
+        let parts = input.split(separator).collect::<Vec<_>>();
+
+        let [test, rest @ ..] = &parts[..] else {
+            todo!();
+        };
+        let mut key = TestKey {
+            test: test.to_string(),
+            caller: String::new(),
+            callee: String::new(),
+            options: TestOptions {
+                convention: CallingConvention::C,
+                repr: LangRepr::C,
+                functions: FunctionSelector::All,
+                val_writer: WriteImpl::HarnessCallback,
+                val_generator: ValueGeneratorKind::Graffiti,
+            },
+        };
+        for part in rest {
+            // pairs
+            if let Some((caller, callee)) = part.split_once("_calls_") {
+                key.caller = caller.to_owned();
+                key.callee = callee.to_owned();
+                continue;
+            }
+            if let Some(caller) = part.strip_suffix("_caller") {
+                key.caller = caller.to_owned();
+                continue;
+            }
+            if let Some(callee) = part.strip_suffix("_callee") {
+                key.callee = callee.to_owned();
+                continue;
+            }
+
+            // repr
+            if let Some(repr) = part.strip_prefix("repr_") {
+                key.options.repr = repr.parse()?;
+                continue;
+            }
+
+            // conv
+            if let Some(conv) = part.strip_prefix("conv_") {
+                key.options.convention = conv.parse()?;
+                continue;
+            }
+            // generator
+            if let Ok(val_generator) = part.parse() {
+                key.options.val_generator = val_generator;
+                continue;
+            }
+            // writer
+            if let Ok(val_writer) = part.parse() {
+                key.options.val_writer = val_writer;
+                continue;
+            }
+
+            return Err(format!("unknown testkey part: {part}"))
+        }
+        Ok(key)
     }
 
     /// The name of a test for pretty-printing.

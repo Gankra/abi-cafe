@@ -13,6 +13,7 @@ pub struct Paths {
     pub out_dir: Utf8PathBuf,
     pub generated_src_dir: Utf8PathBuf,
     pub runtime_test_input_dir: Option<Utf8PathBuf>,
+    pub runtime_rules_file: Utf8PathBuf,
 }
 impl Paths {
     pub fn harness_dylib_main_file(&self) -> Utf8PathBuf {

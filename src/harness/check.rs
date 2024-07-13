@@ -5,7 +5,6 @@ use kdl_script::types::Ty;
 use tracing::{error, info};
 
 use crate::error::*;
-use crate::report::*;
 use crate::*;
 
 impl TestHarness {

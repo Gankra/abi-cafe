@@ -114,19 +114,19 @@ impl FunctionSelector {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub enum FunctionSelector {
     All,
     One { idx: FuncIdx, args: ArgSelector },
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub enum ArgSelector {
     All,
     One { idx: usize, vals: ValSelector },
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub enum ValSelector {
     All,
     One { idx: usize },

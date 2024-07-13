@@ -17,11 +17,12 @@ mod build;
 mod check;
 mod generate;
 mod read;
+pub mod report;
 mod run;
 pub mod test;
 pub mod vals;
 
-pub use read::{find_tests, spawn_read_test};
+pub use read::{find_test_rules, find_tests, spawn_read_test};
 pub use run::TestBuffer;
 
 pub type Memoized<K, V> = Mutex<SortedMap<K, Arc<OnceCell<V>>>>;
@@ -30,6 +31,7 @@ pub struct TestHarness {
     paths: Paths,
     toolchains: Toolchains,
     tests: SortedMap<TestId, Arc<Test>>,
+    test_rules: ExpectFile,
     tests_with_vals: Memoized<(TestId, ValueGeneratorKind), Arc<TestWithVals>>,
     tests_with_toolchain:
         Memoized<(TestId, ValueGeneratorKind, ToolchainId), Arc<TestWithToolchain>>,
@@ -39,11 +41,12 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    pub fn new(tests: SortedMap<TestId, Arc<Test>>, cfg: &Config) -> Self {
+    pub fn new(test_rules: ExpectFile, tests: SortedMap<TestId, Arc<Test>>, cfg: &Config) -> Self {
         let toolchains = toolchains::create_toolchains(cfg);
         Self {
             paths: cfg.paths.clone(),
             tests,
+            test_rules,
             toolchains,
             tests_with_vals: Default::default(),
             tests_with_toolchain: Default::default(),
@@ -109,13 +112,6 @@ impl TestHarness {
             .clone();
         Ok(output)
     }
-    pub fn get_test_rules(&self, test_key: &TestKey) -> TestRules {
-        let caller = self.toolchains[&test_key.caller].clone();
-        let callee = self.toolchains[&test_key.callee].clone();
-
-        get_test_rules(test_key, &*caller, &*callee)
-    }
-
     pub fn spawn_test(
         self: Arc<Self>,
         rt: &tokio::runtime::Runtime,
@@ -279,64 +275,69 @@ impl TestHarness {
         output
     }
 
-    pub fn parse_test_key(&self, input: &str) -> Result<TestKey, String> {
+    pub fn parse_test_pattern(&self, input: &str) -> Result<TestKeyPattern, String> {
         let separator = "::";
         let parts = input.split(separator).collect::<Vec<_>>();
 
         let [test, rest @ ..] = &parts[..] else {
             todo!();
         };
-        let mut key = TestKey {
-            test: test.to_string(),
-            caller: String::new(),
-            callee: String::new(),
-            options: TestOptions {
-                convention: CallingConvention::C,
-                repr: LangRepr::C,
-                functions: FunctionSelector::All,
-                val_writer: WriteImpl::HarnessCallback,
-                val_generator: ValueGeneratorKind::Graffiti,
+        let mut key = TestKeyPattern {
+            test: (!test.is_empty()).then(|| test.to_string()),
+            caller: None,
+            callee: None,
+            toolchain: None,
+            options: TestOptionsPattern {
+                convention: None,
+                repr: None,
+                functions: None,
+                val_writer: None,
+                val_generator: None,
             },
         };
         for part in rest {
             // pairs
             if let Some((caller, callee)) = part.split_once("_calls_") {
-                key.caller = caller.to_owned();
-                key.callee = callee.to_owned();
+                key.caller = Some(caller.to_owned());
+                key.callee = Some(callee.to_owned());
                 continue;
             }
             if let Some(caller) = part.strip_suffix("_caller") {
-                key.caller = caller.to_owned();
+                key.caller = Some(caller.to_owned());
                 continue;
             }
             if let Some(callee) = part.strip_suffix("_callee") {
-                key.callee = callee.to_owned();
+                key.callee = Some(callee.to_owned());
+                continue;
+            }
+            if let Some(toolchain) = part.strip_suffix("_toolchain") {
+                key.toolchain = Some(toolchain.to_owned());
                 continue;
             }
 
             // repr
             if let Some(repr) = part.strip_prefix("repr_") {
-                key.options.repr = repr.parse()?;
+                key.options.repr = Some(repr.parse()?);
                 continue;
             }
 
             // conv
             if let Some(conv) = part.strip_prefix("conv_") {
-                key.options.convention = conv.parse()?;
+                key.options.convention = Some(conv.parse()?);
                 continue;
             }
             // generator
             if let Ok(val_generator) = part.parse() {
-                key.options.val_generator = val_generator;
+                key.options.val_generator = Some(val_generator);
                 continue;
             }
             // writer
             if let Ok(val_writer) = part.parse() {
-                key.options.val_writer = val_writer;
+                key.options.val_writer = Some(val_writer);
                 continue;
             }
 
-            return Err(format!("unknown testkey part: {part}"))
+            return Err(format!("unknown testkey part: {part}"));
         }
         Ok(key)
     }

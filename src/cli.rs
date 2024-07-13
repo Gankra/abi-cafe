@@ -130,6 +130,12 @@ struct Cli {
     #[clap(long)]
     add_tests: Option<Utf8PathBuf>,
 
+    /// Add the test expectations at the given path
+    ///
+    /// (If not specified we'll look for a file called abi-cafe-rules.toml in the working dir)
+    #[clap(long)]
+    rules: Option<Utf8PathBuf>,
+
     /// disable the builtin tests
     ///
     /// See also `--add-tests`
@@ -154,6 +160,7 @@ pub fn make_app() -> Config {
         output_format,
         add_rustc_codegen_backend,
         add_tests,
+        rules,
         disable_builtin_tests,
         // unimplemented
         select_vals: _,
@@ -228,12 +235,14 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
     let out_dir = target_dir.join("temp");
     let generated_src_dir = target_dir.join("generated_impls");
     let runtime_test_input_dir = add_tests;
+    let runtime_rules_file = rules.unwrap_or_else(|| "abi-cafe-rules.toml".into());
 
     let paths = Paths {
         target_dir,
         out_dir,
         generated_src_dir,
         runtime_test_input_dir,
+        runtime_rules_file,
     };
     Config {
         output_format,

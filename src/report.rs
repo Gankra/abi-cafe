@@ -55,6 +55,15 @@ pub fn get_test_rules(test: &TestKey, caller: &dyn Toolchain, callee: &dyn Toolc
     result
 }
 
+struct ExpectFile {
+    targets: IndexMap<String, ExpectEntry>,
+}
+struct ExpectEntry {
+    tests: IndexMap<String, Expect>
+}
+
+R
+
 impl Serialize for BuildError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -209,7 +218,7 @@ impl TestKey {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestRules {
     pub run: TestRunMode,
     pub check: TestCheckMode,
@@ -218,9 +227,8 @@ pub struct TestRules {
 /// How far the test should be executed
 ///
 /// Each case implies all the previous cases.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Serialize)]
-#[allow(dead_code)]
-
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum TestRunMode {
     /// Don't run the test at all (marked as skipped)
     Skip,
@@ -240,7 +248,7 @@ pub enum TestRunMode {
 ///
 /// Tests that are Skipped ignore this.
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Serialize)]
-#[allow(dead_code)]
+#[serde(rename_all = "kebab-case")]
 pub enum TestCheckMode {
     /// The test must successfully complete this phase,
     /// whatever happens after that is gravy.
@@ -252,7 +260,7 @@ pub enum TestCheckMode {
     Busted(TestRunMode),
     /// The test is flakey and random but we want to run it anyway,
     /// so accept whatever result we get as ok.
-    Random,
+    Random(bool),
 }
 
 #[derive(Debug, Serialize)]

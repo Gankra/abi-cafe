@@ -131,7 +131,6 @@ impl TestHarness {
     pub async fn do_test(&self, test_key: TestKey, test_rules: TestRules) -> TestRunResults {
         use TestRunMode::*;
 
-        let out_dir = self.paths.out_dir.clone();
         let mut res = TestRunResults::new(test_key, test_rules);
         if res.rules.run <= Skip {
             return res;
@@ -159,7 +158,7 @@ impl TestHarness {
         }
 
         res.ran_to = Build;
-        res.build = Some(self.build_test(&res.key, source, &out_dir).await);
+        res.build = Some(self.build_test(&res.key, source).await);
         let build = match res.build.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
@@ -172,7 +171,7 @@ impl TestHarness {
         }
 
         res.ran_to = Link;
-        res.link = Some(self.link_dynamic_lib(&res.key, build, &out_dir).await);
+        res.link = Some(self.link_bin(&res.key, build).await);
         let link = match res.link.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {
@@ -185,7 +184,7 @@ impl TestHarness {
         }
 
         res.ran_to = Run;
-        res.run = Some(self.run_dynamic_test(&res.key, link).await);
+        res.run = Some(self.run_bin_test(&res.key, link).await);
         let run = match res.run.as_ref().unwrap() {
             Ok(v) => v,
             Err(e) => {

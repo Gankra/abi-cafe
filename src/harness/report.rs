@@ -1,68 +1,83 @@
 use camino::Utf8PathBuf;
 use console::Style;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::error::*;
 use crate::harness::test::*;
-use crate::toolchains::*;
 use crate::*;
 
 /// These are the builtin test-expectations, edit these if there are new rules!
-#[allow(unused_variables)]
-pub fn get_test_rules(test: &TestKey, caller: &dyn Toolchain, callee: &dyn Toolchain) -> TestRules {
-    use TestCheckMode::*;
-    use TestRunMode::*;
+impl TestHarness {
+    #[allow(unused_variables)]
+    pub fn get_test_rules(&self, key: &TestKey) -> TestRules {
+        let caller = self.toolchain_by_test_key(key, CallSide::Caller);
+        let callee = self.toolchain_by_test_key(key, CallSide::Caller);
 
-    // By default, require tests to run completely and pass
-    let mut result = TestRules {
-        run: Check,
-        check: Pass(Check),
-    };
+        use TestCheckMode::*;
+        use TestRunMode::*;
 
-    // Now apply specific custom expectations for platforms/suites
-    let is_c = caller.lang() == "c" || callee.lang() == "c";
-    let is_rust = caller.lang() == "rust" || callee.lang() == "rust";
-    let is_rust_and_c = is_c && is_rust;
+        // By default, require tests to run completely and pass
+        let mut result = TestRules {
+            run: Check,
+            check: Pass(Check),
+        };
 
-    // i128 types are fake on windows so this is all random garbage that might
-    // not even compile, but that datapoint is a little interesting/useful
-    // so let's keep running them and just ignore the result for now.
-    //
-    // Anyone who cares about this situation more can make the expectations more precise.
-    if cfg!(windows) && (test.test == "i128" || test.test == "u128") {
-        result.check = Random;
+        // Now apply specific custom expectations for platforms/suites
+        let is_c = caller.lang() == "c" || callee.lang() == "c";
+        let is_rust = caller.lang() == "rust" || callee.lang() == "rust";
+        let is_rust_and_c = is_c && is_rust;
+
+        // i128 types are fake on windows so this is all random garbage that might
+        // not even compile, but that datapoint is a little interesting/useful
+        // so let's keep running them and just ignore the result for now.
+        //
+        // Anyone who cares about this situation more can make the expectations more precise.
+        if cfg!(windows) && (key.test == "i128" || key.test == "u128") {
+            result.check = Random(true);
+        }
+
+        // CI GCC is too old to support `_Float16`.
+        if cfg!(all(target_arch = "x86_64", target_os = "linux")) && is_c && key.test == "f16" {
+            result.check = Random(true);
+        }
+
+        // FIXME: investigate why this is failing to build
+        if cfg!(windows) && is_c && (key.test == "EmptyStruct" || key.test == "EmptyStructInside") {
+            result.check = Busted(Build);
+        }
+
+        //
+        //
+        // THIS AREA RESERVED FOR VENDORS TO APPLY PATCHES
+
+        // END OF VENDOR RESERVED AREA
+        //
+        //
+
+        if let Some(rules) = self.test_rules.targets.get(built_info::TARGET) {
+            for (pattern, rules) in rules {
+                let pat = self
+                    .parse_test_pattern(pattern)
+                    .expect("failed to parse test pattern");
+                if pat.matches(key) {
+                    if let Some(run) = rules.run.clone() {
+                        result.run = run;
+                    }
+                    if let Some(check) = rules.check.clone() {
+                        result.check = check;
+                    }
+                }
+            }
+        }
+        result
     }
-
-    // CI GCC is too old to support `_Float16`.
-    if cfg!(all(target_arch = "x86_64", target_os = "linux")) && is_c && test.test == "f16" {
-        result.check = Random;
-    }
-
-    // FIXME: investigate why this is failing to build
-    if cfg!(windows) && is_c && (test.test == "EmptyStruct" || test.test == "EmptyStructInside") {
-        result.check = Busted(Build);
-    }
-
-    //
-    //
-    // THIS AREA RESERVED FOR VENDORS TO APPLY PATCHES
-
-    // END OF VENDOR RESERVED AREA
-    //
-    //
-
-    result
 }
 
-struct ExpectFile {
-    targets: IndexMap<String, ExpectEntry>,
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct ExpectFile {
+    pub targets: SortedMap<String, SortedMap<String, TestRulesPattern>>,
 }
-struct ExpectEntry {
-    tests: IndexMap<String, Expect>
-}
-
-R
 
 impl Serialize for BuildError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -156,7 +171,7 @@ pub fn report_test(results: TestRunResults) -> TestReport {
                     .map(|r| !r.all_passed)
                     .unwrap_or(false),
             },
-            TestCheckMode::Random => true,
+            TestCheckMode::Random(_) => true,
         };
         if passed {
             if matches!(results.rules.check, TestCheckMode::Busted(_)) {
@@ -209,6 +224,23 @@ pub struct TestKey {
     pub callee: ToolchainId,
     pub options: TestOptions,
 }
+
+#[derive(Debug, Clone)]
+pub struct TestKeyPattern {
+    pub test: Option<TestId>,
+    pub caller: Option<ToolchainId>,
+    pub callee: Option<ToolchainId>,
+    pub toolchain: Option<ToolchainId>,
+    pub options: TestOptionsPattern,
+}
+#[derive(Debug, Clone)]
+pub struct TestOptionsPattern {
+    pub convention: Option<CallingConvention>,
+    pub functions: Option<FunctionSelector>,
+    pub val_writer: Option<WriteImpl>,
+    pub val_generator: Option<ValueGeneratorKind>,
+    pub repr: Option<LangRepr>,
+}
 impl TestKey {
     pub(crate) fn toolchain_id(&self, call_side: CallSide) -> &str {
         match call_side {
@@ -218,12 +250,88 @@ impl TestKey {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl TestKeyPattern {
+    fn matches(&self, key: &TestKey) -> bool {
+        let TestKeyPattern {
+            test,
+            caller,
+            callee,
+            toolchain,
+            options:
+                TestOptionsPattern {
+                    convention,
+                    functions,
+                    val_writer,
+                    val_generator,
+                    repr,
+                },
+        } = self;
+
+        if let Some(test) = test {
+            if test != &key.test {
+                return false;
+            }
+        }
+
+        if let Some(caller) = caller {
+            if caller != &key.caller {
+                return false;
+            }
+        }
+        if let Some(callee) = callee {
+            if callee != &key.callee {
+                return false;
+            }
+        }
+        if let Some(toolchain) = toolchain {
+            if toolchain != &key.caller && toolchain != &key.callee {
+                return false;
+            }
+        }
+
+        if let Some(convention) = convention {
+            if convention != &key.options.convention {
+                return false;
+            }
+        }
+        if let Some(functions) = functions {
+            if functions != &key.options.functions {
+                return false;
+            }
+        }
+        if let Some(val_writer) = val_writer {
+            if val_writer != &key.options.val_writer {
+                return false;
+            }
+        }
+        if let Some(val_generator) = val_generator {
+            if val_generator != &key.options.val_generator {
+                return false;
+            }
+        }
+        if let Some(repr) = repr {
+            if repr != &key.options.repr {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct TestRules {
     pub run: TestRunMode,
+    #[serde(flatten)]
     pub check: TestCheckMode,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestRulesPattern {
+    pub run: Option<TestRunMode>,
+    #[serde(flatten)]
+    pub check: Option<TestCheckMode>,
+}
 /// How far the test should be executed
 ///
 /// Each case implies all the previous cases.
@@ -247,7 +355,7 @@ pub enum TestRunMode {
 /// To what level of correctness should the test be graded?
 ///
 /// Tests that are Skipped ignore this.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TestCheckMode {
     /// The test must successfully complete this phase,
@@ -315,6 +423,7 @@ pub struct CheckOutput {
 }
 
 #[derive(Debug, Copy, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "kebab-case")]
 pub enum TestConclusion {
     Skipped,
     Passed,
@@ -350,7 +459,7 @@ impl FullReport {
                 }
 
                 (Passed, Pass(_)) => write!(f, "passed")?,
-                (Passed, Random) => write!(f, "passed (random, result ignored)")?,
+                (Passed, Random(_)) => write!(f, "passed (random, result ignored)")?,
                 (Passed, Fail(_)) => write!(f, "passed (failed as expected)")?,
 
                 (Failed, Pass(_)) => {
@@ -374,7 +483,7 @@ impl FullReport {
                         writeln!(f, "  {}", red.apply_to(err))?;
                     }
                 }
-                (Failed, Random) => {
+                (Failed, Random(_)) => {
                     write!(f, "{}", red.apply_to("failed!? (failed but random!?)"))?
                 }
                 (Failed, Fail(_)) => {

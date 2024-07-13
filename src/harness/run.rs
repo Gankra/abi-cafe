@@ -6,7 +6,7 @@ use serde::Serialize;
 use tracing::info;
 
 use crate::error::*;
-use crate::report::*;
+use crate::harness::report::*;
 use crate::*;
 
 impl TestHarness {

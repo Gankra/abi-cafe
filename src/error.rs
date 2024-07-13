@@ -26,6 +26,8 @@ pub enum GenerateError {
     #[error(transparent)]
     #[diagnostic(transparent)]
     KdlScriptError(#[from] kdl_script::KdlScriptError),
+    #[error(transparent)]
+    TomlError(#[from] toml::de::Error),
     /// Used to signal we just skipped it
     #[error("<skipped>")]
     Skipped,

@@ -6,17 +6,15 @@ mod harness;
 mod log;
 mod toolchains;
 
-mod report;
-
 use error::*;
 use files::Paths;
+use harness::report::*;
 use harness::test::*;
 use harness::vals::*;
 use harness::*;
 use toolchains::*;
 
 use kdl_script::parse::LangRepr;
-use report::*;
 use std::error::Error;
 use std::process::Command;
 use std::sync::Arc;
@@ -92,6 +90,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _handle = rt.enter();
 
     // Grab all the tests
+    let test_rules = harness::find_test_rules(&cfg)?;
     let test_sources = harness::find_tests(&cfg)?;
     let read_tasks = test_sources
         .into_iter()
@@ -119,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     debug!("loaded tests!");
 
-    let harness = Arc::new(TestHarness::new(tests, &cfg));
+    let harness = Arc::new(TestHarness::new(test_rules, tests, &cfg));
     debug!("initialized test harness!");
 
     // Run the tests

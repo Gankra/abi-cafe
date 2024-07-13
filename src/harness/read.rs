@@ -32,6 +32,21 @@ impl Pathish {
     }
 }
 
+pub fn find_test_rules(cfg: &Config) -> Result<ExpectFile, GenerateError> {
+    let rules = find_test_rules_runtime(&cfg.paths.runtime_rules_file)?;
+    Ok(rules)
+}
+
+pub fn find_test_rules_runtime(rule_file: &Utf8Path) -> Result<ExpectFile, GenerateError> {
+    if rule_file.exists() {
+        let data = read_runtime_file_to_string(rule_file)?;
+        let rules = toml::from_str(&data)?;
+        Ok(rules)
+    } else {
+        Ok(ExpectFile::default())
+    }
+}
+
 pub fn find_tests(cfg: &Config) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
     let mut tests = find_tests_runtime(cfg.paths.runtime_test_input_dir.as_deref())?;
     let mut more_tests = find_tests_static(cfg.disable_builtin_tests)?;

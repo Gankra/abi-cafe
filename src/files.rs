@@ -15,8 +15,14 @@ pub struct Paths {
     pub runtime_test_input_dir: Option<Utf8PathBuf>,
 }
 impl Paths {
-    pub fn harness_main_file(&self) -> Utf8PathBuf {
-        self.out_dir.join("harness.rs")
+    pub fn harness_dylib_main_file(&self) -> Utf8PathBuf {
+        self.out_dir.join("harness_lib.rs")
+    }
+    pub fn harness_bin_main_file(&self) -> Utf8PathBuf {
+        self.out_dir.join("harness_main.rs")
+    }
+    pub fn freestanding_bin_main_file(&self) -> Utf8PathBuf {
+        self.out_dir.join("main.rs")
     }
 
     /// Delete and recreate the build dir
@@ -27,12 +33,28 @@ impl Paths {
 
         // Initialize harness.rs
         {
-            let harness_file_contents = get_file("harness/harness.rs");
-            let harness_file_path = self.harness_main_file();
-            let mut file =
-                std::fs::File::create_new(harness_file_path).expect("failed to create harness.rs");
+            let harness_file_contents = get_file("harness/harness_lib.rs");
+            let harness_file_path = self.harness_dylib_main_file();
+            let mut file = std::fs::File::create_new(harness_file_path)
+                .expect("failed to create harness_lib.rs");
             file.write_all(harness_file_contents.as_bytes())
-                .expect("failed to initialize harness.rs");
+                .expect("failed to initialize harness_lib.rs");
+        }
+        {
+            let harness_file_contents = get_file("harness/harness_main.rs");
+            let harness_file_path = self.harness_bin_main_file();
+            let mut file = std::fs::File::create_new(harness_file_path)
+                .expect("failed to create harness_main.rs");
+            file.write_all(harness_file_contents.as_bytes())
+                .expect("failed to initialize harness_main.rs");
+        }
+        {
+            let harness_file_contents = get_file("harness/main.rs");
+            let harness_file_path = self.freestanding_bin_main_file();
+            let mut file =
+                std::fs::File::create_new(harness_file_path).expect("failed to create main.rs");
+            file.write_all(harness_file_contents.as_bytes())
+                .expect("failed to initialize main.rs");
         }
 
         // Set up env vars for CC

@@ -8,6 +8,7 @@
 //!
 //! In theory this could be replaced with just making `caller::do_test` into `main`
 //! but this might be a bit easier..?
+
 extern {
     fn do_test();
 }

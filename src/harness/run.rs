@@ -1,6 +1,7 @@
 //! The runtime actual types and functions that are injected into
 //! compiled tests.
 
+use serde::Deserialize;
 use serde::Serialize;
 use tracing::info;
 
@@ -9,13 +10,22 @@ use crate::report::*;
 use crate::*;
 
 impl TestHarness {
-    pub async fn run_dynamic_test(
+    pub async fn run_dylib_test(
+        &self,
+        _key: &TestKey,
+        linked_test: &LinkOutput,
+    ) -> Result<RunOutput, RunError> {
+        let output = run_dylib_test(linked_test)?;
+        Ok(output)
+    }
+
+    pub async fn run_bin_test(
         &self,
         key: &TestKey,
-        test_dylib: &LinkOutput,
+        linked_test: &LinkOutput,
     ) -> Result<RunOutput, RunError> {
-        let full_test_name = self.full_test_name(key);
-        let output = run_dynamic_test(test_dylib, &full_test_name)?;
+        let test = self.test(&key.test);
+        let output = run_bin_test(test, linked_test)?;
         Ok(output)
     }
 }
@@ -83,6 +93,14 @@ pub unsafe extern "C" fn write_val(
     input: *const u8,
     size: u32,
 ) {
+    write_val_inner(
+        test,
+        val_idx,
+        std::slice::from_raw_parts(input, size as usize),
+    )
+}
+
+fn write_val_inner(test: &mut TestBuffer, val_idx: u32, data: &[u8]) {
     // Get the current function
     let Some(func_idx) = test.cur_func else {
         test.had_missing_set_func = true;
@@ -105,14 +123,13 @@ pub unsafe extern "C" fn write_val(
         test.had_double_writes.push((func_idx, val_idx));
         return;
     }
-    let data = std::slice::from_raw_parts(input, size as usize);
     val.bytes = data.to_vec();
 }
 
 /// Run the test!
 ///
 /// See the README for a high-level description of this design.
-fn run_dynamic_test(test_dylib: &LinkOutput, _full_test_name: &str) -> Result<RunOutput, RunError> {
+fn run_dylib_test(test_dylib: &LinkOutput) -> Result<RunOutput, RunError> {
     // Initialize all the buffers the tests will write to
     let mut caller_vals = TestBuffer::new();
     let mut callee_vals = TestBuffer::new();
@@ -139,4 +156,116 @@ fn run_dynamic_test(test_dylib: &LinkOutput, _full_test_name: &str) -> Result<Ru
         caller_funcs: caller_vals,
         callee_funcs: callee_vals,
     })
+}
+
+/// Run the test!
+///
+/// See the README for a high-level description of this design.
+fn run_bin_test(test: Arc<Test>, test_bin: &LinkOutput) -> Result<RunOutput, RunError> {
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename_all = "kebab-case")]
+    #[serde(tag = "info")]
+    enum HarnessJsonMessage {
+        Func {
+            id: HarnessSide,
+            func: u32,
+        },
+        Val {
+            id: HarnessSide,
+            val: u32,
+            bytes: Vec<u8>,
+        },
+        Done,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename_all = "kebab-case")]
+    enum HarnessSide {
+        Caller,
+        Callee,
+    }
+
+    // Initialize all the buffers the tests will write to
+    let mut caller_vals = TestBuffer::new();
+    let mut callee_vals = TestBuffer::new();
+    let mut finished_clean = false;
+
+    unsafe {
+        info!(
+            "running     {}",
+            test_bin.test_bin.file_name().unwrap_or_default()
+        );
+        // Load the dylib of the test, and get its test_start symbol
+
+        debug!("loading     {}", &test_bin.test_bin);
+        let mut cmd = Command::new(&test_bin.test_bin);
+        let output = cmd.output().map_err(|e| RunError::ExecError {
+            bin: test_bin.test_bin.clone(),
+            e,
+        })?;
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let Ok(message): Result<HarnessJsonMessage, _> = serde_json::from_str(line) else {
+                finished_clean = false;
+                continue;
+            };
+            match message {
+                HarnessJsonMessage::Func { id, func } => {
+                    let buf = match id {
+                        HarnessSide::Caller => &mut caller_vals,
+                        HarnessSide::Callee => &mut callee_vals,
+                    };
+                    set_func(buf, func)
+                }
+                HarnessJsonMessage::Val { id, val, bytes } => {
+                    let buf = match id {
+                        HarnessSide::Caller => &mut caller_vals,
+                        HarnessSide::Callee => &mut callee_vals,
+                    };
+                    write_val_inner(buf, val, &bytes)
+                }
+                HarnessJsonMessage::Done => {
+                    finished_clean = true;
+                }
+            }
+        }
+        if !output.status.success() {
+            let (caller_func_idx, caller_val_idx, caller_func) = best_vals(&test, &caller_vals);
+            let (callee_func_idx, callee_val_idx, callee_func) = best_vals(&test, &callee_vals);
+            return Err(RunError::BadExit {
+                status: output.status,
+                caller_func_idx,
+                caller_val_idx,
+                caller_func,
+                callee_func_idx,
+                callee_val_idx,
+                callee_func,
+            });
+        }
+    }
+
+    if !finished_clean {
+        return Err(RunError::InvalidMessages {
+            caller_funcs: caller_vals,
+            callee_funcs: callee_vals,
+        });
+    }
+
+    caller_vals.finish_tests()?;
+    callee_vals.finish_tests()?;
+
+    Ok(RunOutput {
+        caller_funcs: caller_vals,
+        callee_funcs: callee_vals,
+    })
+}
+
+fn best_vals(test: &Test, vals: &TestBuffer) -> (usize, usize, String) {
+    let default_funcs = FuncBuffer::default();
+    let func_idx = vals.cur_func.unwrap_or(0);
+    let funcs = vals.funcs.get(func_idx).unwrap_or(&default_funcs);
+    let val_idx = funcs.vals.len().saturating_sub(1);
+    let func_name = test.types.realize_func(func_idx).name.to_string();
+
+    (func_idx, val_idx, func_name)
 }

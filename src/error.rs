@@ -1,6 +1,6 @@
 use miette::Diagnostic;
 
-use crate::harness::test::TestId;
+use crate::{harness::test::TestId, TestBuffer};
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum CliParseError {
@@ -132,12 +132,37 @@ pub enum LinkError {
 
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum RunError {
-    #[error("test loading error (dynamic linking failed)\n{0}")]
+    #[error("test loading error (dynamic linking failed)\n  {0}")]
     LoadError(#[from] libloading::Error),
+    #[error("failed to spawn test bin: {bin}\n  {e}")]
+    ExecError {
+        bin: camino::Utf8PathBuf,
+        e: std::io::Error,
+    },
     #[error("test impl didn't call set_func before calling write_val")]
     MissingSetFunc,
     #[error("test impl called write_val on func {func} val {val} twice")]
     DoubleWrite { func: usize, val: usize },
+    #[error(
+        "test impl exited with bad status (crashed?): {status}
+    caller last reported: fn {caller_func} value {caller_val_idx}
+    callee last reported: fn {callee_func} value {callee_val_idx}
+    "
+    )]
+    BadExit {
+        status: std::process::ExitStatus,
+        caller_func_idx: usize,
+        caller_val_idx: usize,
+        caller_func: String,
+        callee_func_idx: usize,
+        callee_val_idx: usize,
+        callee_func: String,
+    },
+    #[error("test impl sent invalid messages to harness (executed some kind of UB?)")]
+    InvalidMessages {
+        caller_funcs: TestBuffer,
+        callee_funcs: TestBuffer,
+    },
 }
 
 fn fmt_bytes(bytes: &[u8]) -> String {

@@ -215,9 +215,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut output = std::io::stdout();
     match cfg.output_format {
-        OutputFormat::Human => full_report.print_human(&harness, &mut output).unwrap(),
-        OutputFormat::Json => full_report.print_json(&harness, &mut output).unwrap(),
-        OutputFormat::RustcJson => full_report.print_rustc_json(&harness, &mut output).unwrap(),
+        OutputFormat::Human => full_report.print_human(&harness, &mut output)?,
+        OutputFormat::Json => full_report.print_json(&harness, &mut output)?,
+        OutputFormat::RustcJson => full_report.print_rustc_json(&harness, &mut output)?,
     }
 
     if full_report.failed() {

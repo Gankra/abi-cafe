@@ -61,8 +61,8 @@ pub enum BuildError {
     #[error("io error\n{0}")]
     Io(#[from] std::io::Error),
     #[error("rust compile error \n{} \n{}",
-        std::str::from_utf8(&.0.stdout).unwrap(),
-        std::str::from_utf8(&.0.stderr).unwrap())]
+        String::from_utf8_lossy(&.0.stdout),
+        String::from_utf8_lossy(&.0.stderr))]
     RustCompile(std::process::Output),
     #[error("c compile error\n{0}")]
     CCompile(#[from] cc::Error),
@@ -125,8 +125,8 @@ pub enum LinkError {
     #[error("io error\n{0}")]
     Io(#[from] std::io::Error),
     #[error("rust link error \n{} \n{}",
-        std::str::from_utf8(&.0.stdout).unwrap(),
-        std::str::from_utf8(&.0.stderr).unwrap())]
+        String::from_utf8_lossy(&.0.stdout),
+        String::from_utf8_lossy(&.0.stderr))]
     RustLink(std::process::Output),
 }
 

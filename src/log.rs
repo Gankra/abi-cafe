@@ -72,11 +72,12 @@ impl MapLogger {
     pub fn new() -> Self {
         Self::default()
     }
+    /*
     pub fn clear(&self) {
-        let mut log = self.state.lock().unwrap();
+        let mut log = self.state.lock().ok()?;
         let ids = log.sub_spans.keys().cloned().collect::<Vec<_>>();
         for id in ids {
-            let span = log.sub_spans.get_mut(&id).unwrap();
+            let span = log.sub_spans.get_mut(&id)?;
             if !span.destroyed {
                 span.events.clear();
                 continue;
@@ -85,23 +86,25 @@ impl MapLogger {
         }
         log.root_span.events.clear();
         log.cur_string = None;
+        Some(())
     }
-
-    fn print_span_if_test(&self, span_id: &Id) {
+    */
+    fn print_span_if_test(&self, span_id: &Id) -> Result<(), std::fmt::Error> {
         let span = {
             let log = self.state.lock().unwrap();
             let Some(span) = log.live_spans.get(span_id) else {
-                return;
+                return Ok(());
             };
             if !log.test_spans.contains(span) {
-                return;
+                return Ok(());
             }
             *span
         };
-        eprintln!("{}", self.string_for_span(span));
+        eprintln!("{}", self.string_for_span(span)?);
+        Ok(())
     }
 
-    pub fn string_for_span(&self, span: SpanId) -> Arc<String> {
+    pub fn string_for_span(&self, span: SpanId) -> Result<Arc<String>, std::fmt::Error> {
         self.string_query(Query::Span(span))
     }
     /*
@@ -151,29 +154,29 @@ impl MapLogger {
            }
        }
     */
-    fn string_query(&self, query: Query) -> Arc<String> {
+    fn string_query(&self, query: Query) -> Result<Arc<String>, std::fmt::Error> {
         use std::fmt::Write;
 
-        fn print_indent(output: &mut String, depth: usize) {
-            write!(output, "{:indent$}", "", indent = depth * 4).unwrap();
+        fn print_indent(output: &mut String, depth: usize) -> Result<(), std::fmt::Error> {
+            write!(output, "{:indent$}", "", indent = depth * 4)
         }
         fn print_span_recursive(
             f: &mut Fivemat,
             sub_spans: &LinkedHashMap<SpanId, SpanEntry>,
             span: &SpanEntry,
             range: Option<Range<usize>>,
-        ) {
+        ) -> Result<(), std::fmt::Error> {
             if !span.name.is_empty() {
                 let style = Style::new().blue();
-                write!(f, "{}", style.apply_to(&span.name)).unwrap();
+                write!(f, "{}", style.apply_to(&span.name))?;
                 for (key, val) in &span.fields {
                     if key == "id" {
-                        write!(f, " {}", style.apply_to(val)).unwrap();
+                        write!(f, " {}", style.apply_to(val))?;
                     } else {
-                        write!(f, "{key}: {val}").unwrap();
+                        write!(f, "{key}: {val}")?;
                     }
                 }
-                writeln!(f).unwrap();
+                writeln!(f)?;
             }
 
             let event_range = if let Some(range) = range {
@@ -181,26 +184,26 @@ impl MapLogger {
             } else {
                 &span.events[..]
             };
-            f.add_indent(1);
+            let mut f = f.indent();
             for event in event_range {
                 match event {
                     EventEntry::Message(event) => {
                         if event.fields.contains_key("message") {
-                            print_event(f, event);
+                            print_event(&mut f, event)?;
                         }
                     }
                     EventEntry::Span(sub_span) => {
-                        print_span_recursive(f, sub_spans, &sub_spans[sub_span], None);
+                        print_span_recursive(&mut f, sub_spans, &sub_spans[sub_span], None)?;
                     }
                 }
             }
-            f.sub_indent(1);
+            Ok(())
         }
 
         let mut log = self.state.lock().unwrap();
         if Some(query) == log.last_query {
             if let Some(string) = &log.cur_string {
-                return string.clone();
+                return Ok(string.clone());
             }
         }
         log.last_query = Some(query);
@@ -213,22 +216,23 @@ impl MapLogger {
             Query::Span(span_id) => (&log.sub_spans[&span_id], None),
         };
 
-        print_span_recursive(&mut f, &log.sub_spans, span_to_print, range);
+        print_span_recursive(&mut f, &log.sub_spans, span_to_print, range)?;
 
         let result = Arc::new(output_buf);
         log.cur_string = Some(result.clone());
-        result
+        Ok(result)
     }
 }
 
-fn immediate_event(event: &MessageEntry) {
+fn immediate_event(event: &MessageEntry) -> std::fmt::Result {
     let mut output = String::new();
     let mut f = Fivemat::new(&mut output, INDENT);
-    print_event(&mut f, event);
+    print_event(&mut f, event)?;
     eprintln!("{}", output);
+    Ok(())
 }
 
-fn print_event(f: &mut Fivemat, event: &MessageEntry) {
+fn print_event(f: &mut Fivemat, event: &MessageEntry) -> Result<(), std::fmt::Error> {
     use std::fmt::Write;
     if let Some(message) = event.fields.get("message") {
         let style = match event.level {
@@ -238,9 +242,10 @@ fn print_event(f: &mut Fivemat, event: &MessageEntry) {
             Level::DEBUG => Style::new().blue(),
             Level::TRACE => Style::new().green(),
         };
-        // writeln!(output, "[{:5}] {}", event.level, message).unwrap();
-        writeln!(f, "{}", style.apply_to(message)).unwrap();
+        // writeln!(output, "[{:5}] {}", event.level, message)?;
+        writeln!(f, "{}", style.apply_to(message))?;
     }
+    Ok(())
 }
 
 impl<S> Layer<S> for MapLogger
@@ -277,7 +282,7 @@ where
             target: target.to_owned(),
         };
         if is_root {
-            immediate_event(&event);
+            immediate_event(&event).ok();
         }
         cur_span.events.push(EventEntry::Message(event));
     }
@@ -332,7 +337,7 @@ where
     fn on_close(&self, id: Id, _ctx: tracing_subscriber::layer::Context<'_, S>) {
         // Mark the span as GC-able and remove it from the live mappings,
         // as tracing may now recycle the id for future spans!
-        self.print_span_if_test(&id);
+        self.print_span_if_test(&id).ok();
         let mut log = self.state.lock().unwrap();
         let Some(&span_id) = log.live_spans.get(&id) else {
             // Skipped span, ignore

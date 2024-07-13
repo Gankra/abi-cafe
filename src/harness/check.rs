@@ -134,8 +134,8 @@ impl TestHarness {
             let caller_tag = load_tag(caller_val);
             let callee_tag = load_tag(callee_val);
 
-            if caller_tag != expected_tag || callee_tag != expected_tag {
-                let expected = tagged_variant_name(tagged_ty, expected_tag);
+            if caller_tag != Some(expected_tag) || callee_tag != Some(expected_tag) {
+                let expected = tagged_variant_name(tagged_ty, Some(expected_tag));
                 let caller = tagged_variant_name(tagged_ty, caller_tag);
                 let callee = tagged_variant_name(tagged_ty, callee_tag);
                 return Err(tag_error(types, &expected_val, expected, caller, callee));
@@ -145,8 +145,8 @@ impl TestHarness {
             let caller_tag = load_tag(caller_val);
             let callee_tag = load_tag(callee_val);
 
-            if caller_tag != expected_tag || callee_tag != expected_tag {
-                let expected = enum_variant_name(enum_ty, expected_tag);
+            if caller_tag != Some(expected_tag) || callee_tag != Some(expected_tag) {
+                let expected = enum_variant_name(enum_ty, Some(expected_tag));
                 let caller = enum_variant_name(enum_ty, caller_tag);
                 let callee = enum_variant_name(enum_ty, callee_tag);
                 return Err(tag_error(types, &expected_val, expected, caller, callee));
@@ -156,8 +156,8 @@ impl TestHarness {
             let caller_tag = load_tag(caller_val);
             let callee_tag = load_tag(callee_val);
 
-            if caller_tag != expected_tag || callee_tag != expected_tag {
-                let expected = bool_variant_name(expected_tag, expected_tag);
+            if caller_tag != Some(expected_tag) || callee_tag != Some(expected_tag) {
+                let expected = bool_variant_name(expected_tag, Some(expected_tag));
                 let caller = bool_variant_name(expected_tag, caller_tag);
                 let callee = bool_variant_name(expected_tag, callee_tag);
                 return Err(tag_error(types, &expected_val, expected, caller, callee));
@@ -189,11 +189,16 @@ impl TestHarness {
     }
 }
 
-fn load_tag(val: &ValBuffer) -> usize {
-    u32::from_ne_bytes(<[u8; 4]>::try_from(&val.bytes[..4]).unwrap()) as usize
+fn load_tag(val: &ValBuffer) -> Option<usize> {
+    let buf = val.bytes.get(..4)?;
+    let bytes = <[u8; 4]>::try_from(buf).ok()?;
+    Some(u32::from_ne_bytes(bytes) as usize)
 }
 
-fn tagged_variant_name(tagged_ty: &kdl_script::types::TaggedTy, tag: usize) -> String {
+fn tagged_variant_name(tagged_ty: &kdl_script::types::TaggedTy, tag: Option<usize>) -> String {
+    let Some(tag) = tag else {
+        return "<tag never recorded?>".to_owned();
+    };
     let tagged_name = &tagged_ty.name;
     let variant_name = tagged_ty
         .variants
@@ -203,7 +208,10 @@ fn tagged_variant_name(tagged_ty: &kdl_script::types::TaggedTy, tag: usize) -> S
     format!("{tagged_name}::{variant_name}")
 }
 
-fn enum_variant_name(enum_ty: &kdl_script::types::EnumTy, tag: usize) -> String {
+fn enum_variant_name(enum_ty: &kdl_script::types::EnumTy, tag: Option<usize>) -> String {
+    let Some(tag) = tag else {
+        return "<tag never recorded?>".to_owned();
+    };
     let enum_name = &enum_ty.name;
     let variant_name = enum_ty
         .variants
@@ -213,7 +221,10 @@ fn enum_variant_name(enum_ty: &kdl_script::types::EnumTy, tag: usize) -> String 
     format!("{enum_name}::{variant_name}")
 }
 
-fn bool_variant_name(expected_tag: usize, tag: usize) -> String {
+fn bool_variant_name(expected_tag: usize, tag: Option<usize>) -> String {
+    let Some(tag) = tag else {
+        return "<tag never recorded?>".to_owned();
+    };
     // Because we're using the tag variant machinery, this code is a bit weird,
     // because we essentially get passed Option<bool> for `tag`, where we get
     // None when the wrong path is taken.

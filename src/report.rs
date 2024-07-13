@@ -349,40 +349,16 @@ impl FullReport {
                     write!(f, "{}", red.apply_to("failed"))?;
                     if test.results.ran_to < TestRunMode::Check {
                         let (msg, err) = match &test.results.ran_to {
-                            TestRunMode::Generate => (
-                                "generate source code",
-                                format!(
-                                    "{}",
-                                    test.results
-                                        .source
-                                        .as_ref()
-                                        .unwrap()
-                                        .as_ref()
-                                        .err()
-                                        .unwrap()
-                                ),
-                            ),
-                            TestRunMode::Build => (
-                                "compile source code",
-                                format!(
-                                    "{}",
-                                    test.results.build.as_ref().unwrap().as_ref().err().unwrap()
-                                ),
-                            ),
-                            TestRunMode::Link => (
-                                "link both sides together",
-                                format!(
-                                    "{}",
-                                    test.results.link.as_ref().unwrap().as_ref().err().unwrap()
-                                ),
-                            ),
-                            TestRunMode::Run => (
-                                "run the program",
-                                format!(
-                                    "{}",
-                                    test.results.run.as_ref().unwrap().as_ref().err().unwrap()
-                                ),
-                            ),
+                            TestRunMode::Generate => {
+                                ("generate source code", format_err(&test.results.source))
+                            }
+                            TestRunMode::Build => {
+                                ("compile source code", format_err(&test.results.build))
+                            }
+                            TestRunMode::Link => {
+                                ("link both sides together", format_err(&test.results.link))
+                            }
+                            TestRunMode::Run => ("run the program", format_err(&test.results.run)),
                             TestRunMode::Skip | TestRunMode::Check => ("", String::new()),
                         };
                         write!(f, "{}", red.apply_to(" to "))?;
@@ -412,7 +388,9 @@ impl FullReport {
                 writeln!(f)?;
                 continue;
             }
-            let check_result = test.results.check.as_ref().unwrap();
+            let Some(check_result) = &test.results.check else {
+                continue;
+            };
             let sub_results = &check_result.subtest_checks;
             let num_passed = sub_results.iter().filter(|r| r.is_ok()).count();
 
@@ -536,4 +514,14 @@ impl FullReport {
     pub fn failed(&self) -> bool {
         self.summary.num_failed > 0
     }
+}
+
+fn format_err<T, E: std::fmt::Display>(maybe_res: &Option<Result<T, E>>) -> String {
+    let Some(res) = maybe_res else {
+        return String::new();
+    };
+    let Some(res) = res.as_ref().err() else {
+        return String::new();
+    };
+    format!("{res}")
 }

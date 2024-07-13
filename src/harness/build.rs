@@ -60,6 +60,7 @@ impl TestHarness {
         Ok(real_lib_name)
     }
 
+    #[allow(dead_code)]
     pub async fn link_dylib(
         &self,
         key: &TestKey,

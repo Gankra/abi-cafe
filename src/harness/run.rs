@@ -10,6 +10,7 @@ use crate::report::*;
 use crate::*;
 
 impl TestHarness {
+    #[allow(dead_code)]
     pub async fn run_dylib_test(
         &self,
         _key: &TestKey,

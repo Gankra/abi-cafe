@@ -20,14 +20,6 @@ impl TestHarness {
             check: Pass(Check),
         };
 
-        //
-        //
-        // THIS AREA RESERVED FOR VENDORS TO APPLY PATCHES
-
-        // END OF VENDOR RESERVED AREA
-        //
-        //
-
         for expect_file in &self.test_rules {
             let rulesets = [
                 expect_file.targets.get("*"),
@@ -49,6 +41,14 @@ impl TestHarness {
                 }
             }
         }
+
+        //
+        //
+        // THIS AREA RESERVED FOR VENDORS TO APPLY PATCHES
+
+        // END OF VENDOR RESERVED AREA
+        //
+        //
 
         result
     }

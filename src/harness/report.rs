@@ -31,10 +31,10 @@ impl TestHarness {
                 };
                 for (pattern, rules) in rules {
                     if pattern.matches(key) {
-                        if let Some(run) = rules.run.clone() {
+                        if let Some(run) = rules.run {
                             result.run = run;
                         }
-                        if let Some(check) = rules.check.clone() {
+                        if let Some(check) = rules.check {
                             result.check = check;
                         }
                     }
@@ -56,7 +56,8 @@ impl TestHarness {
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ExpectFile {
-    pub targets: SortedMap<String, SortedMap<TestKeyPattern, TestRulesPattern>>,
+    #[serde(default)]
+    pub targets: IndexMap<String, IndexMap<TestKeyPattern, TestRulesPattern>>,
 }
 
 impl Serialize for BuildError {
@@ -127,33 +128,12 @@ pub fn report_test(results: TestRunResults) -> TestReport {
         Skipped
     } else {
         let passed = match &results.rules.check {
-            TestCheckMode::Pass(must_pass) => match must_pass {
-                Skip => true,
-                Generate => results.source.as_ref().map(|r| r.is_ok()).unwrap_or(false),
-                Build => results.build.as_ref().map(|r| r.is_ok()).unwrap_or(false),
-                Link => results.link.as_ref().map(|r| r.is_ok()).unwrap_or(false),
-                Run => results.run.as_ref().map(|r| r.is_ok()).unwrap_or(false),
-                Check => results
-                    .check
-                    .as_ref()
-                    .map(|r| r.all_passed)
-                    .unwrap_or(false),
-            },
-            TestCheckMode::Fail(must_fail) | TestCheckMode::Busted(must_fail) => match must_fail {
-                Skip => true,
-                Generate => results.source.as_ref().map(|r| !r.is_ok()).unwrap_or(false),
-                Build => results.build.as_ref().map(|r| !r.is_ok()).unwrap_or(false),
-                Link => results.link.as_ref().map(|r| !r.is_ok()).unwrap_or(false),
-                Run => results.run.as_ref().map(|r| !r.is_ok()).unwrap_or(false),
-                Check => results
-                    .check
-                    .as_ref()
-                    .map(|r| !r.all_passed)
-                    .unwrap_or(false),
-            },
-            TestCheckMode::Random(_) => true,
+            TestCheckMode::Pass(must_pass) => success_at_step(&results, must_pass, true),
+            TestCheckMode::Fail(must_fail) => success_at_step(&results, must_fail, false),
+            TestCheckMode::Busted(must_fail) => success_at_step(&results, must_fail, false),
+            TestCheckMode::Random(_) => Some(true),
         };
-        if passed {
+        if passed.unwrap_or(false) {
             if matches!(results.rules.check, TestCheckMode::Busted(_)) {
                 TestConclusion::Busted
             } else {
@@ -163,18 +143,47 @@ pub fn report_test(results: TestRunResults) -> TestReport {
             TestConclusion::Failed
         }
     };
+
+    // Compute what the annotation *could* be to make CI green
+    let did_pass = success_at_step(&results, &results.ran_to, true).unwrap_or(false);
+    let could_be = TestRulesPattern {
+        run: if results.rules.run != TestRunMode::Check {
+            Some(results.rules.run)
+        } else {
+            None
+        },
+        check: if did_pass {
+            Some(TestCheckMode::Pass(results.rules.run))
+        } else {
+            Some(TestCheckMode::Busted(results.rules.run))
+        },
+    };
     TestReport {
         key: results.key.clone(),
-        rules: results.rules.clone(),
+        rules: results.rules,
         conclusion,
+        could_be,
         results,
     }
+}
+
+fn success_at_step(results: &TestRunResults, step: &TestRunMode, wants_pass: bool) -> Option<bool> {
+    use TestRunMode::*;
+    let res = match step {
+        Skip => return Some(true),
+        Generate => results.source.as_ref().map(|r| r.is_ok()),
+        Build => results.build.as_ref().map(|r| r.is_ok()),
+        Link => results.link.as_ref().map(|r| r.is_ok()),
+        Run => results.run.as_ref().map(|r| r.is_ok()),
+        Check => results.check.as_ref().map(|r| r.all_passed),
+    };
+    res.map(|res| res == wants_pass)
 }
 
 #[derive(Debug, Serialize)]
 pub struct FullReport {
     pub summary: TestSummary,
-    pub config: TestConfig,
+    pub possible_rules: Option<ExpectFile>,
     pub tests: Vec<TestReport>,
 }
 
@@ -184,10 +193,9 @@ pub struct TestReport {
     pub rules: TestRules,
     pub results: TestRunResults,
     pub conclusion: TestConclusion,
+    pub could_be: TestRulesPattern,
 }
 
-#[derive(Debug, Serialize)]
-pub struct TestConfig {}
 #[derive(Debug, Serialize)]
 pub struct TestSummary {
     pub num_tests: u64,
@@ -205,7 +213,7 @@ pub struct TestKey {
     pub options: TestOptions,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TestKeyPattern {
     pub test: Option<TestId>,
     pub caller: Option<ToolchainId>,
@@ -213,7 +221,7 @@ pub struct TestKeyPattern {
     pub toolchain: Option<ToolchainId>,
     pub options: TestOptionsPattern,
 }
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TestOptionsPattern {
     pub convention: Option<CallingConvention>,
     pub val_generator: Option<ValueGeneratorKind>,
@@ -407,7 +415,6 @@ impl std::fmt::Display for TestKeyPattern {
                 // Noting
             }
         }
-        output.push_str(separator);
         if let Some(val_generator) = val_generator {
             output.push_str(separator);
             output.push_str(&val_generator.to_string());
@@ -434,7 +441,7 @@ impl Serialize for TestKeyPattern {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct TestRules {
     pub run: TestRunMode,
     #[serde(flatten)]
@@ -450,7 +457,7 @@ pub struct TestRulesPattern {
 /// How far the test should be executed
 ///
 /// Each case implies all the previous cases.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TestRunMode {
     /// Don't run the test at all (marked as skipped)
@@ -470,7 +477,7 @@ pub enum TestRunMode {
 /// To what level of correctness should the test be graded?
 ///
 /// Tests that are Skipped ignore this.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TestCheckMode {
     /// The test must successfully complete this phase,
@@ -534,7 +541,13 @@ pub struct LinkOutput {
 pub struct CheckOutput {
     pub all_passed: bool,
     pub subtest_names: Vec<String>,
-    pub subtest_checks: Vec<Result<(), CheckFailure>>,
+    pub subtest_checks: Vec<SubtestDetails>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SubtestDetails {
+    pub result: Result<(), CheckFailure>,
+    pub minimized: Option<GenerateOutput>,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -615,7 +628,8 @@ impl FullReport {
                 }
             }
 
-            let be_detailed = test.results.ran_to >= TestRunMode::Check;
+            let be_detailed = test.results.ran_to >= TestRunMode::Check
+                && test.conclusion != TestConclusion::Busted;
             if !be_detailed {
                 writeln!(f)?;
                 continue;
@@ -624,7 +638,7 @@ impl FullReport {
                 continue;
             };
             let sub_results = &check_result.subtest_checks;
-            let num_passed = sub_results.iter().filter(|r| r.is_ok()).count();
+            let num_passed = sub_results.iter().filter(|t| t.result.is_ok()).count();
 
             writeln!(f, " ({num_passed:>3}/{:<3} passed)", sub_results.len())?;
             // If all the subtests pass, don't bother with a breakdown.
@@ -636,11 +650,16 @@ impl FullReport {
                 .subtest_names
                 .iter()
                 .fold(0, |max, name| max.max(name.len()));
-            for (subtest_name, result) in check_result.subtest_names.iter().zip(sub_results.iter())
+            for (subtest_name, subtest) in check_result.subtest_names.iter().zip(sub_results.iter())
             {
                 write!(f, "  {:width$} ", subtest_name, width = max_name_len)?;
-                if let Err(e) = result {
+                if let Err(e) = &subtest.result {
                     writeln!(f, "{}", red.apply_to("failed!"))?;
+                    if let Some(minimized) = &subtest.minimized {
+                        writeln!(f, "    {}", blue.apply_to("minimized to:"))?;
+                        writeln!(f, "      caller: {}", blue.apply_to(&minimized.caller_src))?;
+                        writeln!(f, "      callee: {}", blue.apply_to(&minimized.callee_src))?;
+                    }
                     writeln!(f, "{}", red.apply_to(e))?;
                 } else {
                     writeln!(f)?;
@@ -652,7 +671,7 @@ impl FullReport {
         let summary_style = if self.summary.num_failed > 0 {
             red
         } else if self.summary.num_busted > 0 {
-            blue
+            blue.clone()
         } else {
             green
         };
@@ -665,6 +684,16 @@ impl FullReport {
             self.summary.num_skipped
         );
         writeln!(f, "{}", summary_style.apply_to(summary),)?;
+        if let Some(rules) = &self.possible_rules {
+            writeln!(f)?;
+            writeln!(
+                f,
+                "{}",
+                blue.apply_to("(experimental) adding this to your abi-cafe-rules.toml might help:")
+            )?;
+            let toml = toml::to_string_pretty(rules).expect("failed to serialize possible rules!?");
+            writeln!(f, "{}", toml)?;
+        }
         Ok(())
     }
 

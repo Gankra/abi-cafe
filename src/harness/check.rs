@@ -28,7 +28,7 @@ impl TestHarness {
         // Start peeling back the layers of the buffers.
         // funcs (subtests) -> vals (args/returns) -> fields -> bytes
 
-        let mut results: Vec<Result<(), CheckFailure>> = Vec::new();
+        let mut results: Vec<SubtestDetails> = Vec::new();
 
         // `Run` already checks that this length is congruent with all the inputs/outputs Vecs
         let expected_funcs = key.options.functions.active_funcs(&test.types);
@@ -53,7 +53,10 @@ impl TestHarness {
                 let caller_val = caller_func.vals.get(val_idx).unwrap_or(&empty_val);
                 let callee_val = callee_func.vals.get(val_idx).unwrap_or(&empty_val);
                 if let Err(e) = self.check_val(&test, expected_val, caller_val, callee_val) {
-                    results.push(Err(e));
+                    results.push(SubtestDetails {
+                        result: Err(e),
+                        minimized: None,
+                    });
                     // FIXME: now that each value is absolutely indexed,
                     // we should be able to check all the values independently
                     // and return all errors. However the first one is the most
@@ -63,7 +66,10 @@ impl TestHarness {
             }
 
             // If we got this far then the test passes
-            results.push(Ok(()));
+            results.push(SubtestDetails {
+                result: Ok(()),
+                minimized: None,
+            });
         }
 
         // Report the results of each subtest
@@ -77,12 +83,12 @@ impl TestHarness {
             .map(|func_id| self.full_subtest_name(key, &test.types.realize_func(func_id).name))
             .collect::<Vec<_>>();
         let max_name_len = names.iter().fold(0, |max, name| max.max(name.len()));
-        let num_passed = results.iter().filter(|r| r.is_ok()).count();
+        let num_passed = results.iter().filter(|t| t.result.is_ok()).count();
         let all_passed = num_passed == results.len();
 
         if !all_passed {
-            for (subtest_name, result) in names.iter().zip(&results) {
-                match result {
+            for (subtest_name, subtest) in names.iter().zip(&results) {
+                match &subtest.result {
                     Ok(()) => {
                         info!("Test {subtest_name:width$} passed", width = max_name_len);
                     }

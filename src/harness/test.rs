@@ -276,7 +276,7 @@ impl TestWithToolchain {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize, serde::Serialize,
 )]
 #[serde(rename = "lowercase")]
 pub enum CallingConvention {

@@ -134,7 +134,7 @@ struct Cli {
     ///
     /// (If not specified we'll look for a file called abi-cafe-rules.toml in the working dir)
     ///
-    /// Note that there are already builtin rules (disabled with `--disable-builtin-riles`),
+    /// Note that there are already builtin rules (disabled with `--disable-builtin-rules`),
     /// and it would be nice for rules to be upstreamed so everyone can benefit!
     #[clap(long)]
     rules: Option<Utf8PathBuf>,

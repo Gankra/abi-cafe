@@ -33,14 +33,18 @@ impl Pathish {
 }
 
 pub fn find_test_rules(cfg: &Config) -> Result<Vec<ExpectFile>, GenerateError> {
-    let static_rules = find_test_rules_static()?;
+    let static_rules = find_test_rules_static(cfg.disable_builtin_rules)?;
     let rules = find_test_rules_runtime(&cfg.paths.runtime_rules_file)?;
     Ok(vec![static_rules, rules])
 }
 
-pub fn find_test_rules_static() -> Result<ExpectFile, GenerateError> {
-    let data = files::static_rules();
-    let rules = toml::from_str(&data)?;
+pub fn find_test_rules_static(disable_builtin_rules: bool) -> Result<ExpectFile, GenerateError> {
+    let rules = if disable_builtin_rules {
+        ExpectFile::default()
+    } else {
+        let data = files::static_rules();
+        toml::from_str(&data)?
+    };
     Ok(rules)
 }
 

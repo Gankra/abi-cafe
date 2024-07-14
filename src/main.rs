@@ -74,6 +74,7 @@ pub struct Config {
     pub minimizing_write_impl: WriteImpl,
     pub rustc_codegen_backends: Vec<(String, String)>,
     pub disable_builtin_tests: bool,
+    pub disable_builtin_rules: bool,
     pub paths: Paths,
 }
 

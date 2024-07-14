@@ -74,13 +74,13 @@ pub enum BuildError {
 #[derive(Debug, thiserror::Error, Diagnostic)]
 pub enum CheckFailure {
     #[error(
-        "  func {func_name}'s values differed
-    values (native-endian hex bytes):
-      expect: {}
-      caller: {}
-      callee: {}
-    the value was {val_path}: {val_ty_name}
-    whose arg was {arg_name}: {arg_ty_name}",
+        "    func {func_name}'s values differed
+      values (native-endian hex bytes):
+        expect: {}
+        caller: {}
+        callee: {}
+      the value was {val_path}: {val_ty_name}
+      whose arg was {arg_name}: {arg_ty_name}",
         fmt_bytes(expected),
         fmt_bytes(caller),
         fmt_bytes(callee)
@@ -99,13 +99,13 @@ pub enum CheckFailure {
         callee: Vec<u8>,
     },
     #[error(
-        "  func {func_name}'s value had unexpected variant
-    values:
-      expect: {expected}
-      caller: {caller}
-      callee: {callee}
-    the value was {val_path}: {val_ty_name}
-    whose arg was {arg_name}: {arg_ty_name}"
+        "    func {func_name}'s value had unexpected variant
+      values:
+        expect: {expected}
+        caller: {caller}
+        callee: {callee}
+      the value was {val_path}: {val_ty_name}
+      whose arg was {arg_name}: {arg_ty_name}"
     )]
     TagMismatch {
         func_idx: usize,

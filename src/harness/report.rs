@@ -358,11 +358,12 @@ impl std::fmt::Display for TestKeyPattern {
             caller,
             callee,
             toolchain,
-            options: TestOptionsPattern {
-                convention,
-                val_generator,
-                repr,
-            },
+            options:
+                TestOptionsPattern {
+                    convention,
+                    val_generator,
+                    repr,
+                },
         } = self;
         let separator = "::";
         let mut output = String::new();
@@ -417,21 +418,21 @@ impl std::fmt::Display for TestKeyPattern {
 impl<'de> Deserialize<'de> for TestKeyPattern {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>
+        D: serde::Deserializer<'de>,
     {
         use serde::de::Error;
         let input = String::deserialize(deserializer)?;
-        input.parse().map_err(|e| D::Error::custom(e))
+        input.parse().map_err(D::Error::custom)
     }
 }
 impl Serialize for TestKeyPattern {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer {
+        S: serde::Serializer,
+    {
         self.to_string().serialize(serializer)
     }
 }
-
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TestRules {

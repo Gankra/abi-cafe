@@ -275,7 +275,9 @@ impl TestWithToolchain {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize, serde::Serialize,
+)]
 #[serde(rename = "lowercase")]
 pub enum CallingConvention {
     /// The platform's default C convention (cdecl?)

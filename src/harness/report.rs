@@ -382,10 +382,6 @@ impl std::fmt::Display for TestKeyPattern {
             output.push_str(separator);
             output.push_str(&format!("conv_{convention}"));
         }
-        if let Some(convention) = convention {
-            output.push_str(separator);
-            output.push_str(&format!("conv_{convention}"));
-        }
         if let Some(repr) = repr {
             output.push_str(separator);
             output.push_str(&format!("repr_{repr}"));

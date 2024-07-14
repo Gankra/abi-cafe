@@ -133,6 +133,9 @@ struct Cli {
     /// Add the test expectations at the given path
     ///
     /// (If not specified we'll look for a file called abi-cafe-rules.toml in the working dir)
+    ///
+    /// Note that there are already builtin rules (disabled with `--disable-builtin-riles`),
+    /// and it would be nice for rules to be upstreamed so everyone can benefit!
     #[clap(long)]
     rules: Option<Utf8PathBuf>,
 
@@ -141,6 +144,12 @@ struct Cli {
     /// See also `--add-tests`
     #[clap(long)]
     disable_builtin_tests: bool,
+
+    /// disable the builtin rules
+    ///
+    /// See also `--add-rules`
+    #[clap(long)]
+    disable_builtin_rules: bool,
 
     /// deprecated, does nothing (we always procgen now)
     #[clap(long, hide = true)]
@@ -162,6 +171,7 @@ pub fn make_app() -> Config {
         add_tests,
         rules,
         disable_builtin_tests,
+        disable_builtin_rules,
         // unimplemented
         select_vals: _,
         key: _,
@@ -257,6 +267,7 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
         run_selections,
         minimizing_write_impl,
         disable_builtin_tests,
+        disable_builtin_rules,
         paths,
     }
 }

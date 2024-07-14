@@ -12,7 +12,7 @@ impl TestHarness {
     #[allow(unused_variables)]
     pub fn get_test_rules(&self, key: &TestKey) -> TestRules {
         let caller = self.toolchain_by_test_key(key, CallSide::Caller);
-        let callee = self.toolchain_by_test_key(key, CallSide::Caller);
+        let callee = self.toolchain_by_test_key(key, CallSide::Callee);
 
         use TestCheckMode::*;
         use TestRunMode::*;

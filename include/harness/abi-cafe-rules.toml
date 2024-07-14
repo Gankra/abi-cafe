@@ -15,5 +15,5 @@ busted = "build"
 busted = "build"
 
 # CI GCC is too old to support _Float16
-[targets.x86_64-unknown-liinux-gnu."f16::conv_c"]
+[targets.x86_64-unknown-linux-gnu."f16::conv_c"]
 random = true

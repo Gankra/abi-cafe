@@ -1,0 +1,19 @@
+# i128 types are fake on windows so this is all random garbage that might
+# not even compile, but that datapoint is a little interesting/useful
+# so let's keep running them and just ignore the result for now.
+#
+# Anyone who cares about this situation more can make the expectations more precise.
+[targets.x86_64-pc-windows-msvc."i128::cc_toolchain"]
+random = true
+[targets.x86_64-pc-windows-msvc."u128::cc_toolchain"]
+random = true
+
+# FIXME: investigate why this is failing to build
+[targets.x86_64-pc-windows-msvc."EmptyStruct::cc_toolchain"]
+busted = "build"
+[targets.x86_64-pc-windows-msvc."EmptyStructInside::cc_toolchain"]
+busted = "build"
+
+# CI GCC is too old to support _Float16
+[targets.x86_64-unknown-liinux-gnu."f16::conv_c"]
+random = true

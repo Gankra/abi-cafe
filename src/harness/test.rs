@@ -114,19 +114,19 @@ impl FunctionSelector {
     }
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FunctionSelector {
     All,
     One { idx: FuncIdx, args: ArgSelector },
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ArgSelector {
     All,
     One { idx: usize, vals: ValSelector },
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ValSelector {
     All,
     One { idx: usize },
@@ -202,7 +202,7 @@ impl std::ops::Deref for TestImpl {
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WriteImpl {
     HarnessCallback,
     Assert,
@@ -275,7 +275,7 @@ impl TestWithToolchain {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize, serde::Serialize)]
 #[serde(rename = "lowercase")]
 pub enum CallingConvention {
     /// The platform's default C convention (cdecl?)

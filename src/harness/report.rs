@@ -11,9 +11,6 @@ use crate::*;
 impl TestHarness {
     #[allow(unused_variables)]
     pub fn get_test_rules(&self, key: &TestKey) -> TestRules {
-        let caller = self.toolchain_by_test_key(key, CallSide::Caller);
-        let callee = self.toolchain_by_test_key(key, CallSide::Callee);
-
         use TestCheckMode::*;
         use TestRunMode::*;
 
@@ -23,30 +20,6 @@ impl TestHarness {
             check: Pass(Check),
         };
 
-        // Now apply specific custom expectations for platforms/suites
-        let is_c = caller.lang() == "c" || callee.lang() == "c";
-        let is_rust = caller.lang() == "rust" || callee.lang() == "rust";
-        let is_rust_and_c = is_c && is_rust;
-
-        // i128 types are fake on windows so this is all random garbage that might
-        // not even compile, but that datapoint is a little interesting/useful
-        // so let's keep running them and just ignore the result for now.
-        //
-        // Anyone who cares about this situation more can make the expectations more precise.
-        if cfg!(windows) && (key.test == "i128" || key.test == "u128") {
-            result.check = Random(true);
-        }
-
-        // CI GCC is too old to support `_Float16`.
-        if cfg!(all(target_arch = "x86_64", target_os = "linux")) && is_c && key.test == "f16" {
-            result.check = Random(true);
-        }
-
-        // FIXME: investigate why this is failing to build
-        if cfg!(windows) && is_c && (key.test == "EmptyStruct" || key.test == "EmptyStructInside") {
-            result.check = Busted(Build);
-        }
-
         //
         //
         // THIS AREA RESERVED FOR VENDORS TO APPLY PATCHES
@@ -55,28 +28,35 @@ impl TestHarness {
         //
         //
 
-        if let Some(rules) = self.test_rules.targets.get(built_info::TARGET) {
-            for (pattern, rules) in rules {
-                let pat = self
-                    .parse_test_pattern(pattern)
-                    .expect("failed to parse test pattern");
-                if pat.matches(key) {
-                    if let Some(run) = rules.run.clone() {
-                        result.run = run;
-                    }
-                    if let Some(check) = rules.check.clone() {
-                        result.check = check;
+        for expect_file in &self.test_rules {
+            let rulesets = [
+                expect_file.targets.get("*"),
+                expect_file.targets.get(built_info::TARGET),
+            ];
+            for rules in rulesets {
+                let Some(rules) = rules else {
+                    continue;
+                };
+                for (pattern, rules) in rules {
+                    if pattern.matches(key) {
+                        if let Some(run) = rules.run.clone() {
+                            result.run = run;
+                        }
+                        if let Some(check) = rules.check.clone() {
+                            result.check = check;
+                        }
                     }
                 }
             }
         }
+
         result
     }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ExpectFile {
-    pub targets: SortedMap<String, SortedMap<String, TestRulesPattern>>,
+    pub targets: SortedMap<String, SortedMap<TestKeyPattern, TestRulesPattern>>,
 }
 
 impl Serialize for BuildError {
@@ -225,7 +205,7 @@ pub struct TestKey {
     pub options: TestOptions,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TestKeyPattern {
     pub test: Option<TestId>,
     pub caller: Option<ToolchainId>,
@@ -233,11 +213,9 @@ pub struct TestKeyPattern {
     pub toolchain: Option<ToolchainId>,
     pub options: TestOptionsPattern,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TestOptionsPattern {
     pub convention: Option<CallingConvention>,
-    pub functions: Option<FunctionSelector>,
-    pub val_writer: Option<WriteImpl>,
     pub val_generator: Option<ValueGeneratorKind>,
     pub repr: Option<LangRepr>,
 }
@@ -260,8 +238,6 @@ impl TestKeyPattern {
             options:
                 TestOptionsPattern {
                     convention,
-                    functions,
-                    val_writer,
                     val_generator,
                     repr,
                 },
@@ -294,16 +270,6 @@ impl TestKeyPattern {
                 return false;
             }
         }
-        if let Some(functions) = functions {
-            if functions != &key.options.functions {
-                return false;
-            }
-        }
-        if let Some(val_writer) = val_writer {
-            if val_writer != &key.options.val_writer {
-                return false;
-            }
-        }
         if let Some(val_generator) = val_generator {
             if val_generator != &key.options.val_generator {
                 return false;
@@ -318,6 +284,154 @@ impl TestKeyPattern {
         true
     }
 }
+
+impl std::str::FromStr for TestKeyPattern {
+    type Err = String;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let separator = "::";
+        let parts = input.split(separator).collect::<Vec<_>>();
+
+        let mut key = TestKeyPattern {
+            test: None,
+            caller: None,
+            callee: None,
+            toolchain: None,
+            options: TestOptionsPattern {
+                convention: None,
+                repr: None,
+                val_generator: None,
+            },
+        };
+
+        let [test, rest @ ..] = &parts[..] else {
+            return Ok(key);
+        };
+        key.test = (!test.is_empty()).then(|| test.to_string());
+
+        for part in rest {
+            // pairs
+            if let Some((caller, callee)) = part.split_once("_calls_") {
+                key.caller = Some(caller.to_owned());
+                key.callee = Some(callee.to_owned());
+                continue;
+            }
+            if let Some(caller) = part.strip_suffix("_caller") {
+                key.caller = Some(caller.to_owned());
+                continue;
+            }
+            if let Some(callee) = part.strip_suffix("_callee") {
+                key.callee = Some(callee.to_owned());
+                continue;
+            }
+            if let Some(toolchain) = part.strip_suffix("_toolchain") {
+                key.toolchain = Some(toolchain.to_owned());
+                continue;
+            }
+
+            // repr
+            if let Some(repr) = part.strip_prefix("repr_") {
+                key.options.repr = Some(repr.parse()?);
+                continue;
+            }
+
+            // conv
+            if let Some(conv) = part.strip_prefix("conv_") {
+                key.options.convention = Some(conv.parse()?);
+                continue;
+            }
+            // generator
+            if let Ok(val_generator) = part.parse() {
+                key.options.val_generator = Some(val_generator);
+                continue;
+            }
+
+            return Err(format!("unknown testkey part: {part}"));
+        }
+        Ok(key)
+    }
+}
+impl std::fmt::Display for TestKeyPattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let TestKeyPattern {
+            test,
+            caller,
+            callee,
+            toolchain,
+            options: TestOptionsPattern {
+                convention,
+                val_generator,
+                repr,
+            },
+        } = self;
+        let separator = "::";
+        let mut output = String::new();
+        if let Some(test) = test {
+            output.push_str(test);
+        }
+        if let Some(convention) = convention {
+            output.push_str(separator);
+            output.push_str(&format!("conv_{convention}"));
+        }
+        if let Some(convention) = convention {
+            output.push_str(separator);
+            output.push_str(&format!("conv_{convention}"));
+        }
+        if let Some(repr) = repr {
+            output.push_str(separator);
+            output.push_str(&format!("repr_{repr}"));
+        }
+        if let Some(toolchain) = toolchain {
+            output.push_str(separator);
+            output.push_str(&format!("{toolchain}_toolchain"));
+        }
+        match (caller, callee) {
+            (Some(caller), Some(callee)) => {
+                output.push_str(separator);
+                output.push_str(caller);
+                output.push_str("_calls_");
+                output.push_str(callee);
+            }
+            (Some(caller), None) => {
+                output.push_str(separator);
+                output.push_str(caller);
+                output.push_str("_caller");
+            }
+            (None, Some(callee)) => {
+                output.push_str(separator);
+                output.push_str(callee);
+                output.push_str("_callee");
+            }
+            (None, None) => {
+                // Noting
+            }
+        }
+        output.push_str(separator);
+        if let Some(val_generator) = val_generator {
+            output.push_str(separator);
+            output.push_str(&val_generator.to_string());
+        }
+        output.fmt(f)
+    }
+}
+impl<'de> Deserialize<'de> for TestKeyPattern {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>
+    {
+        use serde::de::Error;
+        let input = String::deserialize(deserializer)?;
+        input.parse().map_err(|e| D::Error::custom(e))
+    }
+}
+impl Serialize for TestKeyPattern {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer {
+        self.to_string().serialize(serializer)
+    }
+}
+
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TestRules {

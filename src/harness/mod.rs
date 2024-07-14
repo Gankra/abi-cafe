@@ -41,7 +41,11 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    pub fn new(test_rules: Vec<ExpectFile>, tests: SortedMap<TestId, Arc<Test>>, cfg: &Config) -> Self {
+    pub fn new(
+        test_rules: Vec<ExpectFile>,
+        tests: SortedMap<TestId, Arc<Test>>,
+        cfg: &Config,
+    ) -> Self {
         let toolchains = toolchains::create_toolchains(cfg);
         Self {
             paths: cfg.paths.clone(),

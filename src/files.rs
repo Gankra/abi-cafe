@@ -90,10 +90,14 @@ pub fn load_file(file: &File) -> String {
     clean_newlines(string)
 }
 
-pub fn tests() -> &'static Dir<'static> {
+pub fn static_tests() -> &'static Dir<'static> {
     INCLUDES
         .get_dir("tests")
         .expect("includes didn't contain ./test")
+}
+
+pub fn static_rules() -> String {
+    get_file("harness/abi-cafe-rules.toml")
 }
 
 fn clean_newlines(input: &str) -> String {

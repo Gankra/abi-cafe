@@ -30,6 +30,7 @@ const C_TOOLCHAINS: &[&str] = &[
 
 /// A compiler/language toolchain!
 pub trait Toolchain {
+    #[allow(dead_code)]
     fn lang(&self) -> &'static str;
     fn src_ext(&self) -> &'static str;
     fn pun_env(&self) -> Arc<PunEnv>;

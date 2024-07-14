@@ -31,7 +31,7 @@ pub struct TestHarness {
     paths: Paths,
     toolchains: Toolchains,
     tests: SortedMap<TestId, Arc<Test>>,
-    test_rules: ExpectFile,
+    test_rules: Vec<ExpectFile>,
     tests_with_vals: Memoized<(TestId, ValueGeneratorKind), Arc<TestWithVals>>,
     tests_with_toolchain:
         Memoized<(TestId, ValueGeneratorKind, ToolchainId), Arc<TestWithToolchain>>,
@@ -41,7 +41,7 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    pub fn new(test_rules: ExpectFile, tests: SortedMap<TestId, Arc<Test>>, cfg: &Config) -> Self {
+    pub fn new(test_rules: Vec<ExpectFile>, tests: SortedMap<TestId, Arc<Test>>, cfg: &Config) -> Self {
         let toolchains = toolchains::create_toolchains(cfg);
         Self {
             paths: cfg.paths.clone(),
@@ -273,73 +273,6 @@ impl TestHarness {
             }
         }
         output
-    }
-
-    pub fn parse_test_pattern(&self, input: &str) -> Result<TestKeyPattern, String> {
-        let separator = "::";
-        let parts = input.split(separator).collect::<Vec<_>>();
-
-        let [test, rest @ ..] = &parts[..] else {
-            todo!();
-        };
-        let mut key = TestKeyPattern {
-            test: (!test.is_empty()).then(|| test.to_string()),
-            caller: None,
-            callee: None,
-            toolchain: None,
-            options: TestOptionsPattern {
-                convention: None,
-                repr: None,
-                functions: None,
-                val_writer: None,
-                val_generator: None,
-            },
-        };
-        for part in rest {
-            // pairs
-            if let Some((caller, callee)) = part.split_once("_calls_") {
-                key.caller = Some(caller.to_owned());
-                key.callee = Some(callee.to_owned());
-                continue;
-            }
-            if let Some(caller) = part.strip_suffix("_caller") {
-                key.caller = Some(caller.to_owned());
-                continue;
-            }
-            if let Some(callee) = part.strip_suffix("_callee") {
-                key.callee = Some(callee.to_owned());
-                continue;
-            }
-            if let Some(toolchain) = part.strip_suffix("_toolchain") {
-                key.toolchain = Some(toolchain.to_owned());
-                continue;
-            }
-
-            // repr
-            if let Some(repr) = part.strip_prefix("repr_") {
-                key.options.repr = Some(repr.parse()?);
-                continue;
-            }
-
-            // conv
-            if let Some(conv) = part.strip_prefix("conv_") {
-                key.options.convention = Some(conv.parse()?);
-                continue;
-            }
-            // generator
-            if let Ok(val_generator) = part.parse() {
-                key.options.val_generator = Some(val_generator);
-                continue;
-            }
-            // writer
-            if let Ok(val_writer) = part.parse() {
-                key.options.val_writer = Some(val_writer);
-                continue;
-            }
-
-            return Err(format!("unknown testkey part: {part}"));
-        }
-        Ok(key)
     }
 
     /// The name of a test for pretty-printing.

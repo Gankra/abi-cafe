@@ -32,8 +32,15 @@ impl Pathish {
     }
 }
 
-pub fn find_test_rules(cfg: &Config) -> Result<ExpectFile, GenerateError> {
+pub fn find_test_rules(cfg: &Config) -> Result<Vec<ExpectFile>, GenerateError> {
+    let static_rules = find_test_rules_static()?;
     let rules = find_test_rules_runtime(&cfg.paths.runtime_rules_file)?;
+    Ok(vec![static_rules, rules])
+}
+
+pub fn find_test_rules_static() -> Result<ExpectFile, GenerateError> {
+    let data = files::static_rules();
+    let rules = toml::from_str(&data)?;
     Ok(rules)
 }
 
@@ -92,7 +99,7 @@ pub fn find_tests_static(
         return Ok(tests);
     }
 
-    let mut dirs = vec![crate::files::tests()];
+    let mut dirs = vec![crate::files::static_tests()];
     while let Some(dir) = dirs.pop() {
         for entry in dir.entries() {
             // If it's a dir, add it to the working set

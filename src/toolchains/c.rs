@@ -31,6 +31,7 @@ enum CCFlavor {
     Clang,
     Gcc,
     Msvc,
+    Zigcc,
 }
 
 #[derive(PartialEq)]
@@ -87,6 +88,7 @@ impl Toolchain for CcToolchain {
             "gcc" => self.compile_gcc(src_path, out_dir, lib_name),
             "clang" => self.compile_clang(src_path, out_dir, lib_name),
             "msvc" => self.compile_msvc(src_path, out_dir, lib_name),
+            "zigcc" => self.compile_zigcc(src_path, out_dir, lib_name),
             _ => unimplemented!("unknown c compiler"),
         }
     }
@@ -102,6 +104,7 @@ impl Toolchain for CcToolchain {
             "gcc" => self.compile_gcc(src_path, out_dir, lib_name),
             "clang" => self.compile_clang(src_path, out_dir, lib_name),
             "msvc" => self.compile_msvc(src_path, out_dir, lib_name),
+            "zigcc" => self.compile_zigcc(src_path, out_dir, lib_name),
             _ => unimplemented!("unknown c compiler"),
         }
     }
@@ -273,6 +276,7 @@ impl CcToolchain {
             TOOLCHAIN_GCC => CCFlavor::Gcc,
             TOOLCHAIN_CLANG => CCFlavor::Clang,
             TOOLCHAIN_MSVC => CCFlavor::Msvc,
+            TOOLCHAIN_ZIGCC => CCFlavor::Zigcc,
             TOOLCHAIN_CC => {
                 let compiler = cc::Build::new()
                     .cargo_metadata(false)
@@ -349,6 +353,36 @@ impl CcToolchain {
         let obj_path = out_dir.join(format!("{lib_name}.o"));
         let lib_path = out_dir.join(format!("lib{lib_name}.a"));
         let mut cmd = Command::new("clang");
+        for flag in self.extra_flags() {
+            cmd.arg(flag);
+        }
+        cmd.arg("-ffunction-sections")
+            .arg("-fdata-sections")
+            .arg("-fPIC")
+            .arg("-o")
+            .arg(&obj_path)
+            .arg("-c")
+            .arg(src_path)
+            .status()?;
+        Command::new("ar")
+            .arg("cq")
+            .arg(&lib_path)
+            .arg(&obj_path)
+            .status()?;
+        Command::new("ar").arg("s").arg(&lib_path).status()?;
+        Ok(String::from(lib_name))
+    }
+
+    fn compile_zigcc(
+        &self,
+        src_path: &Utf8Path,
+        out_dir: &Utf8Path,
+        lib_name: &str,
+    ) -> Result<String, BuildError> {
+        let obj_path = out_dir.join(format!("{lib_name}.o"));
+        let lib_path = out_dir.join(format!("lib{lib_name}.a"));
+        let mut cmd = Command::new("zig");
+        cmd.arg("cc");
         for flag in self.extra_flags() {
             cmd.arg(flag);
         }

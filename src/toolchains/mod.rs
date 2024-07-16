@@ -18,8 +18,15 @@ pub const TOOLCHAIN_CC: &str = "cc";
 pub const TOOLCHAIN_GCC: &str = "gcc";
 pub const TOOLCHAIN_CLANG: &str = "clang";
 pub const TOOLCHAIN_MSVC: &str = "msvc";
+pub const TOOLCHAIN_ZIGCC: &str = "zigcc";
 
-const C_TOOLCHAINS: &[&str] = &[TOOLCHAIN_CC, TOOLCHAIN_GCC, TOOLCHAIN_CLANG, TOOLCHAIN_MSVC];
+const C_TOOLCHAINS: &[&str] = &[
+    TOOLCHAIN_CC,
+    TOOLCHAIN_GCC,
+    TOOLCHAIN_CLANG,
+    TOOLCHAIN_MSVC,
+    TOOLCHAIN_ZIGCC,
+];
 
 /// A compiler/language toolchain!
 pub trait Toolchain {

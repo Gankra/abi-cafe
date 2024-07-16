@@ -94,7 +94,7 @@ impl CcToolchain {
                         CCFlavor::Gcc => Err(UnsupportedError::Other(
                             "GCC isn't known to support f16 on this target".to_owned(),
                         ))?,
-                        CCFlavor::Clang
+                        CCFlavor::Clang | CCFlavor::Zigcc
                             if cfg!(any(
                                 all(target_arch = "x86", target_feature = "sse2"),
                                 target_arch = "x86_64",
@@ -106,7 +106,7 @@ impl CcToolchain {
                         {
                             "_Float16 "
                         }
-                        CCFlavor::Clang => Err(UnsupportedError::Other(
+                        CCFlavor::Clang | CCFlavor::Zigcc => Err(UnsupportedError::Other(
                             "Clang isn't known to support f16 on this target".to_owned(),
                         ))?,
                         CCFlavor::Msvc => Err(UnsupportedError::Other(
@@ -134,7 +134,7 @@ impl CcToolchain {
                             CCFlavor::Gcc => Err(UnsupportedError::Other(
                                 "GCC isn't known to support f128 on this target".to_owned(),
                             ))?,
-                            CCFlavor::Clang
+                            CCFlavor::Clang | CCFlavor::Zigcc
                                 if cfg!(any(
                                     target_arch = "x86",
                                     target_arch = "x86_64",
@@ -152,7 +152,7 @@ impl CcToolchain {
                             {
                                 "__float128 "
                             }
-                            CCFlavor::Clang => Err(UnsupportedError::Other(
+                            CCFlavor::Clang | CCFlavor::Zigcc => Err(UnsupportedError::Other(
                                 "Clang isn't known to support f128 on this target".to_owned(),
                             ))?,
                             CCFlavor::Msvc => Err(UnsupportedError::Other(
@@ -555,7 +555,7 @@ impl CcToolchain {
                 if self.platform == Windows {
                     match self.cc_flavor {
                         Msvc => "__cdecl ",
-                        Gcc | Clang => "__attribute__((cdecl)) ",
+                        Gcc | Clang | Zigcc => "__attribute__((cdecl)) ",
                     }
                 } else {
                     return Err(self.unsupported_convention(&convention))?;
@@ -565,7 +565,7 @@ impl CcToolchain {
                 if self.platform == Windows {
                     match self.cc_flavor {
                         Msvc => "__stdcall ",
-                        Gcc | Clang => "__attribute__((stdcall)) ",
+                        Gcc | Clang | Zigcc => "__attribute__((stdcall)) ",
                     }
                 } else {
                     return Err(self.unsupported_convention(&convention))?;
@@ -575,7 +575,7 @@ impl CcToolchain {
                 if self.platform == Windows {
                     match self.cc_flavor {
                         Msvc => "__fastcall ",
-                        Gcc | Clang => "__attribute__((fastcall)) ",
+                        Gcc | Clang | Zigcc => "__attribute__((fastcall)) ",
                     }
                 } else {
                     return Err(self.unsupported_convention(&convention))?;
@@ -585,7 +585,7 @@ impl CcToolchain {
                 if self.platform == Windows {
                     match self.cc_flavor {
                         Msvc => "__vectorcall ",
-                        Gcc | Clang => "__attribute__((vectorcall)) ",
+                        Gcc | Clang | Zigcc => "__attribute__((vectorcall)) ",
                     }
                 } else {
                     return Err(self.unsupported_convention(&convention))?;

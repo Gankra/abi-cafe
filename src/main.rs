@@ -6,17 +6,16 @@ mod harness;
 mod log;
 mod toolchains;
 
-mod report;
-
 use error::*;
 use files::Paths;
+use harness::report::*;
 use harness::test::*;
 use harness::vals::*;
 use harness::*;
+use indexmap::IndexMap;
 use toolchains::*;
 
 use kdl_script::parse::LangRepr;
-use report::*;
 use std::error::Error;
 use std::process::Command;
 use std::sync::Arc;
@@ -76,6 +75,7 @@ pub struct Config {
     pub minimizing_write_impl: WriteImpl,
     pub rustc_codegen_backends: Vec<(String, String)>,
     pub disable_builtin_tests: bool,
+    pub disable_builtin_rules: bool,
     pub paths: Paths,
 }
 
@@ -92,6 +92,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _handle = rt.enter();
 
     // Grab all the tests
+    let test_rules = harness::find_test_rules(&cfg)?;
     let test_sources = harness::find_tests(&cfg)?;
     let read_tasks = test_sources
         .into_iter()
@@ -119,12 +120,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     debug!("loaded tests!");
 
-    let harness = Arc::new(TestHarness::new(tests, &cfg));
+    let harness = Arc::new(TestHarness::new(test_rules, tests, &cfg));
     debug!("initialized test harness!");
 
     // Run the tests
-    use TestConclusion::*;
-
     let mut tasks = vec![];
 
     // The cruel bastard that is combinatorics... THE GOD LOOPS
@@ -161,11 +160,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                                     },
                                 };
                                 let rules = harness.get_test_rules(&test_key);
-                                let task = harness.clone().spawn_test(
-                                    &rt,
-                                    rules.clone(),
-                                    test_key.clone(),
-                                );
+                                let task = harness.clone().spawn_test(&rt, rules, test_key.clone());
 
                                 tasks.push(task);
                             }
@@ -185,6 +180,34 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Vec<_>>();
 
     // Compute the final report
+    let mut full_report = compute_final_report(&cfg, &harness, reports);
+
+    if full_report.failed() {
+        generate_minimized_failures(&cfg, &harness, &rt, &mut full_report);
+    }
+
+    let mut output = std::io::stdout();
+    match cfg.output_format {
+        OutputFormat::Human => full_report.print_human(&harness, &mut output)?,
+        OutputFormat::Json => full_report.print_json(&harness, &mut output)?,
+        OutputFormat::RustcJson => full_report.print_rustc_json(&harness, &mut output)?,
+    }
+
+    if full_report.failed() {
+        Err(TestsFailed {})?;
+    }
+    Ok(())
+}
+
+fn compute_final_report(
+    _cfg: &Config,
+    harness: &Arc<TestHarness>,
+    reports: Vec<TestReport>,
+) -> FullReport {
+    use TestConclusion::*;
+
+    let mut expects = IndexMap::<TestKeyPattern, TestRulesPattern>::new();
+
     let mut num_tests = 0;
     let mut num_passed = 0;
     let mut num_busted = 0;
@@ -196,11 +219,25 @@ fn main() -> Result<(), Box<dyn Error>> {
             Busted => num_busted += 1,
             Skipped => num_skipped += 1,
             Passed => num_passed += 1,
-            Failed => num_failed += 1,
+            Failed => {
+                num_failed += 1;
+                let pattern = harness.base_id(&report.key, None, "::");
+                if let Ok(pattern) = pattern.parse() {
+                    expects.insert(pattern, report.could_be.clone());
+                }
+            }
         }
     }
 
-    let full_report = FullReport {
+    let possible_rules = if expects.is_empty() {
+        None
+    } else {
+        Some(ExpectFile {
+            targets: IndexMap::from_iter([(built_info::TARGET.to_owned(), expects)]),
+        })
+    };
+
+    FullReport {
         summary: TestSummary {
             num_tests,
             num_passed,
@@ -208,78 +245,70 @@ fn main() -> Result<(), Box<dyn Error>> {
             num_failed,
             num_skipped,
         },
-        // FIXME: put in a bunch of metadata here?
-        config: TestConfig {},
+        possible_rules,
         tests: reports,
-    };
-
-    let mut output = std::io::stdout();
-    match cfg.output_format {
-        OutputFormat::Human => full_report.print_human(&harness, &mut output)?,
-        OutputFormat::Json => full_report.print_json(&harness, &mut output)?,
-        OutputFormat::RustcJson => full_report.print_rustc_json(&harness, &mut output)?,
     }
-
-    if full_report.failed() {
-        generate_minimized_failures(&cfg, &harness, &rt, &full_report);
-        Err(TestsFailed {})?;
-    }
-    Ok(())
 }
 
 fn generate_minimized_failures(
     cfg: &Config,
     harness: &Arc<TestHarness>,
     rt: &tokio::runtime::Runtime,
-    reports: &FullReport,
+    reports: &mut FullReport,
 ) {
-    info!("rerunning failures");
-    let tasks = reports.tests.iter().flat_map(|report| {
+    info!("minimizing failures...");
+    let mut tasks = vec![];
+    for (test_idx, report) in reports.tests.iter().enumerate() {
         let Some(check) = report.results.check.as_ref() else {
-            return vec![];
+            continue;
         };
-        check
-            .subtest_checks
-            .iter()
-            .filter_map(|func_result| {
-                let Err(failure) = func_result else {
-                    return None;
-                };
-                let functions = match *failure {
-                    CheckFailure::ValMismatch {
-                        func_idx,
-                        arg_idx,
-                        val_idx,
-                        ..
-                    }
-                    | CheckFailure::TagMismatch {
-                        func_idx,
-                        arg_idx,
-                        val_idx,
-                        ..
-                    } => FunctionSelector::One {
-                        idx: func_idx,
-                        args: ArgSelector::One {
-                            idx: arg_idx,
-                            vals: ValSelector::One { idx: val_idx },
-                        },
+        // FIXME: certainly classes of run failure could also be minimized,
+        // because we have information indicating there was an error in a specific func!
+        for (subtest_idx, subtest) in check.subtest_checks.iter().enumerate() {
+            let Err(failure) = &subtest.result else {
+                continue;
+            };
+
+            let functions = match *failure {
+                CheckFailure::ValMismatch {
+                    func_idx,
+                    arg_idx,
+                    val_idx,
+                    ..
+                }
+                | CheckFailure::TagMismatch {
+                    func_idx,
+                    arg_idx,
+                    val_idx,
+                    ..
+                } => FunctionSelector::One {
+                    idx: func_idx,
+                    args: ArgSelector::One {
+                        idx: arg_idx,
+                        vals: ValSelector::One { idx: val_idx },
                     },
-                };
+                },
+            };
 
-                let mut test_key = report.key.clone();
-                test_key.options.functions = functions;
-                test_key.options.val_writer = cfg.minimizing_write_impl;
-                let mut rules = report.rules.clone();
-                rules.run = TestRunMode::Generate;
+            let mut test_key = report.key.clone();
+            test_key.options.functions = functions;
+            test_key.options.val_writer = cfg.minimizing_write_impl;
+            let mut rules = report.rules;
+            rules.run = TestRunMode::Generate;
 
-                let task = harness.clone().spawn_test(rt, rules, test_key);
-                Some(task)
-            })
-            .collect()
-    });
+            let task = harness.clone().spawn_test(rt, rules, test_key);
+            tasks.push((test_idx, subtest_idx, task));
+        }
+    }
 
-    let _results = tasks
-        .into_iter()
-        .map(|task| rt.block_on(task).expect("failed to join task"))
-        .collect::<Vec<_>>();
+    for (test_idx, subtest_idx, task) in tasks {
+        let results = rt.block_on(task).expect("failed to join task");
+        reports.tests[test_idx]
+            .results
+            .check
+            .as_mut()
+            .unwrap()
+            .subtest_checks[subtest_idx]
+            .minimized = results.source.and_then(|r| r.ok());
+    }
 }

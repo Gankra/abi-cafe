@@ -13,6 +13,7 @@ pub struct Paths {
     pub out_dir: Utf8PathBuf,
     pub generated_src_dir: Utf8PathBuf,
     pub runtime_test_input_dir: Option<Utf8PathBuf>,
+    pub runtime_rules_file: Utf8PathBuf,
 }
 impl Paths {
     pub fn harness_dylib_main_file(&self) -> Utf8PathBuf {
@@ -89,10 +90,14 @@ pub fn load_file(file: &File) -> String {
     clean_newlines(string)
 }
 
-pub fn tests() -> &'static Dir<'static> {
+pub fn static_tests() -> &'static Dir<'static> {
     INCLUDES
         .get_dir("tests")
         .expect("includes didn't contain ./test")
+}
+
+pub fn static_rules() -> String {
+    get_file("harness/abi-cafe-rules.toml")
 }
 
 fn clean_newlines(input: &str) -> String {

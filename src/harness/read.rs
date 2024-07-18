@@ -32,6 +32,32 @@ impl Pathish {
     }
 }
 
+pub fn find_test_rules(cfg: &Config) -> Result<Vec<ExpectFile>, GenerateError> {
+    let static_rules = find_test_rules_static(cfg.disable_builtin_rules)?;
+    let rules = find_test_rules_runtime(&cfg.paths.runtime_rules_file)?;
+    Ok(vec![static_rules, rules])
+}
+
+pub fn find_test_rules_static(disable_builtin_rules: bool) -> Result<ExpectFile, GenerateError> {
+    let rules = if disable_builtin_rules {
+        ExpectFile::default()
+    } else {
+        let data = files::static_rules();
+        toml::from_str(&data)?
+    };
+    Ok(rules)
+}
+
+pub fn find_test_rules_runtime(rule_file: &Utf8Path) -> Result<ExpectFile, GenerateError> {
+    if rule_file.exists() {
+        let data = read_runtime_file_to_string(rule_file)?;
+        let rules = toml::from_str(&data)?;
+        Ok(rules)
+    } else {
+        Ok(ExpectFile::default())
+    }
+}
+
 pub fn find_tests(cfg: &Config) -> Result<SortedMap<TestId, TestFile>, GenerateError> {
     let mut tests = find_tests_runtime(cfg.paths.runtime_test_input_dir.as_deref())?;
     let mut more_tests = find_tests_static(cfg.disable_builtin_tests)?;
@@ -77,7 +103,7 @@ pub fn find_tests_static(
         return Ok(tests);
     }
 
-    let mut dirs = vec![crate::files::tests()];
+    let mut dirs = vec![crate::files::static_tests()];
     while let Some(dir) = dirs.pop() {
         for entry in dir.entries() {
             // If it's a dir, add it to the working set

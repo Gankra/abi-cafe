@@ -218,7 +218,7 @@ pub enum Repr {
     Transparent,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize)]
 pub enum LangRepr {
     Rust,
     C,

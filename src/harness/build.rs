@@ -5,8 +5,8 @@ use camino::Utf8Path;
 use tracing::info;
 
 use crate::error::*;
+use crate::harness::report::*;
 use crate::harness::test::*;
-use crate::report::*;
 use crate::*;
 
 impl TestHarness {

@@ -17,11 +17,12 @@ mod build;
 mod check;
 mod generate;
 mod read;
+pub mod report;
 mod run;
 pub mod test;
 pub mod vals;
 
-pub use read::{find_tests, spawn_read_test};
+pub use read::{find_test_rules, find_tests, spawn_read_test};
 pub use run::TestBuffer;
 
 pub type Memoized<K, V> = Mutex<SortedMap<K, Arc<OnceCell<V>>>>;
@@ -30,6 +31,7 @@ pub struct TestHarness {
     paths: Paths,
     toolchains: Toolchains,
     tests: SortedMap<TestId, Arc<Test>>,
+    test_rules: Vec<ExpectFile>,
     tests_with_vals: Memoized<(TestId, ValueGeneratorKind), Arc<TestWithVals>>,
     tests_with_toolchain:
         Memoized<(TestId, ValueGeneratorKind, ToolchainId), Arc<TestWithToolchain>>,
@@ -39,11 +41,16 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    pub fn new(tests: SortedMap<TestId, Arc<Test>>, cfg: &Config) -> Self {
+    pub fn new(
+        test_rules: Vec<ExpectFile>,
+        tests: SortedMap<TestId, Arc<Test>>,
+        cfg: &Config,
+    ) -> Self {
         let toolchains = toolchains::create_toolchains(cfg);
         Self {
             paths: cfg.paths.clone(),
             tests,
+            test_rules,
             toolchains,
             tests_with_vals: Default::default(),
             tests_with_toolchain: Default::default(),
@@ -109,13 +116,6 @@ impl TestHarness {
             .clone();
         Ok(output)
     }
-    pub fn get_test_rules(&self, test_key: &TestKey) -> TestRules {
-        let caller = self.toolchains[&test_key.caller].clone();
-        let callee = self.toolchains[&test_key.callee].clone();
-
-        get_test_rules(test_key, &*caller, &*callee)
-    }
-
     pub fn spawn_test(
         self: Arc<Self>,
         rt: &tokio::runtime::Runtime,
@@ -262,26 +262,18 @@ impl TestHarness {
             WriteImpl::HarnessCallback => {
                 // Do nothing, implicit default
             }
-            WriteImpl::Print => {
+            other => {
                 output.push_str(separator);
-                output.push_str("print");
-            }
-            WriteImpl::Assert => {
-                output.push_str(separator);
-                output.push_str("assert");
-            }
-            WriteImpl::Noop => {
-                output.push_str(separator);
-                output.push_str("noop");
+                output.push_str(&other.to_string())
             }
         }
         match val_generator {
             ValueGeneratorKind::Graffiti => {
                 // Do nothing, implicit default
             }
-            ValueGeneratorKind::Random { seed } => {
+            other => {
                 output.push_str(separator);
-                output.push_str(&format!("random{seed}"));
+                output.push_str(&other.to_string())
             }
         }
         output

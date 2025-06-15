@@ -11,11 +11,14 @@ The following toolchains are available, but only "rustc" and "cc" are enabled by
 
 * rustc - uses the rustc on your PATH
 * cc - gets the "system" C compiler via the CC crate (supports msvc on windows)
-* gcc - explicitly run the gcc on your PATH (probably less reliable than cc)
-* clang  - explicitly run the clang on your PATH (probably less reliable than cc)
+* gcc - explicitly run the gcc on your PATH
+* clang - explicitly run the clang on your PATH
+* zigcc - explicitly run the zigcc on your PATH
 * ~~msvc~~ (incomplete)
 
-You can also add custom rustc codegen backends as new toolchain (inheriting all the behaviour of the rustc toolchain) with `--rust-codegen-backend=mytoolchain:path/to/codegen_backend`. Where `mytoolchain` is a custom id for referring to it in `--pairs` and test output.
+You can also add custom rustc codegen backends as new toolchain (inheriting all the behaviour of the rustc toolchain) with `--rust-codegen-backend=mytoolchain:path/to/codegen_backend`. Where `mytoolchain` is a custom id for referring to it [in `--pairs` and test output](./tests.md#test-rules-expectations).
+
+Note that the `rustc` on PATH is currently required for ABI Cafe to work at all -- it will be used as the authoritaty on what the current host platform is, and the test harness binaries we generate and run are compiled and linked with it.
 
 
 ## `--pairs`

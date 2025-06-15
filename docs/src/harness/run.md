@@ -1,5 +1,7 @@
 # the runtime
 
+> NOTE: the high-level idea here is still the same, but the harness has since switched to building an executable and running it as its own process, with json messages over stdout communicating values. This has made ABI Cafe able to handle a test segfaulting, which is kinda important since we're hear to find compiler bugs! [This page should be rewritten](https://github.com/Gankra/abi-cafe/issues/69).
+
 Implementation details of dylib test harness are split up between [src/harness/run.rs](https://github.com/Gankra/abi-cafe/blob/main/src/harness/run.rs) and the contents of the top-level [/include/harness/](https://github.com/Gankra/abi-cafe/blob/main/include/harness/). The contents of /include/harness/ are:
 
 * "headers" for the testing framework for each language

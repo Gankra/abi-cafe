@@ -5,8 +5,7 @@
 
 ## Quickstart
 
-To run ABI Cafe, just [checkout the repository](https://github.com/Gankra/abi-cafe) and `cargo run`!
-
+To run ABI Cafe you can `cargo install abi-cafe` and run `abi-cafe`, *or* [checkout the repository](https://github.com/Gankra/abi-cafe) and `cargo run`!
 
 ## What Is This
 

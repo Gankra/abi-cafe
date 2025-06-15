@@ -5,10 +5,10 @@
 
 ## Quickstart
 
-To run ABI Cafe, just [checkout the repository](https://github.com/Gankra/abi-cafe) and `cargo run`!
+To run ABI Cafe, just `cargo install abi-cafe` and run `abi-cafe`!
 
-([`cargo install` TBD...](https://github.com/Gankra/abi-cafe/issues/49))
-
+We will then find the Rust compiler and C compiler on your system and check that the two have compatible ABIs.
+(A `./target/` directory will be made wherever you run it.)
 
 
 ## What Is This

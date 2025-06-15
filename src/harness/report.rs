@@ -709,8 +709,7 @@ impl FullReport {
         _harness: &TestHarness,
         f: impl std::io::Write,
     ) -> Result<(), std::io::Error> {
-        serde_json::to_writer_pretty(f, self)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        serde_json::to_writer_pretty(f, self).map_err(std::io::Error::other)
     }
     pub fn print_rustc_json(
         &self,
@@ -725,7 +724,7 @@ impl FullReport {
                 "test_count": self.summary.num_tests - self.summary.num_skipped,
             }),
         )
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
         writeln!(&mut f)?;
 
         for test in &self.tests {
@@ -744,7 +743,7 @@ impl FullReport {
                     "name": &test_name,
                 }),
             )
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
             writeln!(&mut f)?;
             serde_json::to_writer(
                 &mut f,
@@ -755,7 +754,7 @@ impl FullReport {
                     "stdout": status_message,
                 }),
             )
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
             writeln!(&mut f)?;
         }
 
@@ -773,7 +772,7 @@ impl FullReport {
                 "exec_time": 0.0,
             }),
         )
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
         writeln!(&mut f)?;
 
         Ok(())

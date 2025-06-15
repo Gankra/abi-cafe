@@ -253,7 +253,7 @@ impl<'a> ValueRef<'a> {
         &self.tree.funcs[self.func_idx]
     }
 }
-impl<'a> std::ops::Deref for ValueRef<'a> {
+impl std::ops::Deref for ValueRef<'_> {
     type Target = Value;
     fn deref(&self) -> &Self::Target {
         &self.tree.funcs[self.func_idx].args[self.arg_idx].vals[self.val_idx]

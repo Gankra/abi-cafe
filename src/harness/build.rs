@@ -142,7 +142,7 @@ fn build_harness_dylib(
 
     let src = paths.harness_dylib_main_file();
     let output = paths.out_dir.join(dynamic_lib_name);
-    let mut cmd = Command::new(&rustc);
+    let mut cmd = Command::new(rustc);
     cmd.arg("-v")
         .arg("-L")
         .arg(&paths.out_dir)

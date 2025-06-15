@@ -372,7 +372,7 @@ where
 /// Same as MapVisitor but grabs the special `idx: u64` field
 struct SpanVisitor<'a>(&'a mut SpanEntry);
 
-impl<'a> tracing::field::Visit for SpanVisitor<'a> {
+impl tracing::field::Visit for SpanVisitor<'_> {
     fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
         self.0.fields.insert(field.to_string(), value.to_string());
     }
@@ -411,7 +411,7 @@ impl<'a> tracing::field::Visit for SpanVisitor<'a> {
 /// Super boring generic field slurping
 struct MapVisitor<'a>(&'a mut BTreeMap<String, String>);
 
-impl<'a> tracing::field::Visit for MapVisitor<'a> {
+impl tracing::field::Visit for MapVisitor<'_> {
     fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
         self.0.insert(field.to_string(), value.to_string());
     }

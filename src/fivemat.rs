@@ -26,13 +26,13 @@ impl Drop for FivematIndent<'_, '_> {
         self.inner.sub_indent(self.count);
     }
 }
-impl<'a, 'b> std::ops::Deref for FivematIndent<'a, 'b> {
+impl<'a> std::ops::Deref for FivematIndent<'a, '_> {
     type Target = Fivemat<'a>;
     fn deref(&self) -> &Fivemat<'a> {
         self.inner
     }
 }
-impl<'a, 'b> std::ops::DerefMut for FivematIndent<'a, 'b> {
+impl<'a> std::ops::DerefMut for FivematIndent<'a, '_> {
     fn deref_mut(&mut self) -> &mut Fivemat<'a> {
         self.inner
     }
@@ -77,7 +77,7 @@ impl<'a> Fivemat<'a> {
     }
 }
 
-impl<'a> std::fmt::Write for Fivemat<'a> {
+impl std::fmt::Write for Fivemat<'_> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         let mut multiline = false;
         let ends_with_newline = s.ends_with('\n') || s.ends_with("\r\n") || s.ends_with("\n\r");

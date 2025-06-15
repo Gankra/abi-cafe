@@ -160,6 +160,9 @@ fn build_harness_dylib(
         .arg("-o")
         .arg(&output)
         .arg(&src);
+    if toolchains.debug {
+        cmd.arg("-g");
+    }
 
     debug!("running: {:?}", cmd);
     let out = cmd.output()?;
@@ -201,6 +204,9 @@ fn build_harness_main(
         .arg("-o")
         .arg(&output)
         .arg(bin_main);
+    if toolchains.debug {
+        cmd.arg("-g");
+    }
 
     debug!("running: {:?}", cmd);
     let out = cmd.output()?;

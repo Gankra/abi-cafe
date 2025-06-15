@@ -56,6 +56,7 @@ pub struct Toolchains {
     pub platform_info: PlatformInfo,
     pub rustc_command: Utf8PathBuf,
     pub toolchains: ToolchainMap,
+    pub debug: bool,
 }
 pub type ToolchainMap = SortedMap<String, Arc<dyn Toolchain + Send + Sync>>;
 
@@ -104,6 +105,7 @@ pub(crate) fn create_toolchains(cfg: &crate::Config) -> Toolchains {
         platform_info,
         rustc_command,
         toolchains,
+        debug: cfg.debug,
     }
 }
 

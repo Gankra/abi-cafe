@@ -61,6 +61,8 @@ pub struct RustcToolchain {
     platform: Platform,
     /// What codegen backend are we using?
     codegen_backend: Option<String>,
+    /// Enable debuginfo
+    debug: bool,
 }
 
 #[derive(PartialEq)]
@@ -96,6 +98,9 @@ impl Toolchain for RustcToolchain {
             .arg(&self.platform_info.target)
             .arg(format!("-Cmetadata={lib_name}"))
             .arg(src_path);
+        if self.debug {
+            cmd.arg("-g");
+        }
         if let Some(codegen_backend) = &self.codegen_backend {
             cmd.arg(format!("-Zcodegen-backend={codegen_backend}"));
         }
@@ -285,7 +290,7 @@ impl RustcToolchain {
 }
 
 impl RustcToolchain {
-    pub fn new(_system_info: &Config, command: &Utf8Path, codegen_backend: Option<String>) -> Self {
+    pub fn new(system_info: &Config, command: &Utf8Path, codegen_backend: Option<String>) -> Self {
         // Get rustc's version and host
         let rustc_info = Command::new(command)
             .arg("-Vv")
@@ -337,6 +342,7 @@ impl RustcToolchain {
             platform_info: PlatformInfo { target: host, cfgs },
             platform,
             codegen_backend,
+            debug: system_info.debug,
         }
     }
 

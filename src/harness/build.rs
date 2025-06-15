@@ -73,7 +73,7 @@ impl TestHarness {
             .expect("failed to acquire concurrency limit semaphore");
         let dynamic_lib_name = self.dynamic_lib_name(key);
         info!("linking     {dynamic_lib_name}");
-        build_harness_dylib(&self.paths, build, &dynamic_lib_name)
+        build_harness_dylib(&self.toolchains, &self.paths, build, &dynamic_lib_name)
     }
 
     pub async fn link_bin(
@@ -93,7 +93,7 @@ impl TestHarness {
         } else {
             self.paths.freestanding_bin_main_file()
         };
-        build_harness_main(&self.paths, build, &bin_name, &bin_main)
+        build_harness_main(&self.toolchains, &self.paths, build, &bin_name, &bin_main)
     }
 
     fn static_lib_name(&self, key: &TestKey, call_side: CallSide) -> String {
@@ -132,13 +132,17 @@ async fn build_static_lib(
 
 /// Compile and link the test harness with the two sides of the FFI boundary.
 fn build_harness_dylib(
+    toolchains: &Toolchains,
     paths: &Paths,
     build: &BuildOutput,
     dynamic_lib_name: &str,
 ) -> Result<LinkOutput, LinkError> {
+    let target = &toolchains.platform_info.target;
+    let rustc = &toolchains.rustc_command;
+
     let src = paths.harness_dylib_main_file();
     let output = paths.out_dir.join(dynamic_lib_name);
-    let mut cmd = Command::new("rustc");
+    let mut cmd = Command::new(&rustc);
     cmd.arg("-v")
         .arg("-L")
         .arg(&paths.out_dir)
@@ -149,7 +153,7 @@ fn build_harness_dylib(
         .arg("--crate-type")
         .arg("cdylib")
         .arg("--target")
-        .arg(built_info::TARGET)
+        .arg(target)
         // .arg("-Csave-temps=y")
         // .arg("--out-dir")
         // .arg("target/temp/")
@@ -169,13 +173,17 @@ fn build_harness_dylib(
 
 /// Compile and link the test harness with the two sides of the FFI boundary.
 fn build_harness_main(
+    toolchains: &Toolchains,
     paths: &Paths,
     build: &BuildOutput,
     bin_name: &str,
     bin_main: &Utf8Path,
 ) -> Result<LinkOutput, LinkError> {
+    let target = &toolchains.platform_info.target;
+    let rustc = &toolchains.rustc_command;
+
     let output = paths.out_dir.join(bin_name);
-    let mut cmd = Command::new("rustc");
+    let mut cmd = Command::new(rustc);
     cmd.arg("-v")
         .arg("-L")
         .arg(&paths.out_dir)
@@ -186,7 +194,7 @@ fn build_harness_main(
         .arg("--crate-type")
         .arg("bin")
         .arg("--target")
-        .arg(built_info::TARGET)
+        .arg(target)
         // .arg("-Csave-temps=y")
         // .arg("--out-dir")
         // .arg("target/temp/")

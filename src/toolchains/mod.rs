@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::harness::test::*;
 use crate::{error::*, SortedMap};
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use kdl_script::PunEnv;
 
 pub mod c;
@@ -52,37 +52,64 @@ pub trait Toolchain {
 }
 
 /// All the toolchains
-pub type Toolchains = SortedMap<String, Arc<dyn Toolchain + Send + Sync>>;
+pub struct Toolchains {
+    pub platform_info: PlatformInfo,
+    pub rustc_command: Utf8PathBuf,
+    pub toolchains: ToolchainMap,
+}
+pub type ToolchainMap = SortedMap<String, Arc<dyn Toolchain + Send + Sync>>;
+
+#[derive(Debug, Clone)]
+pub struct PlatformInfo {
+    /// Platform we're targetting
+    pub target: String,
+    /// Enabled rustc cfgs, used for our own test harness cfgs
+    pub cfgs: Vec<cargo_platform::Cfg>,
+}
 
 /// Create all the toolchains
 pub(crate) fn create_toolchains(cfg: &crate::Config) -> Toolchains {
-    let mut toolchains = Toolchains::default();
+    let mut toolchains = ToolchainMap::default();
+
+    let rustc_command: Utf8PathBuf = "rustc".into();
+    let base_rustc = RustcToolchain::new(cfg, &rustc_command, None);
+    let platform_info = base_rustc.platform_info.clone();
+
+    // Set up env vars for CC
+    std::env::set_var("OUT_DIR", &cfg.paths.out_dir);
+    std::env::set_var("HOST", platform_info.target.clone());
+    std::env::set_var("TARGET", platform_info.target.clone());
+    std::env::set_var("OPT_LEVEL", "0");
 
     // Add rust toolchains
-    add_toolchain(
-        &mut toolchains,
-        TOOLCHAIN_RUSTC,
-        RustcToolchain::new(cfg, None),
-    );
+    add_toolchain(&mut toolchains, TOOLCHAIN_RUSTC, base_rustc);
     for (name, path) in &cfg.rustc_codegen_backends {
         add_toolchain(
             &mut toolchains,
             name,
-            RustcToolchain::new(cfg, Some(path.to_owned())),
+            RustcToolchain::new(cfg, &rustc_command, Some(path.to_owned())),
         );
     }
 
     // Add c toolchains
     for &name in C_TOOLCHAINS {
-        add_toolchain(&mut toolchains, name, CcToolchain::new(cfg, name));
+        add_toolchain(
+            &mut toolchains,
+            name,
+            CcToolchain::new(cfg, &platform_info.target, name),
+        );
     }
 
-    toolchains
+    Toolchains {
+        platform_info,
+        rustc_command,
+        toolchains,
+    }
 }
 
 /// Register a toolchain
 fn add_toolchain<A: Toolchain + Send + Sync + 'static>(
-    toolchains: &mut Toolchains,
+    toolchains: &mut ToolchainMap,
     id: impl Into<ToolchainId>,
     toolchain: A,
 ) {

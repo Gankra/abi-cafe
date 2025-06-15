@@ -29,7 +29,7 @@ pub type Memoized<K, V> = Mutex<SortedMap<K, Arc<OnceCell<V>>>>;
 
 pub struct TestHarness {
     paths: Paths,
-    toolchains: Toolchains,
+    pub toolchains: Toolchains,
     tests: SortedMap<TestId, Arc<Test>>,
     test_rules: Vec<ExpectFile>,
     tests_with_vals: Memoized<(TestId, ValueGeneratorKind), Arc<TestWithVals>>,
@@ -66,7 +66,7 @@ impl TestHarness {
         call_side: CallSide,
     ) -> Arc<dyn Toolchain + Send + Sync> {
         let toolchain_id = key.toolchain_id(call_side);
-        self.toolchains[toolchain_id].clone()
+        self.toolchains.toolchains[toolchain_id].clone()
     }
 
     pub fn all_tests(&self) -> Vec<Arc<Test>> {
@@ -100,7 +100,7 @@ impl TestHarness {
     ) -> Result<Arc<TestWithToolchain>, GenerateError> {
         let test_id = test.name.clone();
         let vals = test.vals.generator_kind;
-        let toolchain = self.toolchains[&toolchain_id].clone();
+        let toolchain = self.toolchains.toolchains[&toolchain_id].clone();
         // Briefly lock this map to insert/acquire a OnceCell and then release the lock
         let once = self
             .tests_with_toolchain

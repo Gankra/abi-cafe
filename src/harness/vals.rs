@@ -148,7 +148,7 @@ impl ValueTree {
     }
 
     #[track_caller]
-    pub fn at_func(&self, func_idx: usize) -> FuncValuesIter {
+    pub fn at_func(&self, func_idx: usize) -> FuncValuesIter<'_> {
         assert!(
             func_idx < self.funcs.len(),
             "internal error: ValueTree func_idx exceeded"

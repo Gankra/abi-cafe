@@ -25,6 +25,7 @@ pub struct CcToolchain {
     target: String,
     platform: Platform,
     mode: &'static str,
+    debug: bool,
 }
 
 #[derive(PartialEq)]
@@ -272,7 +273,7 @@ impl CcToolchain {
 }
 
 impl CcToolchain {
-    pub fn new(_system_info: &Config, target: &str, mode: &'static str) -> Self {
+    pub fn new(system_info: &Config, target: &str, mode: &'static str) -> Self {
         let cc_flavor = match mode {
             TOOLCHAIN_GCC => CCFlavor::Gcc,
             TOOLCHAIN_CLANG => CCFlavor::Clang,
@@ -309,6 +310,7 @@ impl CcToolchain {
             target: target.to_owned(),
             platform,
             mode,
+            debug: system_info.debug,
         }
     }
 
@@ -335,6 +337,7 @@ impl CcToolchain {
         build
             .file(src_path)
             .opt_level(0)
+            .debug(self.debug)
             .cargo_metadata(false)
             .cargo_debug(false)
             .cargo_warnings(false)
@@ -357,6 +360,9 @@ impl CcToolchain {
         let mut cmd = Command::new("clang");
         for flag in self.extra_flags() {
             cmd.arg(flag);
+        }
+        if self.debug {
+            cmd.arg("-g");
         }
         cmd.arg("-ffunction-sections")
             .arg("-fdata-sections")
@@ -388,6 +394,9 @@ impl CcToolchain {
         for flag in self.extra_flags() {
             cmd.arg(flag);
         }
+        if self.debug {
+            cmd.arg("-g");
+        }
         cmd.arg("-ffunction-sections")
             .arg("-fdata-sections")
             .arg("-fPIC")
@@ -416,6 +425,9 @@ impl CcToolchain {
         let mut cmd = Command::new("gcc");
         for flag in self.extra_flags() {
             cmd.arg(flag);
+        }
+        if self.debug {
+            cmd.arg("-g");
         }
         cmd.arg("-ffunction-sections")
             .arg("-fdata-sections")

@@ -139,6 +139,12 @@ struct Cli {
     #[clap(long)]
     rules: Option<Utf8PathBuf>,
 
+    /// Enable debuginfo in compiled binaries.
+    ///
+    /// i.e. this passes -g to various compilers.
+    #[clap(long)]
+    debug: bool,
+
     /// disable the builtin tests
     ///
     /// See also `--add-tests`
@@ -172,6 +178,7 @@ pub fn make_app() -> Config {
         rules,
         disable_builtin_tests,
         disable_builtin_rules,
+        debug,
         // unimplemented
         select_vals: _,
         key: _,
@@ -269,5 +276,6 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
         disable_builtin_tests,
         disable_builtin_rules,
         paths,
+        debug,
     }
 }

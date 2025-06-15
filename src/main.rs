@@ -70,6 +70,7 @@ pub struct Config {
     pub disable_builtin_tests: bool,
     pub disable_builtin_rules: bool,
     pub paths: Paths,
+    pub debug: bool,
 }
 
 #[derive(Debug, thiserror::Error)]

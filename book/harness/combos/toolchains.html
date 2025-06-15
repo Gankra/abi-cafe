@@ -1,0 +1,297 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>toolchain pairings - ABI Cafe</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../../highlight.css">
+        <link rel="stylesheet" href="../../tomorrow-night.css">
+        <link rel="stylesheet" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><li class="part-title">ABI Cafe</li><li class="chapter-item expanded "><a href="../../intro.html"><strong aria-hidden="true">1.</strong> introduction</a></li><li class="chapter-item expanded "><a href="../../harness/combos.html"><strong aria-hidden="true">2.</strong> usage</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../harness/combos/tests.html"><strong aria-hidden="true">2.1.</strong> test files</a></li><li class="chapter-item expanded "><a href="../../harness/combos/conventions.html"><strong aria-hidden="true">2.2.</strong> calling conventions</a></li><li class="chapter-item expanded "><a href="../../harness/combos/reprs.html"><strong aria-hidden="true">2.3.</strong> type reprs</a></li><li class="chapter-item expanded "><a href="../../harness/combos/toolchains.html" class="active"><strong aria-hidden="true">2.4.</strong> toolchain pairings</a></li><li class="chapter-item expanded "><a href="../../harness/combos/values.html"><strong aria-hidden="true">2.5.</strong> value generators</a></li><li class="chapter-item expanded "><a href="../../harness/combos/selectors.html"><strong aria-hidden="true">2.6.</strong> value selectors</a></li><li class="chapter-item expanded "><a href="../../harness/combos/writers.html"><strong aria-hidden="true">2.7.</strong> value writers</a></li></ol></li><li class="chapter-item expanded "><a href="../../trophies.html"><strong aria-hidden="true">3.</strong> trophy case</a></li><li class="chapter-item expanded affix "><li class="part-title">KDLScript</li><li class="chapter-item expanded "><a href="../../kdl-script/index.html"><strong aria-hidden="true">4.</strong> introduction</a></li><li class="chapter-item expanded "><a href="../../kdl-script/attributes.html"><strong aria-hidden="true">5.</strong> attributes</a></li><li class="chapter-item expanded "><a href="../../kdl-script/functions/index.html"><strong aria-hidden="true">6.</strong> functions</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kdl-script/functions/signatures.html"><strong aria-hidden="true">6.1.</strong> signatures</a></li><li class="chapter-item expanded "><a href="../../kdl-script/functions/bodies.html"><strong aria-hidden="true">6.2.</strong> bodies (lmao)</a></li></ol></li><li class="chapter-item expanded "><a href="../../kdl-script/types/index.html"><strong aria-hidden="true">7.</strong> types</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kdl-script/types/primitives.html"><strong aria-hidden="true">7.1.</strong> primitives</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.2.</strong> nominal types</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kdl-script/types/struct.html"><strong aria-hidden="true">7.2.1.</strong> struct</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/union.html"><strong aria-hidden="true">7.2.2.</strong> union</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/enum.html"><strong aria-hidden="true">7.2.3.</strong> enum</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/tagged.html"><strong aria-hidden="true">7.2.4.</strong> tagged</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/alias.html"><strong aria-hidden="true">7.2.5.</strong> alias</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/pun.html"><strong aria-hidden="true">7.2.6.</strong> pun</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.3.</strong> structural types</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kdl-script/types/refs.html"><strong aria-hidden="true">7.3.1.</strong> references</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/arrays.html"><strong aria-hidden="true">7.3.2.</strong> arrays</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/tuples.html"><strong aria-hidden="true">7.3.3.</strong> tuples</a></li></ol></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ABI Cafe</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/Gankra/abi-cafe" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/Gankra/abi-cafe/edit/main/docs/src/harness/combos/toolchains.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="toolchains"><a class="header" href="#toolchains">toolchains</a></h1>
+<p>Toolchains refer to a specific compiler (or configuration of a compiler). The entire purpose of ABI Cafe is to take two compilers and pair them up, checking that code built with one can properly call into code built by the other.</p>
+<p>Within ABI Cafe, each Toolchain also comes with a <a href="../combos/toolchains.html">code generation backend</a>, which can take <a href="../../kdl-script/index.html">a header file describing some types and functions</a> and generate either an implementation of those functions, or a caller of those functions.</p>
+<h2 id="--toolchains"><a class="header" href="#--toolchains"><code>--toolchains</code></a></h2>
+<p>The following toolchains are available, but only "rustc" and "cc" are enabled by default.</p>
+<ul>
+<li>rustc - uses the rustc on your PATH</li>
+<li>cc - gets the "system" C compiler via the CC crate (supports msvc on windows)</li>
+<li>gcc - explicitly run the gcc on your PATH</li>
+<li>clang - explicitly run the clang on your PATH</li>
+<li>zigcc - explicitly run the zigcc on your PATH</li>
+<li><del>msvc</del> (incomplete)</li>
+</ul>
+<p>You can also add custom rustc codegen backends as new toolchain (inheriting all the behaviour of the rustc toolchain) with <code>--rust-codegen-backend=mytoolchain:path/to/codegen_backend</code>. Where <code>mytoolchain</code> is a custom id for referring to it <a href="./tests.html#test-rules-expectations">in <code>--pairs</code> and test output</a>.</p>
+<p>Note that the <code>rustc</code> on PATH is currently required for ABI Cafe to work at all -- it will be used as the authoritaty on what the current host platform is, and the test harness binaries we generate and run are compiled and linked with it.</p>
+<h2 id="--pairs"><a class="header" href="#--pairs"><code>--pairs</code></a></h2>
+<p>By default, we will look at the enabled toolchains and pair them with themselves and all the default "pairer" toolchains (if they're enabled). The default pairer toolchains are "rustc" and "cc".</p>
+<p>With the default toolchains enabled, that means we will test:</p>
+<ul>
+<li>rustc_calls_rustc</li>
+<li>cc_calls_cc</li>
+<li>rustc_calls_cc</li>
+<li>cc_calls_rustc</li>
+</ul>
+<h2 id="adding-a-toolchain"><a class="header" href="#adding-a-toolchain">Adding A Toolchain</a></h2>
+<p>Adding a toolchain has two levels of difficulty:</p>
+<ul>
+<li>Easier: Adding a new compiler or mode for an existing language</li>
+<li>Harder: Adding a brand new language (and its compiler)</li>
+</ul>
+<p>The easier case is probably "adding some settings to an existing Toolchain" while the harder case is probably "writing a code generator for a language (with the help of abi-cafe's libraries)".</p>
+<p>(Although <a href="https://github.com/Gankra/abi-cafe/issues/31">if you want to add a C++ backend</a>, <em>probably</em> you want it to be a variant of the C toolchain, and not a whole new one, since, a lot of overlap there?)</p>
+<h3 id="adding-a-new-compiler-or-mode-for-an-existing-language"><a class="header" href="#adding-a-new-compiler-or-mode-for-an-existing-language">Adding A New Compiler Or Mode For An Existing Language</a></h3>
+<p>All the work you'll probably want to do is in <code>src/toolchains/mod.rs</code>. Looking at how gcc is implemented as a variant of <code>CcToolchain</code> (<code>src/toolchains/c.rs</code>) is probably informative.</p>
+<p>At a minimum you will need to change <code>toolchains::create_toolchains</code> to create and register your <code>Toolchain</code>.</p>
+<p><code>Toolchain::compile_caller</code> and <code>Toolchain::compile_callee</code> will likely need to be changed to select your compiler, or use the compiler flags for your mode.</p>
+<p><code>Toolchain::generate_caller</code> and <code>Toolchain::generate_callee</code> may also need to be modified to generate source code that is compatible with your new compiler/mode. For instance when adding a</p>
+<p>To test your new toolchain out you can first make sure it works with itself by running:</p>
+<pre><code>cargo run -- --toolchains=mytoolchain
+</code></pre>
+<p>(where "mytoolchain" is the id you registered in <code>create_toolchains</code>)</p>
+<p>Once more confident you can pair it up with other compilers by running:</p>
+<pre><code>cargo run -- --toolchains=mytoolchain,rustc,cc
+</code></pre>
+<h3 id="adding-a-new-language-and-its-compiler"><a class="header" href="#adding-a-new-language-and-its-compiler">Adding A New Language (And Its Compiler)</a></h3>
+<p>In addition to the things you need to do in the previous section, you now need to specify how to generate source code for your language given <a href="../../kdl-script/index.html">a header file describing some types and functions</a>.</p>
+<p>I have good news, bad news, and okay news.</p>
+<p>The good news is we have several libraries and utilities for helping with this.</p>
+<p>The bad news is that no matter what you're going to need to create like a thousand lines of business logic for specifying the syntax of the language.</p>
+<p>The okay news is that a lot of this can be accomplished without <em>too much</em> pain by copying one of the existing Toolchains and just editing it incrementally, aggressively returning <code>UnimplementedError</code> to indicate unsupported features, or things you just haven't gotten to yet. This is totally fine, all the backends have places where they give up!</p>
+<p>As a codegen backend you will need to answer 3 major questions:</p>
+<ul>
+<li>declare: How do you declare types in this language?</li>
+<li>init: How do you initialize values in this language?</li>
+<li>write: How do you access and print fields of values in this language?</li>
+</ul>
+<p>This largely amounts to writing recursive functions which match on a type definition and loop over all the fields of that type, or handle primitive types as the base case.</p>
+<p>For reference, when the author of ABI Cafe rewrote the codebase, the C backend was recreated mostly from scratch in a day by copying the Rust implementation and changing Rust syntax to C syntax.</p>
+<p>In doing this, you will have 3 major allies (assuming you match the idioms of the other codgen backends):</p>
+<ul>
+<li><code>state.types</code> (<code>TypedProgram</code>) is the type system of the KDLScript Compiler, which gives you type ids for interning state, and handles computing facts about the type definitions</li>
+<li><code>state.vals</code>(<code>ValueTree</code>) has the values and enum variants your program should use</li>
+<li><code>f</code> (<code>Fivemat</code>) is an indent-aware Write implementation for creating pretty formatted code</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../harness/combos/reprs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../harness/combos/values.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../harness/combos/reprs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../harness/combos/values.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

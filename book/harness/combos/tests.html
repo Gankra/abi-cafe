@@ -1,0 +1,340 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>test files - ABI Cafe</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon.svg">
+        <link rel="shortcut icon" href="../../favicon.png">
+        <link rel="stylesheet" href="../../css/variables.css">
+        <link rel="stylesheet" href="../../css/general.css">
+        <link rel="stylesheet" href="../../css/chrome.css">
+        <link rel="stylesheet" href="../../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="../../highlight.css">
+        <link rel="stylesheet" href="../../tomorrow-night.css">
+        <link rel="stylesheet" href="../../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "../../";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><li class="part-title">ABI Cafe</li><li class="chapter-item expanded "><a href="../../intro.html"><strong aria-hidden="true">1.</strong> introduction</a></li><li class="chapter-item expanded "><a href="../../harness/combos.html"><strong aria-hidden="true">2.</strong> usage</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../harness/combos/tests.html" class="active"><strong aria-hidden="true">2.1.</strong> test files</a></li><li class="chapter-item expanded "><a href="../../harness/combos/conventions.html"><strong aria-hidden="true">2.2.</strong> calling conventions</a></li><li class="chapter-item expanded "><a href="../../harness/combos/reprs.html"><strong aria-hidden="true">2.3.</strong> type reprs</a></li><li class="chapter-item expanded "><a href="../../harness/combos/toolchains.html"><strong aria-hidden="true">2.4.</strong> toolchain pairings</a></li><li class="chapter-item expanded "><a href="../../harness/combos/values.html"><strong aria-hidden="true">2.5.</strong> value generators</a></li><li class="chapter-item expanded "><a href="../../harness/combos/selectors.html"><strong aria-hidden="true">2.6.</strong> value selectors</a></li><li class="chapter-item expanded "><a href="../../harness/combos/writers.html"><strong aria-hidden="true">2.7.</strong> value writers</a></li></ol></li><li class="chapter-item expanded "><a href="../../trophies.html"><strong aria-hidden="true">3.</strong> trophy case</a></li><li class="chapter-item expanded affix "><li class="part-title">KDLScript</li><li class="chapter-item expanded "><a href="../../kdl-script/index.html"><strong aria-hidden="true">4.</strong> introduction</a></li><li class="chapter-item expanded "><a href="../../kdl-script/attributes.html"><strong aria-hidden="true">5.</strong> attributes</a></li><li class="chapter-item expanded "><a href="../../kdl-script/functions/index.html"><strong aria-hidden="true">6.</strong> functions</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kdl-script/functions/signatures.html"><strong aria-hidden="true">6.1.</strong> signatures</a></li><li class="chapter-item expanded "><a href="../../kdl-script/functions/bodies.html"><strong aria-hidden="true">6.2.</strong> bodies (lmao)</a></li></ol></li><li class="chapter-item expanded "><a href="../../kdl-script/types/index.html"><strong aria-hidden="true">7.</strong> types</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kdl-script/types/primitives.html"><strong aria-hidden="true">7.1.</strong> primitives</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.2.</strong> nominal types</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kdl-script/types/struct.html"><strong aria-hidden="true">7.2.1.</strong> struct</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/union.html"><strong aria-hidden="true">7.2.2.</strong> union</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/enum.html"><strong aria-hidden="true">7.2.3.</strong> enum</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/tagged.html"><strong aria-hidden="true">7.2.4.</strong> tagged</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/alias.html"><strong aria-hidden="true">7.2.5.</strong> alias</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/pun.html"><strong aria-hidden="true">7.2.6.</strong> pun</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.3.</strong> structural types</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="../../kdl-script/types/refs.html"><strong aria-hidden="true">7.3.1.</strong> references</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/arrays.html"><strong aria-hidden="true">7.3.2.</strong> arrays</a></li><li class="chapter-item expanded "><a href="../../kdl-script/types/tuples.html"><strong aria-hidden="true">7.3.3.</strong> tuples</a></li></ol></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ABI Cafe</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/Gankra/abi-cafe" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/Gankra/abi-cafe/edit/main/docs/src/harness/combos/tests.md" title="Suggest an edit" aria-label="Suggest an edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="tests"><a class="header" href="#tests">tests</a></h1>
+<p>ABI Cafe tests are defined are <a href="../../kdl-script/index.html">KDLScript header files</a> describing an interface, for which we'll <a href="../combos.html">generate and build many different</a> implementations (callees) and users (callers). KDLScript was purpose-made for ABI Cafe, with a custom syntax that avoids us tying our hands to any particular language/semantics. The syntax will feel fairly familiar to Rust programmers.</p>
+<p>Each function in the test is regarded as a "subtest" that can be individually passed/failed.</p>
+<h2 id="adding-tests"><a class="header" href="#adding-tests">Adding Tests</a></h2>
+<p>The default suite of tests can be <a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests">found in <code>/include/tests/</code></a>, which is statically embedded in abi-cafe's binary. You don't need to register the test anywhere, we will just try to parse every file in the tests directory.</p>
+<p>There are two kinds of tests: <code>.kdl</code> ("<a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests/normal">normal</a>") and <code>.procgen.kdl</code> ("<a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests/procgen">procgen</a>").</p>
+<p>Procgen tests are sugar for normal tests, where you just define a type with the same name of the file (so <code>MetersU32.procgen.kdl</code> is expected to define a type named <code>MetersU32</code>), and we generate a battery of types/functions that stress test that the ABI handles that type properly.</p>
+<p><strong>We recommend preferring procgen tests, because they're simpler to write and will probably have better coverage than if you tried to manually define all the functions.</strong></p>
+<p>Suggested Examples:</p>
+<ul>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/normal/simple.kdl">simple.kdl</a> - a little example of a "normal" test with explicitly defined functions to test</li>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/struct/SimpleStruct.procgen.kdl">SimpleStruct.procgen.kdl</a> - similar to simple.kdl, but procgen</li>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/pun/MetersU32.procgen.kdl">MetersU32.procgen.kdl</a> - an example of a <a href="../../kdl-script/types/pun.html">"pun type"</a>, where different languages use different definitions</li>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/fancy/IntrusiveList.procgen.kdl">IntrusiveList.procgen.kdl</a> - an example of how we can procgen tests for self-referential types and tagged unions</li>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/primitive/i8.procgen.kdl">i8.procgen.kdl</a> - ok this one isn't instructive it's just funny that it can be a blank file because i8 is builtin so all the info needed is in the filename</li>
+</ul>
+<h2 id="test-rules-expectations"><a class="header" href="#test-rules-expectations">Test Rules (Expectations)</a></h2>
+<p>ABI Cafe's default expectations can be <a href="https://github.com/Gankra/abi-cafe/tree/main/include/harness/abi-cafe-rules.toml">found in <code>/include/harness/abi-cafe-rules.toml</code></a>, which is statically embedded in abi-cafe's binary (that file also contains some example annotations).</p>
+<p>Every entry in the rules is a <em>selector</em> of the form <code>target.&lt;platform&gt;.&lt;test-pattern&gt;</code>, how far to <code>run</code> tests that match the selector, and an <em>expectation</em> (<code>pass</code>, <code>fail</code>, <code>busted</code>, or <code>random</code>). Both run and expectation directives specify a testing stage to help ensure that tests pass or fail for the reason we expect (more on that below).</p>
+<p>This annotated test expectation file from rustc_codegen_cranelift is a good example that flexes the syntax and features:</p>
+<pre><code class="language-toml"># on aarch64 linux...
+# the F32Array test, with C convention...
+# will run to completion, but have ABI errors (should be fixed).
+[target.'cfg(all(target_arch = "aarch64", target_os = "linux"))']
+'F32Array::conv_c'.busted = "check"
+
+# On aarch64 macos...
+[target.'cfg(all(target_arch = "aarch64", target_os = "macos"))']
+# The SingleVariantUnion tests, with C convention, using repr(Rust)
+# will run to completion, but have ABI errors (should be fixed)
+'SingleVariantUnion::conv_c::repr_c'.busted = "check"
+# The OptionU128 tests, with C convention, using repr(Rust), when Rust is the caller
+# will crash when run (should be fixed)
+'OptionU128::conv_rust::repr_c::rustc_caller'.busted = "run"
+# The OptionU128 tests, with C convention, using repr(Rust), when Cranelift is the caller
+# will run to completion, but have ABI errors (should be fixed)
+'OptionU128::conv_rust::repr_c::cgclif_caller'.busted = "check"
+
+# On x64 msvc windows...
+[target.x86_64-pc-windows-msvc]
+# The simple test, using Rust convention
+# will run to completion, but have ABI errors (should be fixed)
+'simple::conv_rust'.busted = "check"
+# The simple test, using Rust convention, when the caller is rustc
+# will crash when run (should be fixed)
+'simple::conv_rust::rustc_caller'.busted = "run"
+
+# skip the f16 tests
+[target.'*'.'f16']
+run = "skip"
+
+# skip the f128 tests
+[target.'*'.'f128']
+run = "skip"
+</code></pre>
+<h3 id="platform"><a class="header" href="#platform"><code>&lt;platform&gt;</code></a></h3>
+<p>A test rule's <code>&lt;platform&gt;</code> has the same syntax as <a href="https://doc.rust-lang.org/cargo/reference/config.html#target">cargo target tables</a>: it can either be a target triple, or a rustc cfg. We also support <code>*</code> as a platform that matches all.</p>
+<h3 id="test-key"><a class="header" href="#test-key"><code>&lt;test-key&gt;</code></a></h3>
+<p>A test rule's <code>&lt;test-key&gt;</code> is the same <code>::</code>-separated value that abi-cafe will use to refer to <a href="../combos.html">a combinatoric variant of a test</a>, like <code>CLikeTagged::conv_c::repr_c::cc_calls_rustc</code> (this test-key is of the form <code>&lt;test&gt;::&lt;convention&gt;::&lt;repr&gt;::&lt;pair&gt;</code>). If abi-cafe reports a test failure you can just copy that key and use it here. However parts of the test key can be omitted to wildcard match groups of tests.</p>
+<p>A test-key can include the following parts:</p>
+<ul>
+<li><code>&lt;test&gt;</code>: the name of the test (<code>CLikeTagged</code>, this is the only purely positional part of a key, it must come first. You can omit it by starting a key with <code>::</code>)</li>
+<li><code>&lt;convention&gt;</code>: the <a href="./conventions.html">calling convention</a> (<code>conv_c</code>)</li>
+<li><code>&lt;repr&gt;</code>: the <a href="./reprs.html">repr of aggregates</a> (<code>repr_c</code>)</li>
+<li><code>&lt;generator&gt;</code>: the <a href="./values.html">value generator</a> (<code>graffiti</code>)</li>
+<li>a <a href="./toolchains.html">toolchain pairing selector</a>:
+<ul>
+<li><code>&lt;pairing&gt;</code>: this exact toolchain pairing in this order (<code>cc_calls_rustc</code>)</li>
+<li><code>&lt;caller&gt;</code>: the caller must be this toolchain (<code>rustc_caller</code>)</li>
+<li><code>&lt;callee&gt;</code>: the callee must be this toolchain (<code>cc_callee</code>)</li>
+<li><code>&lt;toolchain&gt;</code>: any pairing that includes this toolchain (<code>rustc_toolchain</code>)</li>
+</ul>
+</li>
+</ul>
+<h3 id="run"><a class="header" href="#run"><code>run</code></a></h3>
+<p>A test rule's <code>run</code> field specifies what <code>&lt;phase&gt;</code> to run the test to. The default is <code>run = "check"</code>.
+The phases are, in increasing order:</p>
+<ul>
+<li><code>"skip"</code>: don't run the test at all (marked as skipped)</li>
+<li><code>"generate"</code>: generate the source code</li>
+<li><code>"build"</code>: compile the source code into staticlibs</li>
+<li><code>"link"</code>: link the staticlibs into a binary</li>
+<li><code>"run"</code>: execute the binary</li>
+<li><code>"check"</code>: check the values reported by the binary (this is the default)</li>
+</ul>
+<h3 id="expectation"><a class="header" href="#expectation"><code>&lt;expectation&gt;</code></a></h3>
+<p>A test rule's <code>&lt;expectation&gt;</code> field specifies what result the test should produce. The default is <code>pass = "check"</code>.
+The expectations are:</p>
+<ul>
+<li><code>pass = &lt;phase&gt;</code>: The test must run at least up to <code>&lt;phase&gt;</code> and report a success in that phase</li>
+<li><code>fail = &lt;phase&gt;</code>: The test must fail at this exact phase (use when failing is "correct")</li>
+<li><code>busted = &lt;phase&gt;</code>: Same as Fail, but indicates this is a bug/flaw that should eventually be fixed, and <em>not</em> the desired result longterm.</li>
+<li><code>random = true</code>: The test is flakey and random but we want to run it anyway, so accept whatever result we get as ok.</li>
+</ul>
+<h2 id="configuring-tests"><a class="header" href="#configuring-tests">Configuring Tests</a></h2>
+<p>The following CLI flags are notable for changing what tests/rules to use:</p>
+<h3 id="--tests"><a class="header" href="#--tests"><code>--tests</code></a></h3>
+<p>By default we will run all known tests. Passing the names of tests (the filename without the extension(s)) to <code>--tests</code> will instead make us run only those tests (unlike the cargo test harness this isn't a fuzzy/substring match (but it could be if someone wants to implement that)).</p>
+<p>See <a href="../combos.html">the top-level combo docs for other flags that change the set of tests we combinatorically generate</a>.</p>
+<h3 id="--add-tests"><a class="header" href="#--add-tests"><code>--add-tests</code></a></h3>
+<p>While it's ideal for tests to be <a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests">upstreamed into ABI Cafe's codebase</a> where everyone can benefit from them, you can also add your own custom tests that are read at runtime (instead of baked into the binary) by passing a path to a directory containing them via <code>--add-tests path/to/dir/</code>.</p>
+<h3 id="--rules"><a class="header" href="#--rules"><code>--rules</code></a></h3>
+<p>While it's ideal for rules to be <a href="https://github.com/Gankra/abi-cafe/blob/main/include/harness/abi-cafe-rules.toml">upstreamed into ABI Cafe's codebase</a> where everyone can benefit from them, you can also add your own custom test rules that are read at runtime (instead of baked into the binary) by passing a path to a file containing them via <code>--add-tests path/to/abi-cafe-rules.toml</code>.</p>
+<h3 id="--disable-builtin-tests"><a class="header" href="#--disable-builtin-tests"><code>--disable-builtin-tests</code></a></h3>
+<p>If, for whatever reason, you want all the <a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests">builtin tests</a> to go away, you can pass <code>--disable-builtin-tests</code> to do so. Presumably you'll want to use <code>--add-tests</code> as well if you do.</p>
+<h3 id="--disable-builtin-rules"><a class="header" href="#--disable-builtin-rules"><code>--disable-builtin-rules</code></a></h3>
+<p>If, for whatever reason, you want all the <a href="https://github.com/Gankra/abi-cafe/blob/main/include/harness/abi-cafe-rules.toml">builtin rules</a> to go away, you can pass <code>--disable-builtin-rules</code> to do so. Presumably you'll want to use <code>--rules</code> as well if you do.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../harness/combos.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../../harness/combos/conventions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../harness/combos.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../../harness/combos/conventions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr.min.js"></script>
+        <script src="../../mark.min.js"></script>
+        <script src="../../searcher.js"></script>
+
+        <script src="../../clipboard.min.js"></script>
+        <script src="../../highlight.js"></script>
+        <script src="../../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

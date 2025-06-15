@@ -1,0 +1,1107 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>ABI Cafe</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><li class="part-title">ABI Cafe</li><li class="chapter-item expanded "><a href="intro.html"><strong aria-hidden="true">1.</strong> introduction</a></li><li class="chapter-item expanded "><a href="harness/combos.html"><strong aria-hidden="true">2.</strong> usage</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="harness/combos/tests.html"><strong aria-hidden="true">2.1.</strong> test files</a></li><li class="chapter-item expanded "><a href="harness/combos/conventions.html"><strong aria-hidden="true">2.2.</strong> calling conventions</a></li><li class="chapter-item expanded "><a href="harness/combos/reprs.html"><strong aria-hidden="true">2.3.</strong> type reprs</a></li><li class="chapter-item expanded "><a href="harness/combos/toolchains.html"><strong aria-hidden="true">2.4.</strong> toolchain pairings</a></li><li class="chapter-item expanded "><a href="harness/combos/values.html"><strong aria-hidden="true">2.5.</strong> value generators</a></li><li class="chapter-item expanded "><a href="harness/combos/selectors.html"><strong aria-hidden="true">2.6.</strong> value selectors</a></li><li class="chapter-item expanded "><a href="harness/combos/writers.html"><strong aria-hidden="true">2.7.</strong> value writers</a></li></ol></li><li class="chapter-item expanded "><a href="trophies.html"><strong aria-hidden="true">3.</strong> trophy case</a></li><li class="chapter-item expanded affix "><li class="part-title">KDLScript</li><li class="chapter-item expanded "><a href="kdl-script/index.html"><strong aria-hidden="true">4.</strong> introduction</a></li><li class="chapter-item expanded "><a href="kdl-script/attributes.html"><strong aria-hidden="true">5.</strong> attributes</a></li><li class="chapter-item expanded "><a href="kdl-script/functions/index.html"><strong aria-hidden="true">6.</strong> functions</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kdl-script/functions/signatures.html"><strong aria-hidden="true">6.1.</strong> signatures</a></li><li class="chapter-item expanded "><a href="kdl-script/functions/bodies.html"><strong aria-hidden="true">6.2.</strong> bodies (lmao)</a></li></ol></li><li class="chapter-item expanded "><a href="kdl-script/types/index.html"><strong aria-hidden="true">7.</strong> types</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="kdl-script/types/primitives.html"><strong aria-hidden="true">7.1.</strong> primitives</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.2.</strong> nominal types</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="kdl-script/types/struct.html"><strong aria-hidden="true">7.2.1.</strong> struct</a></li><li class="chapter-item expanded "><a href="kdl-script/types/union.html"><strong aria-hidden="true">7.2.2.</strong> union</a></li><li class="chapter-item expanded "><a href="kdl-script/types/enum.html"><strong aria-hidden="true">7.2.3.</strong> enum</a></li><li class="chapter-item expanded "><a href="kdl-script/types/tagged.html"><strong aria-hidden="true">7.2.4.</strong> tagged</a></li><li class="chapter-item expanded "><a href="kdl-script/types/alias.html"><strong aria-hidden="true">7.2.5.</strong> alias</a></li><li class="chapter-item expanded "><a href="kdl-script/types/pun.html"><strong aria-hidden="true">7.2.6.</strong> pun</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.3.</strong> structural types</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="kdl-script/types/refs.html"><strong aria-hidden="true">7.3.1.</strong> references</a></li><li class="chapter-item expanded "><a href="kdl-script/types/arrays.html"><strong aria-hidden="true">7.3.2.</strong> arrays</a></li><li class="chapter-item expanded "><a href="kdl-script/types/tuples.html"><strong aria-hidden="true">7.3.3.</strong> tuples</a></li></ol></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">ABI Cafe</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/Gankra/abi-cafe" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="abi-cafe"><a class="header" href="#abi-cafe">ABI Cafe</a></h1>
+<blockquote>
+<p><em>Not sure if your compilers have matching ABIs? Then put them through the ultimate compatibility crucible and pair them up on a shift at The ABI Cafe! Find out if your one true pairing fastcalls for each other or are just another slowburn disaster. (Maid outfits optional but recommended.)</em></p>
+</blockquote>
+<h2 id="quickstart"><a class="header" href="#quickstart">Quickstart</a></h2>
+<p>To run ABI Cafe, just <code>cargo install abi-cafe</code> and run <code>abi-cafe</code>!</p>
+<p>We will then find the Rust compiler and C compiler on your system and check that the two have compatible ABIs.
+(A <code>./target/</code> directory will be made wherever you run it.)</p>
+<h2 id="what-is-this"><a class="header" href="#what-is-this">What Is This</a></h2>
+<p>ABI Cafe automates testing that two languages/compilers agree on their ABIs.</p>
+<p><strong>ABI Cafe is essentially an ABI fuzzer</strong>, which:</p>
+<ul>
+<li><a href="./kdl-script/index.html">Creates a header file describing an interface</a></li>
+<li><a href="./harness/combos/toolchains.html">Generates source code for a <em>user</em> and <em>implementation</em> of that interface</a></li>
+<li><a href="./harness/combos.html">Builds and runs the resulting program</a></li>
+<li><a href="./harness/combos/values.html">Checks that both sides saw the same values</a></li>
+</ul>
+<p>If they agree, great!</p>
+<p>If they don't agree, even better, we just learned something! <strong>We then try to diagnose why they disagreed, and generate a minimized version that a human can inspect and report!</strong></p>
+<p>Now do this <a href="./harness/combos.html">a bajillion times</a> and suddenly we're learning a whole lot! Alternatively, you can <a href="./kdl-script/index.html">hand-craft any type or function signature you're interested in</a>, and explore its interoperability between different toolchains.</p>
+<p>ABI Cafe is purely <em>descriptive</em>. It has no preconceived notion of what <em>should</em> work, and it doesn't trust any damn thing anyone says about it. We don't analyze assembly or metadata, and we'll gleefully create programs riddled with Undefined Behaviour. We're here to <em>learn</em> not <em>lecture</em>.</p>
+<p>This design is based on a fundamental belief that <strong>ABIs exist only through sheer force of will</strong>. The spec if often "read GCC's source code", and damn if that ain't an error-prone process. Also GCC doesn't even know you exist, and you're only going to keep interoperating with them if you check and maintain your work. So here's a tool for checking and maintaining your work!</p>
+<h2 id="choose-your-own-adventure"><a class="header" href="#choose-your-own-adventure">Choose Your Own Adventure</a></h2>
+<ul>
+<li><a href="./harness/combos.html">I want to use ABI Cafe in my compiler's testsuite</a></li>
+<li><a href="./harness/combos/toolchains.html">I want to add support for my compiler/language to ABI Cafe</a></li>
+<li><a href="./harness/combos/tests.html">I want to add a test to ABI Cafe</a></li>
+<li><a href="./kdl-script/types/index.html">I want to add a new kind of type to ABI Cafe</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="usage"><a class="header" href="#usage">usage</a></h1>
+<p>To run ABI Cafe, just <code>cargo install abi-cafe</code> and run <code>abi-cafe</code>!</p>
+<p>While ABI Cafe isn't a For Reals Fuzzer (yet?), it accomplishes a similar goal through the magic of procedural generation and combinatorics. These docs serve to describe the N layers of combinatorics we use to turn a grain of sand into a mountain of broken compilers.</p>
+<ul>
+<li><a href="harness/./combos/tests.html">test files: <code>--tests</code></a></li>
+<li><a href="harness/./combos/conventions.html">calling conventions: <code>--conventions</code></a></li>
+<li><a href="harness/./combos/reprs.html">type reprs: <code>--reprs</code></a></li>
+<li><a href="harness/./combos/toolchains.html">toolchain pairings: <code>--pairs</code></a></li>
+<li><a href="harness/./combos/values.html">value generators: <code>--gen-vals</code></a></li>
+<li><a href="harness/./combos/selectors.html">value selectors: <code>--select-vals</code></a></li>
+<li><a href="harness/./combos/writers.html">value writers: <code>--write-vals</code></a></li>
+</ul>
+<p>When you run <code>abi-cafe</code> we will end up running the cross-product of all of these settings, typically resulting in thousands of function calls. See the subsections for details!</p>
+<p>You can also run <code>--help</code> to get information on all the supported features.</p>
+<h2 id="as-part-of-your-testsuite"><a class="header" href="#as-part-of-your-testsuite">As Part Of Your Testsuite</a></h2>
+<p>We're still cleaning up the details of this usecase to make it nicer. If you would like to use abi-cafe in your testsuite, <a href="https://github.com/Gankra/abi-cafe/issues/60">please let us know what you'd need/want</a>!</p>
+<p>At a minimum, all you need to "do" to run abi-cafe in your test suite is run <code>abi-cafe</code> and check its status.
+Of course that's not so helpful when you don't know what it does! The default behaviours you are most likely to want to configure are:</p>
+<ul>
+<li><a href="harness/./combos/toolchains.html">Selecting toolchains</a></li>
+<li><a href="harness/./combos/tests.html">Running tests</a></li>
+</ul>
+<p>(FIXME: write some docs that go over how to read test failures. <a href="harness/./combos/values.html#graffiti-values">grafitti</a> is really useful to understand, as is <a href="https://github.com/Gankra/abi-cafe/issues/38">the minimizer</a>, although that needs work).</p>
+<h2 id="examples"><a class="header" href="#examples">Examples</a></h2>
+<p>The following uses of abi-cafe all vendor it, as previously this was required.</p>
+<ul>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/.github/workflows/cafe.yml">abi-cafe's own CI (runs on various platforms with rustc stable and nightly)</a></li>
+<li><a href="https://github.com/rust-lang/rustc_codegen_cranelift/blob/master/.github/workflows/abi-cafe.yml">rustc_codegen_cranelift's CI (adds custom rustc codegen backend, configures toolchains)</a></li>
+<li><a href="https://github.com/rust-lang/rustc_codegen_gcc/pull/710">rustc_codgegen_gcc's WIP support for abi-cafe</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="tests"><a class="header" href="#tests">tests</a></h1>
+<p>ABI Cafe tests are defined are <a href="harness/combos/../../kdl-script/index.html">KDLScript header files</a> describing an interface, for which we'll <a href="harness/combos/../combos.html">generate and build many different</a> implementations (callees) and users (callers). KDLScript was purpose-made for ABI Cafe, with a custom syntax that avoids us tying our hands to any particular language/semantics. The syntax will feel fairly familiar to Rust programmers.</p>
+<p>Each function in the test is regarded as a "subtest" that can be individually passed/failed.</p>
+<h2 id="adding-tests"><a class="header" href="#adding-tests">Adding Tests</a></h2>
+<p>The default suite of tests can be <a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests">found in <code>/include/tests/</code></a>, which is statically embedded in abi-cafe's binary. You don't need to register the test anywhere, we will just try to parse every file in the tests directory.</p>
+<p>There are two kinds of tests: <code>.kdl</code> ("<a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests/normal">normal</a>") and <code>.procgen.kdl</code> ("<a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests/procgen">procgen</a>").</p>
+<p>Procgen tests are sugar for normal tests, where you just define a type with the same name of the file (so <code>MetersU32.procgen.kdl</code> is expected to define a type named <code>MetersU32</code>), and we generate a battery of types/functions that stress test that the ABI handles that type properly.</p>
+<p><strong>We recommend preferring procgen tests, because they're simpler to write and will probably have better coverage than if you tried to manually define all the functions.</strong></p>
+<p>Suggested Examples:</p>
+<ul>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/normal/simple.kdl">simple.kdl</a> - a little example of a "normal" test with explicitly defined functions to test</li>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/struct/SimpleStruct.procgen.kdl">SimpleStruct.procgen.kdl</a> - similar to simple.kdl, but procgen</li>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/pun/MetersU32.procgen.kdl">MetersU32.procgen.kdl</a> - an example of a <a href="harness/combos/../../kdl-script/types/pun.html">"pun type"</a>, where different languages use different definitions</li>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/fancy/IntrusiveList.procgen.kdl">IntrusiveList.procgen.kdl</a> - an example of how we can procgen tests for self-referential types and tagged unions</li>
+<li><a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/primitive/i8.procgen.kdl">i8.procgen.kdl</a> - ok this one isn't instructive it's just funny that it can be a blank file because i8 is builtin so all the info needed is in the filename</li>
+</ul>
+<h2 id="test-rules-expectations"><a class="header" href="#test-rules-expectations">Test Rules (Expectations)</a></h2>
+<p>ABI Cafe's default expectations can be <a href="https://github.com/Gankra/abi-cafe/tree/main/include/harness/abi-cafe-rules.toml">found in <code>/include/harness/abi-cafe-rules.toml</code></a>, which is statically embedded in abi-cafe's binary (that file also contains some example annotations).</p>
+<p>Every entry in the rules is a <em>selector</em> of the form <code>target.&lt;platform&gt;.&lt;test-pattern&gt;</code>, how far to <code>run</code> tests that match the selector, and an <em>expectation</em> (<code>pass</code>, <code>fail</code>, <code>busted</code>, or <code>random</code>). Both run and expectation directives specify a testing stage to help ensure that tests pass or fail for the reason we expect (more on that below).</p>
+<p>This annotated test expectation file from rustc_codegen_cranelift is a good example that flexes the syntax and features:</p>
+<pre><code class="language-toml"># on aarch64 linux...
+# the F32Array test, with C convention...
+# will run to completion, but have ABI errors (should be fixed).
+[target.'cfg(all(target_arch = "aarch64", target_os = "linux"))']
+'F32Array::conv_c'.busted = "check"
+
+# On aarch64 macos...
+[target.'cfg(all(target_arch = "aarch64", target_os = "macos"))']
+# The SingleVariantUnion tests, with C convention, using repr(Rust)
+# will run to completion, but have ABI errors (should be fixed)
+'SingleVariantUnion::conv_c::repr_c'.busted = "check"
+# The OptionU128 tests, with C convention, using repr(Rust), when Rust is the caller
+# will crash when run (should be fixed)
+'OptionU128::conv_rust::repr_c::rustc_caller'.busted = "run"
+# The OptionU128 tests, with C convention, using repr(Rust), when Cranelift is the caller
+# will run to completion, but have ABI errors (should be fixed)
+'OptionU128::conv_rust::repr_c::cgclif_caller'.busted = "check"
+
+# On x64 msvc windows...
+[target.x86_64-pc-windows-msvc]
+# The simple test, using Rust convention
+# will run to completion, but have ABI errors (should be fixed)
+'simple::conv_rust'.busted = "check"
+# The simple test, using Rust convention, when the caller is rustc
+# will crash when run (should be fixed)
+'simple::conv_rust::rustc_caller'.busted = "run"
+
+# skip the f16 tests
+[target.'*'.'f16']
+run = "skip"
+
+# skip the f128 tests
+[target.'*'.'f128']
+run = "skip"
+</code></pre>
+<h3 id="platform"><a class="header" href="#platform"><code>&lt;platform&gt;</code></a></h3>
+<p>A test rule's <code>&lt;platform&gt;</code> has the same syntax as <a href="https://doc.rust-lang.org/cargo/reference/config.html#target">cargo target tables</a>: it can either be a target triple, or a rustc cfg. We also support <code>*</code> as a platform that matches all.</p>
+<h3 id="test-key"><a class="header" href="#test-key"><code>&lt;test-key&gt;</code></a></h3>
+<p>A test rule's <code>&lt;test-key&gt;</code> is the same <code>::</code>-separated value that abi-cafe will use to refer to <a href="harness/combos/../combos.html">a combinatoric variant of a test</a>, like <code>CLikeTagged::conv_c::repr_c::cc_calls_rustc</code> (this test-key is of the form <code>&lt;test&gt;::&lt;convention&gt;::&lt;repr&gt;::&lt;pair&gt;</code>). If abi-cafe reports a test failure you can just copy that key and use it here. However parts of the test key can be omitted to wildcard match groups of tests.</p>
+<p>A test-key can include the following parts:</p>
+<ul>
+<li><code>&lt;test&gt;</code>: the name of the test (<code>CLikeTagged</code>, this is the only purely positional part of a key, it must come first. You can omit it by starting a key with <code>::</code>)</li>
+<li><code>&lt;convention&gt;</code>: the <a href="harness/combos/./conventions.html">calling convention</a> (<code>conv_c</code>)</li>
+<li><code>&lt;repr&gt;</code>: the <a href="harness/combos/./reprs.html">repr of aggregates</a> (<code>repr_c</code>)</li>
+<li><code>&lt;generator&gt;</code>: the <a href="harness/combos/./values.html">value generator</a> (<code>graffiti</code>)</li>
+<li>a <a href="harness/combos/./toolchains.html">toolchain pairing selector</a>:
+<ul>
+<li><code>&lt;pairing&gt;</code>: this exact toolchain pairing in this order (<code>cc_calls_rustc</code>)</li>
+<li><code>&lt;caller&gt;</code>: the caller must be this toolchain (<code>rustc_caller</code>)</li>
+<li><code>&lt;callee&gt;</code>: the callee must be this toolchain (<code>cc_callee</code>)</li>
+<li><code>&lt;toolchain&gt;</code>: any pairing that includes this toolchain (<code>rustc_toolchain</code>)</li>
+</ul>
+</li>
+</ul>
+<h3 id="run"><a class="header" href="#run"><code>run</code></a></h3>
+<p>A test rule's <code>run</code> field specifies what <code>&lt;phase&gt;</code> to run the test to. The default is <code>run = "check"</code>.
+The phases are, in increasing order:</p>
+<ul>
+<li><code>"skip"</code>: don't run the test at all (marked as skipped)</li>
+<li><code>"generate"</code>: generate the source code</li>
+<li><code>"build"</code>: compile the source code into staticlibs</li>
+<li><code>"link"</code>: link the staticlibs into a binary</li>
+<li><code>"run"</code>: execute the binary</li>
+<li><code>"check"</code>: check the values reported by the binary (this is the default)</li>
+</ul>
+<h3 id="expectation"><a class="header" href="#expectation"><code>&lt;expectation&gt;</code></a></h3>
+<p>A test rule's <code>&lt;expectation&gt;</code> field specifies what result the test should produce. The default is <code>pass = "check"</code>.
+The expectations are:</p>
+<ul>
+<li><code>pass = &lt;phase&gt;</code>: The test must run at least up to <code>&lt;phase&gt;</code> and report a success in that phase</li>
+<li><code>fail = &lt;phase&gt;</code>: The test must fail at this exact phase (use when failing is "correct")</li>
+<li><code>busted = &lt;phase&gt;</code>: Same as Fail, but indicates this is a bug/flaw that should eventually be fixed, and <em>not</em> the desired result longterm.</li>
+<li><code>random = true</code>: The test is flakey and random but we want to run it anyway, so accept whatever result we get as ok.</li>
+</ul>
+<h2 id="configuring-tests"><a class="header" href="#configuring-tests">Configuring Tests</a></h2>
+<p>The following CLI flags are notable for changing what tests/rules to use:</p>
+<h3 id="--tests"><a class="header" href="#--tests"><code>--tests</code></a></h3>
+<p>By default we will run all known tests. Passing the names of tests (the filename without the extension(s)) to <code>--tests</code> will instead make us run only those tests (unlike the cargo test harness this isn't a fuzzy/substring match (but it could be if someone wants to implement that)).</p>
+<p>See <a href="harness/combos/../combos.html">the top-level combo docs for other flags that change the set of tests we combinatorically generate</a>.</p>
+<h3 id="--add-tests"><a class="header" href="#--add-tests"><code>--add-tests</code></a></h3>
+<p>While it's ideal for tests to be <a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests">upstreamed into ABI Cafe's codebase</a> where everyone can benefit from them, you can also add your own custom tests that are read at runtime (instead of baked into the binary) by passing a path to a directory containing them via <code>--add-tests path/to/dir/</code>.</p>
+<h3 id="--rules"><a class="header" href="#--rules"><code>--rules</code></a></h3>
+<p>While it's ideal for rules to be <a href="https://github.com/Gankra/abi-cafe/blob/main/include/harness/abi-cafe-rules.toml">upstreamed into ABI Cafe's codebase</a> where everyone can benefit from them, you can also add your own custom test rules that are read at runtime (instead of baked into the binary) by passing a path to a file containing them via <code>--add-tests path/to/abi-cafe-rules.toml</code>.</p>
+<h3 id="--disable-builtin-tests"><a class="header" href="#--disable-builtin-tests"><code>--disable-builtin-tests</code></a></h3>
+<p>If, for whatever reason, you want all the <a href="https://github.com/Gankra/abi-cafe/tree/main/include/tests">builtin tests</a> to go away, you can pass <code>--disable-builtin-tests</code> to do so. Presumably you'll want to use <code>--add-tests</code> as well if you do.</p>
+<h3 id="--disable-builtin-rules"><a class="header" href="#--disable-builtin-rules"><code>--disable-builtin-rules</code></a></h3>
+<p>If, for whatever reason, you want all the <a href="https://github.com/Gankra/abi-cafe/blob/main/include/harness/abi-cafe-rules.toml">builtin rules</a> to go away, you can pass <code>--disable-builtin-rules</code> to do so. Presumably you'll want to use <code>--rules</code> as well if you do.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="calling-conventions"><a class="header" href="#calling-conventions">calling conventions</a></h1>
+<p>A calling convention is as close as ABI Cafe ever gets to referring to "An ABI" directly, but they're still pretty abstract, since a single calling convention can mean different things on different platforms.</p>
+<p>By default, for each test we will generate a copy of it for every known calling convention (changing the convention of all functions declared by that test).</p>
+<p>Each <a href="harness/combos/./toolchains.html">Toolchain</a> may claim to support a particular set of calling conventions
+(and may use knowledge of the target platform to adjust their decisions). Refusing to support a convention will result in those tests getting marked as "skipped" and omitted from the final report.</p>
+<p>If two <a href="harness/combos/./toolchains.html">Toolchains</a> claim to support a calling convention on a platform, it is assumed that they want to have compatible ABIs, and it's our goal to identify what does and doesn't work.</p>
+<h2 id="--conventions"><a class="header" href="#--conventions"><code>--conventions</code></a></h2>
+<p>All of the following conventions are enabled by default, and only these conventions are supported.</p>
+<p>Universal Conventions:</p>
+<ul>
+<li>c: the platform's default C convention (<code>extern "C"</code>)</li>
+<li>rust: the platform's default Rust convention (<code>extern "Rust"</code>)</li>
+</ul>
+<p>Windows Conventions:</p>
+<ul>
+<li>cdecl</li>
+<li>fastcall</li>
+<li>stdcall</li>
+<li>vectorcall</li>
+</ul>
+<p>(There exists some code for other weird conventions rustc supports, but they aren't really wired up properly and it's not clear if they serve any purpose.)</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="lang-reprs"><a class="header" href="#lang-reprs">lang reprs</a></h1>
+<p>Lang reprs abstractly describe an interop target for the layout of <a href="harness/combos/../../kdl-script/types/index.html">structs and enums and the like</a>. These currently exactly match the <a href="harness/combos/../../kdl-script/attributes.html">"lang reprs" in KDLScript</a>.</p>
+<p>For each test we will generate a copy of it for every enabled lang repr (changing the definitions of all types which <a href="harness/combos/../../kdl-script/attributes.html">don't specify an explicit repr</a>).</p>
+<h2 id="--reprs"><a class="header" href="#--reprs"><code>--reprs</code></a></h2>
+<p>All of the following reprs are enabled by default, and only these reprs are supported.</p>
+<ul>
+<li>c: layout structs in a C-compatible way (<code>repr(C)</code>)</li>
+<li>rust: layout structs in a Rust-compatible way (<code>repr(Rust)</code>)</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="toolchains"><a class="header" href="#toolchains">toolchains</a></h1>
+<p>Toolchains refer to a specific compiler (or configuration of a compiler). The entire purpose of ABI Cafe is to take two compilers and pair them up, checking that code built with one can properly call into code built by the other.</p>
+<p>Within ABI Cafe, each Toolchain also comes with a <a href="harness/combos/../combos/toolchains.html">code generation backend</a>, which can take <a href="harness/combos/../../kdl-script/index.html">a header file describing some types and functions</a> and generate either an implementation of those functions, or a caller of those functions.</p>
+<h2 id="--toolchains"><a class="header" href="#--toolchains"><code>--toolchains</code></a></h2>
+<p>The following toolchains are available, but only "rustc" and "cc" are enabled by default.</p>
+<ul>
+<li>rustc - uses the rustc on your PATH</li>
+<li>cc - gets the "system" C compiler via the CC crate (supports msvc on windows)</li>
+<li>gcc - explicitly run the gcc on your PATH</li>
+<li>clang - explicitly run the clang on your PATH</li>
+<li>zigcc - explicitly run the zigcc on your PATH</li>
+<li><del>msvc</del> (incomplete)</li>
+</ul>
+<p>You can also add custom rustc codegen backends as new toolchain (inheriting all the behaviour of the rustc toolchain) with <code>--rust-codegen-backend=mytoolchain:path/to/codegen_backend</code>. Where <code>mytoolchain</code> is a custom id for referring to it <a href="harness/combos/./tests.html#test-rules-expectations">in <code>--pairs</code> and test output</a>.</p>
+<p>Note that the <code>rustc</code> on PATH is currently required for ABI Cafe to work at all -- it will be used as the authoritaty on what the current host platform is, and the test harness binaries we generate and run are compiled and linked with it.</p>
+<h2 id="--pairs"><a class="header" href="#--pairs"><code>--pairs</code></a></h2>
+<p>By default, we will look at the enabled toolchains and pair them with themselves and all the default "pairer" toolchains (if they're enabled). The default pairer toolchains are "rustc" and "cc".</p>
+<p>With the default toolchains enabled, that means we will test:</p>
+<ul>
+<li>rustc_calls_rustc</li>
+<li>cc_calls_cc</li>
+<li>rustc_calls_cc</li>
+<li>cc_calls_rustc</li>
+</ul>
+<h2 id="adding-a-toolchain"><a class="header" href="#adding-a-toolchain">Adding A Toolchain</a></h2>
+<p>Adding a toolchain has two levels of difficulty:</p>
+<ul>
+<li>Easier: Adding a new compiler or mode for an existing language</li>
+<li>Harder: Adding a brand new language (and its compiler)</li>
+</ul>
+<p>The easier case is probably "adding some settings to an existing Toolchain" while the harder case is probably "writing a code generator for a language (with the help of abi-cafe's libraries)".</p>
+<p>(Although <a href="https://github.com/Gankra/abi-cafe/issues/31">if you want to add a C++ backend</a>, <em>probably</em> you want it to be a variant of the C toolchain, and not a whole new one, since, a lot of overlap there?)</p>
+<h3 id="adding-a-new-compiler-or-mode-for-an-existing-language"><a class="header" href="#adding-a-new-compiler-or-mode-for-an-existing-language">Adding A New Compiler Or Mode For An Existing Language</a></h3>
+<p>All the work you'll probably want to do is in <code>src/toolchains/mod.rs</code>. Looking at how gcc is implemented as a variant of <code>CcToolchain</code> (<code>src/toolchains/c.rs</code>) is probably informative.</p>
+<p>At a minimum you will need to change <code>toolchains::create_toolchains</code> to create and register your <code>Toolchain</code>.</p>
+<p><code>Toolchain::compile_caller</code> and <code>Toolchain::compile_callee</code> will likely need to be changed to select your compiler, or use the compiler flags for your mode.</p>
+<p><code>Toolchain::generate_caller</code> and <code>Toolchain::generate_callee</code> may also need to be modified to generate source code that is compatible with your new compiler/mode. For instance when adding a</p>
+<p>To test your new toolchain out you can first make sure it works with itself by running:</p>
+<pre><code>cargo run -- --toolchains=mytoolchain
+</code></pre>
+<p>(where "mytoolchain" is the id you registered in <code>create_toolchains</code>)</p>
+<p>Once more confident you can pair it up with other compilers by running:</p>
+<pre><code>cargo run -- --toolchains=mytoolchain,rustc,cc
+</code></pre>
+<h3 id="adding-a-new-language-and-its-compiler"><a class="header" href="#adding-a-new-language-and-its-compiler">Adding A New Language (And Its Compiler)</a></h3>
+<p>In addition to the things you need to do in the previous section, you now need to specify how to generate source code for your language given <a href="harness/combos/../../kdl-script/index.html">a header file describing some types and functions</a>.</p>
+<p>I have good news, bad news, and okay news.</p>
+<p>The good news is we have several libraries and utilities for helping with this.</p>
+<p>The bad news is that no matter what you're going to need to create like a thousand lines of business logic for specifying the syntax of the language.</p>
+<p>The okay news is that a lot of this can be accomplished without <em>too much</em> pain by copying one of the existing Toolchains and just editing it incrementally, aggressively returning <code>UnimplementedError</code> to indicate unsupported features, or things you just haven't gotten to yet. This is totally fine, all the backends have places where they give up!</p>
+<p>As a codegen backend you will need to answer 3 major questions:</p>
+<ul>
+<li>declare: How do you declare types in this language?</li>
+<li>init: How do you initialize values in this language?</li>
+<li>write: How do you access and print fields of values in this language?</li>
+</ul>
+<p>This largely amounts to writing recursive functions which match on a type definition and loop over all the fields of that type, or handle primitive types as the base case.</p>
+<p>For reference, when the author of ABI Cafe rewrote the codebase, the C backend was recreated mostly from scratch in a day by copying the Rust implementation and changing Rust syntax to C syntax.</p>
+<p>In doing this, you will have 3 major allies (assuming you match the idioms of the other codgen backends):</p>
+<ul>
+<li><code>state.types</code> (<code>TypedProgram</code>) is the type system of the KDLScript Compiler, which gives you type ids for interning state, and handles computing facts about the type definitions</li>
+<li><code>state.vals</code>(<code>ValueTree</code>) has the values and enum variants your program should use</li>
+<li><code>f</code> (<code>Fivemat</code>) is an indent-aware Write implementation for creating pretty formatted code</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="value-generators"><a class="header" href="#value-generators">value generators</a></h1>
+<p>When generating the source for a program to test, we need to pick values which will be passed to all the functions. These values are baked into the program, with both sides statically knowing which values they <em>should</em> have, and the test harness also having that information available for checking and diagnostics.</p>
+<p>As later sections will explain, this system also allows us to do magic like "generate only the necessary branches of match statements", "generate random-depthed values of self-referential types", "derive debug on c-like untagged unions", and "compare the values of type puns with different fields".</p>
+<h2 id="--gen-vals"><a class="header" href="#--gen-vals"><code>--gen-vals</code></a></h2>
+<p>By default we only set <code>--gen-vals=graffiti</code>, as this mode produces the most useful diagnostic information.</p>
+<p>The possible values are</p>
+<ul>
+<li>graffiti: prefers patterning the bytes of values in a way that helps you identify which byte of which field each recorded value was.</li>
+<li>randomN (random1, random37, ...): seeds an RNG with N to make random (repeatable) values with</li>
+</ul>
+<h2 id="graffiti-values"><a class="header" href="#graffiti-values">graffiti values</a></h2>
+<p>The grafitti pattern stores two indices in each byte: the high nibble contains the index of the field that the byte belongs to (mod 16), and the low nibble contains the index of the byte (mod 16).</p>
+<p>For instance graffiti values should look something like:</p>
+<pre><code class="language-rust  ignore">let array_of_points = [
+    Point { x: 0x0102_0304, y: 0x1112_1314 },
+    Point { x: 0x2122_2324, y: 0x3132_3334 },
+]
+let bytes = [0x40, 0x50, 0x60, 0x70];
+
+some_func(array_of_points, bytes);</code></pre>
+<p>The benefit of this system is that when there's an ABI mismatch if you see something like:</p>
+<pre><code class="language-text">mismatch in some_func val 2 (array_of_points[1].x: u32)
+expect: [21, 22, 23, 24]
+caller: [21, 22, 23, 24]
+callee: [23, 24, 31, 32]
+</code></pre>
+<p>You can pretty clearly see that the callee got half its bytes from val 2, and half of its bytes from val 3, indicating some kind of alignment/padding disagreement.</p>
+<h2 id="the-value-tree"><a class="header" href="#the-value-tree">The Value Tree</a></h2>
+<p>The value tree is the solution that was created to address the various problems sketched out <a href="https://faultlore.com/blah/abi-puns/#what-does-it-mean-for-compilers-to-agree">in this article on ABI Cafe</a>.</p>
+<h3 id="value-tree-problem-statement"><a class="header" href="#value-tree-problem-statement">Value Tree Problem Statement</a></h3>
+<p>There are several problems we need ABI Cafe to solve regarding values:</p>
+<ul>
+<li>We need to be able to pick values for fields in a deterministic/repeatable way so we can reliably reproduce any issues found</li>
+<li>We would like the test harness to know what values the programs <em>should</em> have when checking them (at very least to produce better diagnostics)</li>
+<li>Given a type with "cases" like a tagged union, untagged union, or c-like enum, we need to be able to pick the case it should have, and deal with the fact that this changes the number/names of the fields</li>
+<li>If we want to report the values of an untagged union, we find ourselves needing to <code>derive(Debug)</code> on an untagged union, which is impossible (nothing in the value itself specifies its case)</li>
+<li>Self-referential types may have an arbitrary number of values (like a linked list)</li>
+<li>Type puns may introduce completely different shapes/paths for the same logical values (<code>(u32, u32)</code> vs <code>[u32; 2]</code>)</li>
+</ul>
+<p>The value tree is able to handle all these cases!</p>
+<h3 id="value-tree-solution"><a class="header" href="#value-tree-solution">Value Tree Solution</a></h3>
+<p>Essentially the key insight here is that no matter how complicated a type is, an <em>instance</em> of that type has a tree structure (which syntax like <code>x.y[2].3</code> is a path on). A <em>traversal</em> of that tree then gives a linear list of (paths to) fields and types, for which we need to generate values.</p>
+<p>(Note: intrusive values which contain pointers to themselves <em>aren't</em> treelike, but we simply don't support those because they aren't interesting to us. When we refer to self-referential types, we're talking about types which can contain <em>other instances</em> of the same type, and not literally the same instance.)</p>
+<p>When traversing a struct, there isn't anything special to do: we can just recursively traverse each of its fields. When traversing a tagged or untagged union we apply a simple trick: we introduce an additional artificial leaf field representing the case (tag) of the union.</p>
+<p>Since we're already assuming we have a way to deterministically generate pseudorandom values, this gives us a way to uniformly select one of the cases of the union for each instance of the type. This also naturally handles all valid self-referential types, because they inevitably need to contain something that looks like <code>Option&lt;Self&gt;</code>. Each time we encounter that Option, we are essentially flipping a coin as to whether we should add another layer of Self, or finish.</p>
+<p>These artificial tag fields also give us a way to "derive(Debug) on an untagged union" -- because we're emitting the print statements totally inline for each instance, the code generator can consult the value tree for which case each union has, and only emit the code for accessing that case.</p>
+<p>This ends up being nice even for tagged unions, because it lets us emit only a minimal <code>if let</code> instead of a full <code>match</code>. We even get an internal entry for "which case, semantically, did the program think the tagged union was in", which the program can use to report back that information back to to the harness (as a u32 value, reporting u32::MAX in the <code>else</code> branch of the if-let to indicate "not the one we expected").</p>
+<p>Also, we don't actually care about any of the internal fields, we only care about the leaf (primitive) fields, which have actual logical bytes we can inspect and compare (or the cases of our unions). So, as long as two value tree traversals produce lists with the same lengths, we can compare them, allowing us to handle puns like <code>(u32, u32)</code> vs <code>[u32; 2]</code> or even more complex cases readily.</p>
+<h3 id="value-tree-compromises"><a class="header" href="#value-tree-compromises">Value Tree Compromises</a></h3>
+<p>The only kind of pun we really can't handle is one like <code>u64</code> vs <code>(u32, u32)</code>, because the counts desync. In the current implementation when traversing <a href="harness/combos/../../kdl-script/types/pun.html">a pun</a>, we assert that all blocks of the pun produce the same length list. This is a bit sad, but honestly, that was always going to be a semantic nightmare.</p>
+<p>For various reasons it's tempting to want to "statically" number the leaf fields, such that <code>x.y[2].3</code> can be referred to by a stable index, regardless of the value generation strategy. This is theoretically possible even with unions, because you can traverse even the cases that aren't selected and still number them.</p>
+<p>However the notion of a static numbering completely falls apart once you introduce self-referential types, as there is no static bound on the size of a self-referential subtree (and trying to artifically bound it is more work than it's worth). I also vaguely recall this completely breaking my brain to think about in the context of type puns, so, no big loss. We can just make value numbering value-generation-scoped, and get much the same benefit.</p>
+<p>The same logic that allows for type puns to be handled would also allow <a href="https://github.com/Gankra/abi-cafe/issues/47">function puns</a> to be handled (<code>fn(x: u32, y: u32)</code> vs <code>fn(point: (u32, u32))</code>). We currently don't allow for this, in an attempt to make diagnostics better. <a href="https://github.com/Gankra/abi-cafe/issues/53">In the future we might lift this restriction.</a></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="value-selectors"><a class="header" href="#value-selectors">value selectors</a></h1>
+<p>When generating the source for a program to test, we want a way to identify which of the <a href="harness/combos/./values.html">values of the function arguments</a> we actually care about <a href="harness/combos/./writers.html">writing somewhere</a>. This is specifically relevant when generating a minimized test case.</p>
+<p>Let's say we generate a program with a dozen functions, and specifically we find a mismatch in <code>function3</code> on <code>arg2.field2[7].y</code>, and want to now generate a minimized program that focuses on only that one value. What is safe to throw out?</p>
+<p>It's hopefully safe to throw out all the other functions, because that kind of spooky action at a distance isn't something we're concerned with. (There <em>is</em> a concern that removing random garbage on the stack from previous function calls could change the values captured if something is reading ~padding bytes. We try to avoid repetitive values to minimize the chance of this mattering.)</p>
+<p>Once we throw away functions, we can also throw away any type definitions that aren't used by the remaining function. (God help your poor compiler if this substantially changes the result.)</p>
+<p>Now we have function arguments we don't actually care about <em>but</em> removing those is expected to change the ABI of the function, and will likely make the mismatch disappear. Changing the <a href="harness/combos/./values.html">values of the arguments</a> is also something we want to avoid here, as this may change which variants unions take on and has a chance of introducing unfortunate new coincidental value matches.</p>
+<p>What we <em>can</em> hopefully do is remove all <a href="harness/combos/./writers.html">the code that <em>writes</em> the other arguments/values to output</a>. So in an ideal world the final result is something like this:</p>
+<pre><code class="language-rust  ignore">struct SomeComplicatedType {
+    /* omitted for brevity of example */
+}
+
+fn function3(arg0: f32, arg1: u32, arg2: SomeComplicatedType, arg3: bool) {
+    println!("{:?}", arg2.field2[7].y);
+}</code></pre>
+<p>(This is the callee, the caller ends up being uglier because it needs to still initialize all those values and pass them in.)</p>
+<h2 id="--select-vals"><a class="header" href="#--select-vals"><code>--select-vals</code></a></h2>
+<p>This CLI flag is reserved but not yet implemented. Its semantics are however used internally when regenerating a failed test, as described above.</p>
+<p>When filtering a test you currently get 3 levels of granularity:</p>
+<ul>
+<li>functions: all or one</li>
+<li>arguments: all or one</li>
+<li>values (fields): all or one</li>
+</ul>
+<p>The default is for all levels to be set to "all", because we want to check everything.</p>
+<p>When abi-cafe detects an error, it will regenerate the test with all levels set to "one", so that it can highlight only the one field that matters.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="value-writers"><a class="header" href="#value-writers">value writers</a></h1>
+<p>When generating the source for a program to test, we want the program to write the <a href="harness/combos/./values.html">values of the function arguments</a> somewhere for validation: callbacks, prints, asserts, etc.</p>
+<h2 id="--write-vals"><a class="header" href="#--write-vals"><code>--write-vals</code></a></h2>
+<p>This isn't a setting you typically want to mess with in normal usage, since the default ("harness") is the only one that is machine-checkable. All the others are intended for minimizing/exporting the test for human inspection (see <code>--minimize-vals</code> below).</p>
+<p>The supported writers are:</p>
+<ul>
+<li>harness: send values to the abi-cafe harness with callbacks</li>
+<li>print: print the values to stdout</li>
+<li>assert: assert the values have their expected value</li>
+<li>noop: disable all writes (see also the less blunt <a href="harness/combos/./selectors.html">value selectors</a>)</li>
+</ul>
+<h2 id="--minimize-vals"><a class="header" href="#--minimize-vals"><code>--minimize-vals</code></a></h2>
+<p>This takes the same values as write-vals, but is specifically the writer used when a test has failed and we want to regenerate the test with a minimized human readable output.</p>
+<p>The default is "print".</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="trophy-case"><a class="header" href="#trophy-case">Trophy Case</a></h1>
+<p>Has ABI Cafe helped you find/fix a bug in your compiler? We'd love to hear!</p>
+<ul>
+<li>
+<p><a href="https://github.com/rust-lang/rust/issues/54341#issuecomment-1064729606">x64 linux clang and gcc disagree on __int128 pass-on-stack ABI</a></p>
+<ul>
+<li><a href="https://blog.rust-lang.org/2024/03/30/i128-layout-update.html">now fixed in both rustc and clang!</a></li>
+<li>We already knew clang and rustc disagreed <a href="https://reviews.llvm.org/D28990">because clang does a manual alignment adjustment</a>, but we didn't seem to fully understand that the clang adjustment is actually buggy and doesn't apply to the implicit push-to-stack when passing __int128 by-val. gcc always aligns the value, even when pushing to stack, so the two desync in this case.</li>
+<li>This tool was written to investigate the clang-rustc issue, and helped establish that everyone agreed on the ABI on ARM64, where __int128 is essentially part of the <em>hardware's</em> ABI due to it showing up in the layout for saving/restoring SIMD register state. As a result, <a href="https://github.com/rust-lang/libc/pull/2719">rust's libc crate now exposes typedefs for __int128 on those platforms</a></li>
+</ul>
+</li>
+<li>
+<p><a href="https://github.com/rust-lang/rustc_codegen_cranelift/issues/1234">rustc_codegen_cranelift ICE on passing 11 bools by-val</a></p>
+</li>
+<li>
+<p><a href="https://github.com/rust-lang/rustc_codegen_gcc/issues/711">rustc_codegen_gcc error on arguments larger than 16 bytes</a></p>
+</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="kdlscript"><a class="header" href="#kdlscript">KDLScript</a></h1>
+<p>KDLScript, the <a href="https://kdl.dev/">KDL</a>-based programming language!</p>
+<p>KDLScript ("Cuddle Script") is a "fake" scripting language that actually just exists to declare type/function signatures without tying ourselves to any particular language's semantics. It exists to be used by <a href="kdl-script/../intro.html">ABI Cafe</a>.</p>
+<p>Basically, KDLScript is a header format we can make as weird as we want for our own usecase:</p>
+<pre><code class="language-kdl">struct "Point" {
+    x "f32"
+    y "f32"
+}
+
+enum "ScaleMode" {
+    Width
+    Height
+}
+
+fn "print" {
+    inputs { _ "Point"; }
+}
+
+fn "scale" {
+    inputs { _ "Point"; factor "f32"; scalemode "ScaleMode"; }
+    outputs { _ "Point"; }
+}
+
+fn "sum" {
+    inputs { _ "&amp;[Point; 4]"; }
+    outputs { _ "Point"; }
+}
+</code></pre>
+<p>Ultimately the syntax and concepts are heavily borrowed from Rust, for a few reasons:</p>
+<ul>
+<li>The author is very comfortable with Rust</li>
+<li>This (and <a href="kdl-script/../intro.html">ABI Cafe</a>) were originally created to find bugs in rustc</li>
+<li>Rust is genuinely just a solid language for interfaces! (Better than C/C++)</li>
+</ul>
+<p>The ultimate goal of this is to test that languages can properly communicate over
+FFI by declaring the types/interface once and generating the Rust/C/C++/... versions
+of the program (both caller and callee) and then linking them into various combinations like "Rust calls C++" to check that the values are passed correctly.</p>
+<h2 id="quickstart-1"><a class="header" href="#quickstart-1">Quickstart</a></h2>
+<p><a href="https://github.com/Gankra/abi-cafe/tree/main/kdl-script">kdl-script</a> is both a library and a CLI application. The CLI is just for funsies.</p>
+<p>The main entry point to the library is <code>Compiler::compile_path</code> or <code>Compiler::compile_string</code>, which will produce a <code>TypedProgram</code>. <a href="https://github.com/Gankra/abi-cafe/blob/main/kdl-script/src/types.rs">See the <code>types</code> module docs for how to use that</a>.</p>
+<p>The CLI application can be invoked as <code>kdl-script path/to/program.kdl</code> to run a KDLScript program.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="attributes"><a class="header" href="#attributes">attributes</a></h1>
+<p>KDLScript Attributes start with <code>@</code> and apply to the next item (function or type) that follows them. There are currently 3 major classes of attributes:</p>
+<ul>
+<li>repr attrs
+<ul>
+<li>lang reprs
+<ul>
+<li><code>@repr "rust"</code> - use rust's native struct layout</li>
+<li><code>@repr "c"</code> - use C-compatible struct layout</li>
+</ul>
+</li>
+<li>primitive reprs - for any enums, use the given primitive as its type
+<ul>
+<li><code>@repr "u8"</code></li>
+<li><code>@repr "f32"</code></li>
+<li>...</li>
+</ul>
+</li>
+<li>transparent repr - equivalent of rust's <code>repr(transparent)</code>
+<ul>
+<li><code>@repr "transparent"</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li>modifier attrs
+<ul>
+<li><code>@align 16</code> - align to N</li>
+<li><code>@packed</code> - pack fields to eliminate padding</li>
+</ul>
+</li>
+<li>passthrough attrs
+<ul>
+<li><code>@ "literally anything here"</code></li>
+</ul>
+</li>
+</ul>
+<p>The significance of repr attributes is that providing <em>any</em> explicit <code>repr</code> attribute is considered an opt-out from the default automatic repr all user-defined types receive.</p>
+<p>When we generate tests we will typically generate both a <code>repr(rust)</code> version and a <code>repr(C)</code> version. In these versions any user-defined type gets (an equivalent of) those attributes applied to it.</p>
+<p>This means that applying <code>@align 16</code> still leaves a struct eligible to have the rust layout and c layout tested, while applying <code>@repr "u8"</code> to a tagged union does not (if you want to test <code>repr(C, u8)</code>, you need to set <code>@repr "C" "u8"</code>).</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="functions"><a class="header" href="#functions">functions</a></h1>
+<p>Functions are where the Actually Useful <em>library</em> version of KDLScript and the Just A Meme <em>application</em> version of KDLScript diverge. This difference is configured by the <code>eval</code> feature.</p>
+<p>As a library, KDLScript only has <a href="kdl-script/functions/./signatures.html">function <em>signature declarations</em></a>, and it's the responsibility of the ABI Cafe backend using KDLScript to figure out what the body should be.</p>
+<p>As a CLI binary, KDLScript <a href="kdl-script/functions/./bodies.html">actually lets you fill in the body with some hot garbage I hacked up</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="function-signatures"><a class="header" href="#function-signatures">function signatures</a></h1>
+<p>Here is a fairly complicated/contrived example function signature:</p>
+<pre><code class="language-kdl">fn "my_func" {
+    inputs {
+        x "u32"
+        y "[&amp;MyType; 3]"
+        _ "&amp;bool"
+    }
+    outputs {
+        _ "ErrorCode"
+    }
+}
+</code></pre>
+<p>Functions can have arbitrarily many inputs and outputs with either named or "positional" (<code>_</code>) names which will get autonaming like <code>arg0</code> and <code>out0</code>.</p>
+<p>Currently there is no meaning ascribed to multiple outputs, every backend refuses to implement them. Note that "returning a tuple" or any other composite is still one output. We would need to like, support Go or something to make this a meaningful expression.</p>
+<p>Named args <a href="https://github.com/Gankra/abi-cafe/issues/32"><em>could</em> be the equivalent of Swift named args</a>, where the inner and outer name can vary, but the outer name is like, part of the function name itself (and/or ABI)?</p>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/1#issuecomment-2200345710">Varargs support is also TBD but has a sketch</a>.</p>
+<h1 id="outparams"><a class="header" href="#outparams">Outparams</a></h1>
+<details>
+<summary> not implemented distracting ramblings about outparams </summary>
+As discussed in the section on "Reference Types", references in outputs are sugar for out-params, which should appear after the inputs and before outputs. So the above would lower to something like the following in Rust (values chosen arbitrarily here, and we wouldn't use asserts in practice, but instead record the values for comparison):
+<pre><code class="language-rust  ignore">fn my_func(
+    x: u32,
+    y: [&amp;MyType; 3],
+    arg2: &amp;bool,
+    out1: &amp;mut ErrorCode,
+) -&gt; bool {
+    // Check the inputs are what we expect...
+    assert_eq!(x, 5);
+    assert_eq!(y[0].val, 8);
+    assert_eq!(y[1].val, 9);
+    assert_eq!(y[2].val, 10);
+    assert_eq!(*arg2, true);
+
+    // Return outputs
+    *out1 = ErrorCode::Bad;
+    return true;
+}
+
+
+fn my_func_caller() {
+    // Setup the inputs
+    let x = 5;
+    let y_0 = MyType { val: 8 };
+    let y_1 = MyType { val: 9 };
+    let y_2 = MyType { val: 10 };
+    let y = [&amp;y_0, &amp;y_1, &amp;y_1];
+    let arg2 = false;
+
+    // Setup outparams
+    let mut out1 = ErrorCode::default();
+
+    // Do the call
+    let out0 = my_func(x, y, &amp;arg2, &amp;mut out1);
+
+    // Checkout outputs
+    assert_eq!(out0, true);
+    assert_eq!(*out1, ErrorCode::Bad);
+}</code></pre>
+<blockquote>
+<p>God writing that sucked ass, and it wasn't even the "proper" value checking! This is why I built all this complicated crap to automate it!</p>
+<p>Update: actually even automating this was miserable, and also outparams aren't really substantial ABI-wise right now, so I'm not sure I'll ever implement outparams. It's more complexity than it's worth!</p>
+</blockquote>
+</details>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="kdlscript-function-bodies"><a class="header" href="#kdlscript-function-bodies">KDLScript function bodies</a></h1>
+<p>The kdl-script compiler does technically support function bodies that it can run and evaluate.
+This is <em>completely</em> useless to kdl-script-as-used-by-abi-cafe, and is entirely just a fun shitpost.</p>
+<p>The evaluator has not at all kept up with the type system, so it can only handle some really simply stuff.
+You can run the <code>examples/simple.kdl</code>. All the other examples will just dump type information and decl order
+as they don't define <code>main</code>.</p>
+<pre><code class="language-text">&gt; cargo run examples/simple.kdl
+
+{
+  y: 22
+  x: 11
+}
+33
+</code></pre>
+<p>Is executing the following kdl document:</p>
+<pre><code class="language-kdl">struct "Point" {
+    x "f64"
+    y "f64"
+}
+
+fn "main" {
+    outputs { _ "f64"; }
+
+    let "pt1" "Point" {
+        x 1.0
+        y 2.0
+    }
+    let "pt2" "Point" {
+        x 10.0
+        y 20.0
+    }
+
+    let "sum" "add:" "pt1" "pt2"
+    print "sum"
+
+    return "+:" "sum.x" "sum.y"
+}
+
+fn "add" {
+    inputs { a "Point"; b "Point"; }
+    outputs { _ "Point"; }
+
+    return "Point" {
+        x "+:" "a.x" "b.x"
+        y "+:" "a.y" "b.y"
+    }
+}
+</code></pre>
+<h1 id="why-did-you-make-kdl-documents-executable"><a class="header" href="#why-did-you-make-kdl-documents-executable">Why Did You Make KDL Documents Executable???</a></h1>
+<p>To spite parsers.</p>
+<p>Ok more seriously because I needed the parser and type-system for abi-cafe but it's a ton of work so I'm self-motivated by wrapping it in the guise of a scripting language because it's funny and I could make more incremental progress. This in fact worked, because as of the publishing of this book, abi-cafe was rewritten to use kdl-script!</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="types"><a class="header" href="#types">types</a></h1>
+<p>The following kinds of types exist in KDLScript.</p>
+<ul>
+<li>nominal types
+<ul>
+<li><a href="kdl-script/types/./struct.html"><code>struct</code> - a plain ol' struct</a></li>
+<li><a href="kdl-script/types/./union.html"><code>union</code> - an untagged union</a></li>
+<li><a href="kdl-script/types/./enum.html"><code>enum</code> - a c-style enum</a></li>
+<li><a href="kdl-script/types/./tagged.html"><code>tagged</code> - a tagged union (rust-style enum)</a></li>
+<li><a href="kdl-script/types/./alias.html"><code>alias</code> - a transparent type alias</a></li>
+<li><a href="kdl-script/types/./pun.html"><code>pun</code> - a pun across the FFI boundary, "CSS for ifdefs"</a></li>
+</ul>
+</li>
+<li>structural types
+<ul>
+<li><a href="kdl-script/types/./arrays.html"><code>[T; N]</code> - an array of T, length N</a></li>
+<li><a href="kdl-script/types/./refs.html"><code>&amp;T</code> - a reference to T (the pointee is regarded as the value)</a></li>
+<li><a href="kdl-script/types/./tuples.html"><code>(T, U, V)</code> - a tuple</a></li>
+</ul>
+</li>
+<li><a href="kdl-script/types/./primitives.html">builtin primitives</a>
+<ul>
+<li>integers (<code>i8</code>, <code>u128</code>, ...)</li>
+<li>floats (<code>f16</code>, <code>f32</code>, <code>f64</code>, <code>f128</code>, ...)</li>
+<li><code>bool</code>- your old pal the boolean (TriBool support TBD)</li>
+<li><code>ptr</code> - an opaque pointer (<code>void*</code>), used when you're interested in the value of the pointer and not its pointee (unlike <code>&amp;T</code>)</li>
+</ul>
+</li>
+</ul>
+<p>All of these types can be combined together as you expect, and <a href="https://github.com/Gankra/abi-cafe/blob/main/include/tests/procgen/fancy/IntrusiveList.procgen.kdl">self-referential types do in fact work</a>!</p>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/50">We do not currently support generics.</a></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="primitive-types"><a class="header" href="#primitive-types">primitive types</a></h1>
+<p>There are various builtin primitives in KDLScript, such as:</p>
+<ul>
+<li>integers - fixed width integers
+<ul>
+<li><code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>i128</code>, <code>i256</code></li>
+<li><code>u8</code>, <code>u16</code>, <code>u32</code>, <code>u64</code>, <code>u128</code>, <code>u256</code></li>
+</ul>
+</li>
+<li>floats - fixed with floating point numbers
+<ul>
+<li><code>f16</code>, <code>f32</code>, <code>f64</code>, <code>f128</code></li>
+</ul>
+</li>
+<li><code>bool</code>- your old pal the boolean</li>
+<li><code>ptr</code> - an opaque pointer (<code>void*</code>), used when you're interested in the address as a value (<a href="kdl-script/types/./refs.html">unlike <code>&amp;T</code></a>)</li>
+</ul>
+<p>The lowering of these to Rust is pretty direct, since we're reusing Rust's naming scheme.</p>
+<p>The lowering of these to C uses <code>uint8_t</code> and friends for the integers, and then the usual types for the rest.</p>
+<p>In the future there will probably be language-specific primitives like <code>c_long</code>...?</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="struct-types"><a class="header" href="#struct-types">struct types</a></h1>
+<p>A KDLScript <code>struct</code> type is just what you expect! This definition:</p>
+<pre><code class="language-kdl">struct "Point" {
+    x "f32"
+    y "f32"
+}
+</code></pre>
+<p>(or <code>struct "Point" { x "f32"; y "f32"; }</code>)</p>
+<p>is equivalent to this Rust:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>struct Point {
+    x: f32,
+    y: f32,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>and this C:</p>
+<pre><code class="language-C">typedef struct Point {
+    float x;
+    float y;
+} Point;
+</code></pre>
+<h2 id="attributes-and-layouts"><a class="header" href="#attributes-and-layouts">Attributes And Layouts</a></h2>
+<p><a href="kdl-script/types/../attributes.html">The various KDLScript attributes can be applied to structs to specify how they should be laid out</a>, like so:</p>
+<pre><code class="language-kdl">@repr "transparent"
+struct "MetersU32" {
+    _ "u32"
+}
+</code></pre>
+<p>If no explicit <code>@repr</code> attribute is applied (the default, which is recommended), the struct will be <a href="kdl-script/types/../../harness/combos/reprs.html">eligible for repr combinatorics</a>. Basically, we'll generate a version of the test where it's set to <code>#[repr(C)]</code> and version where it's set to <code>#[repr(Rust)]</code>, improving your test coverage.</p>
+<p>It's up to each <a href="kdl-script/types/../../harness/combos/toolchains.html">compiler / language</a> to implement these attributes <a href="kdl-script/types/../../harness/combos/toolchains.html">however they see fit</a>. But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.</p>
+<p>Note that repr(transparent) <em>is not</em> currently eligible for repr combinatorics. If you want to test that, set it explicitly.</p>
+<h2 id="tuple-structs"><a class="header" href="#tuple-structs">Tuple Structs</a></h2>
+<p>As a convenience, you can omit the names of the fields by calling them <code>_</code>, and we'll make up names like <code>field0</code> and <code>field1</code> for you:</p>
+<pre><code class="language-kdl">struct "Point" {
+    _ "f32"
+    _ "f32"
+}
+</code></pre>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/25">If all fields have the names omitted, then languages like Rust can emit a "tuple struct"</a>. So the above example can/should be emitted like this:</p>
+<pre><code class="language-rust  ignore">struct Point(f64, f64);</code></pre>
+<h2 id="generic-structs"><a class="header" href="#generic-structs">Generic Structs</a></h2>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/50">Generic structs are not supported.</a></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="union-types"><a class="header" href="#union-types">union types</a></h1>
+<p>A KDLScript <code>union</code> type is a C-like untagged union. <a href="kdl-script/types/./tagged.html">For rust-like tagged unions, see tagged types</a>.</p>
+<p>This definition:</p>
+<pre><code class="language-kdl">union "FloatOrInt" {
+    a "f32"
+    b "u32"
+}
+</code></pre>
+<p>is equivalent to this Rust:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>union FloatOrInt {
+    a: f32,
+    b: u32,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>and this C:</p>
+<pre><code class="language-C">typedef union FloatOrInt {
+    float a;
+    int32_t b;
+} FloatOrInt;
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="enum-types"><a class="header" href="#enum-types">enum types</a></h1>
+<p>A KDLScript <code>enum</code> type is a C-like enum with no nest fields. <a href="kdl-script/types/./tagged.html">For a Rust-like enum (tagged union), see tagged types</a>.</p>
+<p>This definition:</p>
+<pre><code class="language-kdl">enum "IoError" {
+    FileNotFound
+    FileClosed
+    FightMe
+}
+</code></pre>
+<p>is equivalent to this Rust:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum IoError {
+    FileNotFound,
+    FileClosed,
+    FightMe,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>and this C:</p>
+<pre><code class="language-C">typedef enum IoError {
+    FileNotFound,
+    FileClosed,
+    FightMe,
+} IoError;
+</code></pre>
+<p>(There are like 3 ways we could lower this concept to C, it's an eternal struggle/argument, I know.)</p>
+<h2 id="attributes-and-layouts-1"><a class="header" href="#attributes-and-layouts-1">Attributes And Layouts</a></h2>
+<p><a href="kdl-script/types/../attributes.html">The various KDLScript attributes can be applied to enums to specify how they should be laid out</a>, like so:</p>
+<pre><code class="language-kdl">@repr "u32"
+enum "MyEnum" {
+    Case1
+    Case2
+}
+</code></pre>
+<p>If no explicit <code>@repr</code> attribute is applied (the default, which is recommended), the enum will be <a href="kdl-script/types/../../harness/combos/reprs.html">eligible for repr combinatorics</a>. Basically, we'll generate a version of the test where it's set to <code>#[repr(C)]</code> and version where it's set to <code>#[repr(Rust)]</code>, improving your test coverage.</p>
+<p>It's up to each <a href="kdl-script/types/../../harness/combos/toolchains.html">compiler / language</a> to implement these attributes <a href="kdl-script/types/../../harness/combos/toolchains.html">however they see fit</a>. But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.</p>
+<p>Note that <code>repr(u32)</code> and friends are <em>not</em> currently eligible for repr combinatorics. If you want to test that, set it explicitly.</p>
+<h2 id="explicit-tag-values"><a class="header" href="#explicit-tag-values">Explicit Tag Values</a></h2>
+<p>⚠️ <a href="https://github.com/Gankra/abi-cafe/issues/29">This feature exists in the KDLScript parser but isn't fully implemented yet.</a></p>
+<p>You can give enum variants an integer value (currently limited to i64 range):</p>
+<pre><code class="language-kdl">enum "IoError" {
+    FileNotFound -1
+    FileClosed
+    FightMe 4
+}
+</code></pre>
+<p>It's up to each to each <a href="kdl-script/types/../../harness/combos/toolchains.html">compiler / language</a> to implement these <a href="kdl-script/types/../../harness/combos/toolchains.html">however they see fit</a>.</p>
+<h2 id="value-initialization-and-analysis"><a class="header" href="#value-initialization-and-analysis">Value Initialization And Analysis</a></h2>
+<p>When <a href="kdl-script/types/../../harness/combos/values.html">initializing an instance of an enum</a>, we will uniformly select a random variant to use (deterministically).</p>
+<p>When <a href="kdl-script/types/../../harness/combos/values.html">checking the value of an enum</a>, we will just check its bytes. In the future <a href="https://github.com/Gankra/abi-cafe/issues/34">we may instead check it semantically with a match/switch</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="tagged-types"><a class="header" href="#tagged-types">tagged types</a></h1>
+<p>A KDLScript <code>tagged</code> type is the equivalent of Rust's <code>enum</code>: a tagged union where variants have fields, which has no "obvious" C/C++ analog. Variant bodies may either be missing (indicating no payload) or have the syntax of a <code>struct</code> body. <a href="kdl-script/types/./enum.html">For c-like enums, see enum types</a>. <a href="kdl-script/types/./union.html">For c-like untagged unions, see union types</a>.</p>
+<p>This definition:</p>
+<pre><code class="language-kdl">tagged "MyOptionU32" {
+    None
+    Some { _ "u32"; }
+    FileNotFound {
+        path "[u8; 100]"
+        error_code "i64"
+    }
+}
+</code></pre>
+<p>Is equivalent to this Rust:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>enum MyOptionU32 {
+    None,
+    Some(u32),
+    FileNotFound {
+        path: [u8; 100],
+        error_code: i64,
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/28">We may one day implement the C(++) equivalents to this definition which are real and my friend</a>. They could theoretically detect when a tagged is equivalent to a c-like enum, but that kinda defeats the purpose of making them separate concepts for backend simplicity.</p>
+<h2 id="attributes-and-layouts-2"><a class="header" href="#attributes-and-layouts-2">Attributes And Layouts</a></h2>
+<p><a href="kdl-script/types/../attributes.html">The various KDLScript attributes can be applied to tagged unions to specify how they should be laid out</a>, like so:</p>
+<pre><code class="language-kdl">@repr "u8"
+tagged "MyOptionU32" {
+    Some { _ "u32"; }
+    None
+}
+</code></pre>
+<p>If no explicit <code>@repr</code> attribute is applied (the default, which is recommended), the struct will be <a href="kdl-script/types/../../harness/combos/reprs.html">eligible for repr combinatorics</a>. Basically, we'll generate a version of the test where it's set to <code>#[repr(C)]</code> and version where it's set to <code>#[repr(Rust)]</code>, improving your test coverage.</p>
+<p>It's up to each <a href="kdl-script/types/../../harness/combos/toolchains.html">compiler / language</a> to implement these attributes <a href="kdl-script/types/../../harness/combos/toolchains.html">however they see fit</a>. But for instance we would expect Rust backends to support both layouts, and C backends to bail on the Rust repr, producing twice as many rust-calls-rust test cases.</p>
+<p>Note that <code>repr(u32)</code> and friends are <em>not</em> currently eligible for repr combinatorics. If you want to test that, set it explicitly.</p>
+<h2 id="tuple-variants"><a class="header" href="#tuple-variants">Tuple Variants</a></h2>
+<p>As a convenience (and as shown liberally above), you can omit the names of the fields by calling them <code>_</code>, and we'll make up names like <code>field0</code> and <code>field1</code> for you.</p>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/25">If all fields of a variant have the names omitted, then languages like Rust can emit a "tuple variant"</a>.</p>
+<h2 id="explicit-tag-values-1"><a class="header" href="#explicit-tag-values-1">Explicit Tag Values</a></h2>
+<p>Tagged unions currently do not support explicit tag values, <a href="kdl-script/types/./enum.html#explicit-tag-values">unlike enums</a>.</p>
+<h2 id="generic-tagged-unions"><a class="header" href="#generic-tagged-unions">Generic Tagged Unions</a></h2>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/50">Generic tagged unions are not supported.</a></p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="alias"><a class="header" href="#alias">alias</a></h1>
+<p>A KDLScript <code>alias</code> type is just what you expect! <a href="kdl-script/types/./pun.html">for superpowered ifdefy aliases, see pun types</a></p>
+<pre><code class="language-kdl">alias "MetersU32" "u32"
+</code></pre>
+<p>is equivalent to this Rust:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>type MetersU32 = u32;
+<span class="boring">}</span></code></pre></pre>
+<p>and this C:</p>
+<pre><code class="language-C">typedef uint32_t MetersU32;
+</code></pre>
+<p>Note that the ordering matches Rust's <code>type Alias = RealType;</code> syntax and not C/C++'s backwards-ass typedef syntax (yes I know why the C syntax is like that, it's very cute).</p>
+<h2 id="attributes-and-layouts-3"><a class="header" href="#attributes-and-layouts-3">Attributes And Layouts</a></h2>
+<p><a href="kdl-script/types/../attributes.html">The various KDLScript attributes can be applied to aliases</a>, but nothing currently respects them, because, what the fuck?</p>
+<h2 id="generic-aliases"><a class="header" href="#generic-aliases">Generic Aliases</a></h2>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/50">Generic aliases are not supported.</a></p>
+<h2 id="im-normal-and-can-be-trusted-with-codegen"><a class="header" href="#im-normal-and-can-be-trusted-with-codegen">I'm Normal And Can Be Trusted With Codegen</a></h2>
+<p><a href="kdl-script/types/../../harness/combos/toolchains.html">The abi-cafe codegen backends</a> will go out of their way to "remember" that a type alias exists and use it when the alias was specified there. So for instance given this definition:</p>
+<pre><code class="language-kdl">enum "ComplexLongName" {
+    A,
+    B,
+}
+
+alias "Clean" "ComplexLongName"
+
+struct "Enums" {
+    x "Clean"
+    y "ComplexLongName"
+}
+</code></pre>
+<p>The Rust backend should initialize an instance of <code>Enums</code> as follows:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let temp = Enums { x: Clean::A, y: ComplexLongName::B }
+<span class="boring">}</span></code></pre></pre>
+<p>Is this important?</p>
+<p>No.</p>
+<p>Am I happy the section is longer than the actual description of <code>alias</code>?</p>
+<p>Yes.</p>
+<p>I will fight every compiler that doesn't work like this. Preserve my fucking aliases in diagnostics and code refactors, cowards. Yes I <em>will</em> accept longer compile times to get this. Who wouldn't? People who are also cowards, that's who.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="pun-types"><a class="header" href="#pun-types">pun types</a></h1>
+<p>A KDLScript <code>pun</code> type is the equivalent of an ifdef/cfg'd type, allowing us to declare that two wildly different declarations in different languages should in fact have the same layout and/or ABI. A pun type contains "selector blocks" which are sequentially matched on much like CSS. The first one to match wins. When lowering to a specific backend/config if no selector matches, then compilation fails.</p>
+<p>Here is an example that claims that a Rust <code>repr(transparent)</code> newtype of a <code>u32</code> should match the ABI of a <code>uint32_t</code> in C/C++:</p>
+<pre><code class="language-kdl">pun "MetersU32" {
+    lang "rust" {
+        @repr "transparent"
+        struct "MetersU32" {
+            _ "u32"
+        }
+    }
+
+    lang "c" "cpp" {
+        alias "MetersU32" "u32"
+    }
+}
+</code></pre>
+<p>Because of this design, the typechecker does not "desugar" <code>pun</code> types to their underlying type when computing type ids. This means <code>[MetersU32; 4]</code> will not be considered the same type as <code>[u32; 4]</code>... because it's not! This is fine because type equality is just an optimization for our transpiler usecase. Typeids mostly exist to deal with type name resolution.</p>
+<p>Pun resolving is done as a second step when lowering the abstract <code>TypedProgram</code> to a more backend-concrete <code>DefinitionGraph</code>.</p>
+<p>(<code>alias</code> also isn't desugarred and has the same "problem" but this is less "fundamental" and more "I want the backend to actually emit
+a type alias and use the alias", just like the source KDLScript program says!)</p>
+<p>The currently supported selector blocks are:</p>
+<ul>
+<li><code>lang "lang1" "lang2" ...</code> - matches <em>any</em> of the languages</li>
+<li><code>default</code> - always matches</li>
+</ul>
+<p>Potentially Supported In The Future:</p>
+<ul>
+<li><code>compiler "compiler1" "compiler2" ...</code></li>
+<li><code>cpu</code> ...</li>
+<li><code>os</code> ...</li>
+<li><code>triple</code> ...</li>
+<li><code>any { selector1; selector2; }</code></li>
+<li><code>all { selector1; selector2; }</code></li>
+<li><code>not { selector; }</code></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="reference-types"><a class="header" href="#reference-types">reference types</a></h1>
+<p>The "value" of a KDLScript reference type <code>&amp;T</code> is its pointee for the purposes of <a href="kdl-script/types/../../intro.html">abi-cafe</a>. In this regard it's similar to C++ references or Rust references, where most operations automagically talk about the pointee and not the pointer. Using a reference type lets you test that something can properly be passed-by-reference, as opposed to passed-by-value.</p>
+<p>Reference types may appear in other composite types, indicating that the caller is responsible for allocating variables for each one and then storing pointers to them in the composite type.</p>
+<blockquote>
+<p>Currently theoretical and probably will never be implemented: When used in the outputs of a function, a reference type is sugar for an out-param that the caller is responsible for allocating and the callee is responsible for initializing. Out-params should appear after all normal inputs but before varargs.</p>
+</blockquote>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="array-types"><a class="header" href="#array-types">array types</a></h1>
+<p>KDLScript array types like <code>[u32; 4]</code> have the layout/repr you would expect from languages like C and Rust.</p>
+<p>But there's a problem with passing them by-value: C is supremely fucking weird about passing arrays by value if they're not wrapped in a struct.</p>
+<p>This is actually sugar for pass-by-reference (and largely decays into <code>uint32_t*</code>):</p>
+<pre><code class="language-C">void blah(uint32_t array[4]);
+</code></pre>
+<p>And this doesn't even compile:</p>
+<pre><code class="language-C">uint32_t[4] blah(); // invalid syntax
+uint32_t blah()[4]; // valid syntax, but still disallowed
+</code></pre>
+<p>To avoid trying to squish weird square pegs in round holes, passing an array by-value like this in KDLScript should indeed mean passing it by-value! C/C++ backends should <em>simply refuse to lower such a KDLScript program and produce an error</em>. Rust backends are free to lower it in the obvious way. If you want to test the C way, use this:</p>
+<pre><code class="language-kdl">fn "blah" {
+    inputs { _ "&amp;[u32; 4]"; }
+}
+</code></pre>
+<p><strong>NOT THIS</strong>:</p>
+<pre><code class="language-kdl">fn "blah" {
+    inputs { _ "[u32; 4]"; }
+}
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="tuples"><a class="header" href="#tuples">tuples</a></h1>
+<p><a href="https://github.com/Gankra/abi-cafe/issues/48">KDLScript only has the empty tuple <code>()</code> currently implemented.</a></p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+    </div>
+    </body>
+</html>

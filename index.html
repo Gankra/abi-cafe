@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en" id="oranda" class="light">
+  <head>
+    <title>abi-cafe</title>
+    
+      <meta property="og:url" content="https://faultlore.com/abi-cafe/book" />
+    
+    
+      <link rel="icon" href="/abi-cafe/favicon.ico" />
+    
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+      <meta name="description" content="Pair your compilers up at The ABI café!" />
+      <meta property="og:description" content="Pair your compilers up at The ABI café!" />
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="abi-cafe" />
+    
+    
+    
+    <meta http-equiv="Permissions-Policy" content="interest-cohort=()" />
+    <link rel="stylesheet" href="/abi-cafe/oranda-v0.6.1.css" />
+    
+    
+  </head>
+  <body>
+    <div class="container">
+      <div class="page-body">
+        
+          <div class="repo_banner">
+            <a href="https://github.com/Gankra/abi-cafe">
+              <div class="github-icon" aria-hidden="true"></div>
+              Check out our GitHub!
+            </a>
+          </div>
+        
+
+        <main>
+          <header>
+            
+            <h1 class="title">abi-cafe</h1>
+            
+  <nav class="nav">
+    <ul>
+      <li><a href="/abi-cafe/">Home</a></li>
+
+      
+
+      
+
+      
+        <li><a href="/abi-cafe/book/">Docs</a></li>
+      
+
+      
+
+      
+        <li><a href="/abi-cafe/changelog/">Changelog</a></li>
+      
+    </ul>
+  </nav>
+
+          </header>
+
+          
+
+
+    <h1>ABI Cafe 🧩☕️❤️</h1>
+<blockquote>
+<p><em>Not sure if your compilers have matching ABIs? Then put them through the ultimate compatibility crucible and pair them up on a shift at The ABI Cafe! Find out if your one true pairing fastcalls for each other or are just another slowburn disaster. (Maid outfits optional but recommended.)</em></p>
+</blockquote>
+<h2>Quickstart</h2>
+<p>To run ABI Cafe you can <code>cargo install abi-cafe</code> and run <code>abi-cafe</code>, <em>or</em> <a href="https://github.com/Gankra/abi-cafe" rel="noopener noreferrer">checkout the repository</a> and <code>cargo run</code>!</p>
+<h2>What Is This</h2>
+<p>ABI Cafe automates testing that two languages/compilers agree on their ABIs.</p>
+<p><strong>ABI Cafe is essentially an ABI fuzzer</strong>, which:</p>
+<ul>
+<li><a href="https://faultlore.com/abi-cafe/book/kdl-script/index.html" rel="noopener noreferrer">Creates a header file describing an interface</a></li>
+<li><a href="https://faultlore.com/abi-cafe/book/harness/combos/toolchains.html" rel="noopener noreferrer">Generates source code for a <em>user</em> and <em>implementation</em> of that interface</a></li>
+<li><a href="https://faultlore.com/abi-cafe/book/harness/combos.html" rel="noopener noreferrer">Builds and runs the resulting program</a></li>
+<li><a href="https://faultlore.com/abi-cafe/book/harness/combos/values.html" rel="noopener noreferrer">Checks that both sides saw the same values</a></li>
+</ul>
+<p>If they agree, great!</p>
+<p>If they don't agree, even better, we just learned something! <strong>We then try to diagnose why they disagreed, and generate a minimized version that a human can inspect and report!</strong></p>
+<p>Now do this <a href="https://faultlore.com/abi-cafe/book/harness/combos.html" rel="noopener noreferrer">a bajillion times</a> and suddenly we're learning a whole lot! Alternatively, you can <a href="https://faultlore.com/abi-cafe/book/kdl-script/index.html" rel="noopener noreferrer">hand-craft any type or function signature you're interested in</a>, and explore its interoperability between different toolchains.</p>
+<p>ABI Cafe is purely <em>descriptive</em>. It has no preconceived notion of what <em>should</em> work, and it doesn't trust any damn thing anyone says about it. We don't analyze assembly or metadata, and we'll gleefully create programs riddled with Undefined Behaviour. We're here to <em>learn</em> not <em>lecture</em>.</p>
+<p>This design is based on a fundamental belief that <strong>ABIs exist only through sheer force of will</strong>. The spec if often "read GCC's source code", and damn if that ain't an error-prone process. Also GCC doesn't even know you exist, and you're only going to keep interoperating with them if you check and maintain your work. So here's a tool for checking and maintaining your work!</p>
+<h2>Choose Your Own Adventure</h2>
+<ul>
+<li><a href="https://faultlore.com/abi-cafe/book/harness/combos.html" rel="noopener noreferrer">I want to use ABI Cafe in my compiler's testsuite</a></li>
+<li><a href="https://faultlore.com/abi-cafe/book/harness/combos/toolchains.html" rel="noopener noreferrer">I want to add support for my compiler/language to ABI Cafe</a></li>
+<li><a href="https://faultlore.com/abi-cafe/book/harness/combos/tests.html" rel="noopener noreferrer">I want to add a test to ABI Cafe</a></li>
+<li><a href="https://faultlore.com/abi-cafe/book/kdl-script/types/index.html" rel="noopener noreferrer">I want to add a new kind of type to ABI Cafe</a></li>
+</ul>
+
+
+
+        </main>
+      </div>
+
+      <footer>
+        
+          <a href="https://github.com/Gankra/abi-cafe"><div class="github-icon" aria-hidden="true"></div></a>
+        
+        <span>
+          abi-cafe, MIT OR Apache-2.0
+        </span>
+      </footer>
+    </div>
+
+    
+    
+
+    
+
+
+  </body>
+</html>

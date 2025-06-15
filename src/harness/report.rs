@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use camino::Utf8PathBuf;
 use console::Style;
 use serde::{Deserialize, Serialize};
@@ -21,14 +23,10 @@ impl TestHarness {
         };
 
         for expect_file in &self.test_rules {
-            let rulesets = [
-                expect_file.targets.get("*"),
-                expect_file.targets.get(built_info::TARGET),
-            ];
-            for rules in rulesets {
-                let Some(rules) = rules else {
+            for (target_cfg, rules) in &expect_file.target {
+                if !self.cfg_enabled(target_cfg) {
                     continue;
-                };
+                }
                 for (pattern, rules) in rules {
                     if pattern.matches(key) {
                         if let Some(run) = rules.run {
@@ -52,12 +50,25 @@ impl TestHarness {
 
         result
     }
+
+    fn cfg_enabled(&self, target_cfg: &str) -> bool {
+        if target_cfg == "*" {
+            true
+        } else {
+            let platform = cargo_platform::Platform::from_str(target_cfg)
+                .expect("failed to parse target expr in test file");
+            platform.matches(
+                &self.toolchains.platform_info.target,
+                &self.toolchains.platform_info.cfgs,
+            )
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ExpectFile {
     #[serde(default)]
-    pub targets: IndexMap<String, IndexMap<TestKeyPattern, TestRulesPattern>>,
+    pub target: IndexMap<String, IndexMap<TestKeyPattern, TestRulesPattern>>,
 }
 
 impl Serialize for BuildError {

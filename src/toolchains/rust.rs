@@ -5,10 +5,12 @@ mod init;
 mod write;
 
 use camino::Utf8Path;
+use camino::Utf8PathBuf;
 use kdl_script::types::*;
 use kdl_script::PunEnv;
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use super::super::*;
@@ -47,8 +49,17 @@ impl TestState {
 
 #[allow(dead_code)]
 pub struct RustcToolchain {
+    /// What command should we invoke rustc from?
+    command: Utf8PathBuf,
+    /// The rustc version
+    version: String,
+    /// Is this a nightly rustc?
     is_nightly: bool,
+    /// Info about the host platform
+    pub platform_info: PlatformInfo,
+    /// Windowsy or Unixy?
     platform: Platform,
+    /// What codegen backend are we using?
     codegen_backend: Option<String>,
 }
 
@@ -76,13 +87,13 @@ impl Toolchain for RustcToolchain {
         out_dir: &Utf8Path,
         lib_name: &str,
     ) -> Result<String, BuildError> {
-        let mut cmd = Command::new("rustc");
+        let mut cmd = Command::new(&self.command);
         cmd.arg("--crate-type")
             .arg("staticlib")
             .arg("--out-dir")
             .arg(out_dir)
             .arg("--target")
-            .arg(built_info::TARGET)
+            .arg(&self.platform_info.target)
             .arg(format!("-Cmetadata={lib_name}"))
             .arg(src_path);
         if let Some(codegen_backend) = &self.codegen_backend {
@@ -274,16 +285,57 @@ impl RustcToolchain {
 }
 
 impl RustcToolchain {
-    pub fn new(_system_info: &Config, codegen_backend: Option<String>) -> Self {
-        let platform = if cfg!(target_os = "windows") {
+    pub fn new(_system_info: &Config, command: &Utf8Path, codegen_backend: Option<String>) -> Self {
+        // Get rustc's version and host
+        let rustc_info = Command::new(command)
+            .arg("-Vv")
+            .output()
+            .expect("rustc -vV failed to run");
+        let rustc_info_stdout = String::from_utf8(rustc_info.stdout).unwrap();
+        let mut version = None;
+        let mut host = None;
+        for line in rustc_info_stdout.lines() {
+            if let Some(val) = line.strip_prefix("host: ") {
+                host = Some(val.to_owned());
+            }
+            if let Some(line) = line.strip_prefix("rustc ") {
+                if let Some((val, _rest)) = line.split_once(' ') {
+                    version = Some(val.to_owned())
+                }
+            }
+        }
+        let version = version.expect("failed to get rustc version");
+        let host = host.expect("failed to get rustc host triple");
+        let is_nightly = version.contains("nightly");
+
+        // Get rustc's cfgs for the platform we're interested in
+        // (Yes we don't have to pass `--target` because host but showing how we can get *any*)
+        let rustc_cfgs = Command::new(command)
+            .arg("--print=cfg")
+            .arg(format!("--target={host}"))
+            .output()
+            .expect("rustc failed to run");
+        let rustc_cfgs_stdout = String::from_utf8(rustc_cfgs.stdout).unwrap();
+        let cfgs = rustc_cfgs_stdout
+            .lines()
+            .map(|line| cargo_platform::Cfg::from_str(line).expect("failed to parse rustc cfg"))
+            .collect::<Vec<_>>();
+        let is_windowsy = cfgs.contains(
+            &cargo_platform::Cfg::from_str("windows").expect("failed to parse windows cfg"),
+        );
+
+        let platform = if is_windowsy {
             Platform::Windows
         } else {
             Platform::Unixy
         };
 
         Self {
+            command: command.to_owned(),
+            version,
+            is_nightly,
+            platform_info: PlatformInfo { target: host, cfgs },
             platform,
-            is_nightly: built_info::RUSTC_VERSION.contains("nightly"),
             codegen_backend,
         }
     }

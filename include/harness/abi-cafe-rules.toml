@@ -3,22 +3,20 @@
 # so let's keep running them and just ignore the result for now.
 #
 # Anyone who cares about this situation more can make the expectations more precise.
-[targets.x86_64-pc-windows-msvc."i128::cc_toolchain"]
+[target.x86_64-pc-windows-msvc."i128::cc_toolchain"]
 random = true
-[targets.x86_64-pc-windows-msvc."u128::cc_toolchain"]
+[target.x86_64-pc-windows-msvc."u128::cc_toolchain"]
 random = true
 
 # FIXME: investigate why this is failing to build
-[targets.x86_64-pc-windows-msvc."EmptyStruct::cc_toolchain"]
+[target.x86_64-pc-windows-msvc."EmptyStruct::cc_toolchain"]
 busted = "build"
-[targets.x86_64-pc-windows-msvc."EmptyStructInside::cc_toolchain"]
+[target.x86_64-pc-windows-msvc."EmptyStructInside::cc_toolchain"]
 busted = "build"
 
 # CI GCC is too old to support _Float16
-[targets.x86_64-unknown-linux-gnu."f16::conv_c"]
+[target.x86_64-unknown-linux-gnu."f16::conv_c"]
 random = true
-
-
 
 #
 #
@@ -26,35 +24,35 @@ random = true
 #
 #
 
-# this test fails on this platform, with this toolchain pairing
+# this test fails on windows, with this toolchain pairing
 #
-# [targets.x86_64-pc-windows-msvc."simple::cc_calls_rustc"]
+# [target."cfg(windows)"."simple::cc_calls_rustc"]
 # fail = "check"
 
 # this test has random results on this platform, whenever rustc is the caller (callee also supported)
 #
-# [targets.x86_64-pc-windows-msvc."simple::rustc_caller"]
+# [target.x86_64-pc-windows-msvc."simple::rustc_caller"]
 # random = true
 
 # whenever this test involves cc, only link it, and expect linking to fail
 #
-# [targets.x86_64-pc-windows-msvc."EmptyStruct::cc_toolchain"]
+# [target.x86_64-pc-windows-msvc."EmptyStruct::cc_toolchain"]
 # run = "link"
 # fail = "link"
 
 # any repr(c) version of this test fails to run
 #
-# [targets.x86_64-unknown-linux-gnu."simple::repr_c"]
+# [target.x86_64-unknown-linux-gnu."simple::repr_c"]
 # busted = "run"
 
 # for this pairing, with the rust calling convention, only generate the test, and expect it to work
 #
-# [targets.x86_64-unknown-linux-gnu."simple::rustc_calls_rustc::conv_rust"]
+# [target.x86_64-unknown-linux-gnu."simple::rustc_calls_rustc::conv_rust"]
 # run = "generate"
 # pass = "generate"
 
 # can match all tests with leading ::
 #
-# [targets.x86_64-unknown-linux-gnu."::rustc_calls_rustc"]
+# [target.x86_64-unknown-linux-gnu."::rustc_calls_rustc"]
 # run = "generate"
 # pass = "generate"

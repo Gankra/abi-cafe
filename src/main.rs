@@ -24,13 +24,6 @@ use tracing::{debug, error, info};
 
 pub type SortedMap<K, V> = std::collections::BTreeMap<K, V>;
 
-/// Slurps up details of how this crate was compiled, which we can use
-/// to better compile the actual tests since we're currently compiling them on
-/// the same platform with the same toolchains!
-pub mod built_info {
-    include!(concat!(env!("OUT_DIR"), "/built.rs"));
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum OutputFormat {
     Human,
@@ -233,7 +226,10 @@ fn compute_final_report(
         None
     } else {
         Some(ExpectFile {
-            targets: IndexMap::from_iter([(built_info::TARGET.to_owned(), expects)]),
+            target: IndexMap::from_iter([(
+                harness.toolchains.platform_info.target.clone(),
+                expects,
+            )]),
         })
     };
 

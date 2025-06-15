@@ -3,7 +3,7 @@ use std::io::Write;
 use camino::{Utf8Path, Utf8PathBuf};
 use include_dir::{include_dir, Dir, File};
 
-use crate::{built_info, GenerateError};
+use crate::GenerateError;
 
 const INCLUDES: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/include");
 
@@ -57,13 +57,6 @@ impl Paths {
             file.write_all(harness_file_contents.as_bytes())
                 .expect("failed to initialize main.rs");
         }
-
-        // Set up env vars for CC
-        std::env::set_var("OUT_DIR", &self.out_dir);
-        std::env::set_var("HOST", built_info::HOST);
-        std::env::set_var("TARGET", built_info::TARGET);
-        std::env::set_var("OPT_LEVEL", "0");
-
         Ok(())
     }
 }

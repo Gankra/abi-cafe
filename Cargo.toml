@@ -13,7 +13,7 @@ exclude = ["docs"]
 default = []
 
 [dependencies]
-kdl-script = { version = "0.4.1", path = "kdl-script" }
+kdl-script = { version = "1.0.0", path = "kdl-script" }
 
 camino.workspace = true
 cc.workspace = true
@@ -53,7 +53,7 @@ homepage = "https://faultlore.com/abi-cafe/book"
 repository = "https://github.com/Gankra/abi-cafe"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-version = "0.4.1"
+version = "1.0.0"
 
 [workspace.dependencies]
 camino = { version = "1.1.7", features = ["serde1"] }

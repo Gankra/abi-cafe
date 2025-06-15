@@ -245,7 +245,21 @@ Hint: Try using `--pairs {name}_calls_rustc` or `--pairs rustc_calls_{name}`.
     let out_dir = target_dir.join("temp");
     let generated_src_dir = target_dir.join("generated_impls");
     let runtime_test_input_dir = add_tests;
-    let runtime_rules_file = rules.unwrap_or_else(|| "abi-cafe-rules.toml".into());
+    let runtime_rules_file = if let Some(rules) = rules {
+        // If they specify rules, require them to exist
+        if !rules.exists() {
+            panic!("could not find --rules {rules}");
+        }
+        Some(rules)
+    } else {
+        // Otherwise try to find the default rules
+        let default_rules: Utf8PathBuf = "abi-cafe-rules.toml".into();
+        if default_rules.exists() {
+            Some(default_rules)
+        } else {
+            None
+        }
+    };
 
     let paths = Paths {
         target_dir,

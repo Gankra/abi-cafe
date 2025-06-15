@@ -1,6 +1,7 @@
 # KDLScript function bodies
 
-The kdl-script compiler does technically
+The kdl-script compiler does technically support function bodies that it can run and evaluate.
+This is *completely* useless to kdl-script-as-used-by-abi-cafe, and is entirely just a fun shitpost.
 
 The evaluator has not at all kept up with the type system, so it can only handle some really simply stuff.
 You can run the `examples/simple.kdl`. All the other examples will just dump type information and decl order

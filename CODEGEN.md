@@ -13,8 +13,8 @@ At a lower level we:
 
 * define a test harness with callbacks for "hi i'm the callee, i think arg1.0.3 = 7"
 * have the codegen backends generate code that invokes those callbacks
-* statically link the two halves together into a dylib, with the caller defining a "run the test" entrypoint
-* have the harness dlopen and run the dylib
+* statically link the two halves together into a binary, with the caller defining a "run the test" entrypoint
+* have the harness run the binary as a subprocess
 * have the harness check that both sides reported the exact same values
 
 However when we discover an issue, we want to be able to explain it to humans, so there are some additional features:

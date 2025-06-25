@@ -1,0 +1,20 @@
+struct "Buffer" {
+    data "ptr"
+    len "ptr"
+    capacity "ptr"
+    reserve "ptr"
+    drop "ptr"
+}
+struct "Closure" {
+	call "ptr"
+	env "ptr"
+}
+struct "BufferConfig" {
+    input "Buffer"
+    dispatch "Closure"
+    force_show_panics "bool"
+}
+fn "derive_macro" {
+	inputs { config "BufferConfig"; }
+	outputs { buffer "Buffer"; }
+}
